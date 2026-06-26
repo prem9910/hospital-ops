@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay } from '../utils';
+import { uid, toDay, notifyAdmins } from '../utils';
 
 const IS = { width: '100%', padding: '9px 13px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 function Field({ label, children }) {
@@ -10,7 +10,7 @@ function Field({ label, children }) {
 
 export default function ReportIssue() {
   const { currentUser } = useAuth();
-  const { issues, depts, save, logAct } = useApp();
+  const { issues, depts, notices, save, logAct } = useApp();
   const [form, setForm] = useState({ title: '', dept: currentUser.dept || '', priority: 'medium', desc: '' });
   const [msg, setMsg] = useState('');
 
@@ -19,6 +19,16 @@ export default function ReportIssue() {
     const obj = { id: uid(), title: form.title.toUpperCase(), dept: form.dept, priority: form.priority, reporter: currentUser.name.toUpperCase(), assigned: '', desc: form.desc, status: 'open', date: toDay(), resolveRemark: '', resolveBy: '', resolvedAt: '' };
     await save('hops-issues', [...issues, obj]);
     await logAct('ISSUE REPORTED BY STAFF', form.title);
+    // Notify main admin bell — high priority issues marked with red icon
+    try {
+      await notifyAdmins({
+        notices, save,
+        subject: form.priority === 'high' ? `🔴 URGENT: ${currentUser.name} reported — ${obj.title}` : `⚠️ ${currentUser.name} reported: ${obj.title}`,
+        message: `Issue: ${obj.title}\nDepartment: ${obj.dept}\nPriority: ${form.priority.toUpperCase()}\nReported By: ${obj.reporter}\nDescription: ${form.desc || '—'}`,
+        type: 'issue_reported',
+        meta: { issueId: obj.id, reporter: obj.reporter, priority: form.priority, title: obj.title },
+      });
+    } catch (e) { console.error('Admin notify failed:', e); }
     setMsg('✅ Issue reported successfully! Admin will be notified.');
     setForm({ title: '', dept: currentUser.dept || '', priority: 'medium', desc: '' });
   }

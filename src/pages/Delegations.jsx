@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, exportToExcel } from '../utils';
+import { uid, toDay, fDate, fDateTime, notifyAdmins, exportToExcel } from '../utils';
 import { Modal } from '../components/common/Modal';
 import { Alert, EmptyState } from '../components/common/Alert';
 
@@ -14,7 +14,7 @@ const STATUS_COLORS = { pending: '#d4920a', accepted: '#0d7377', done: '#1a7a4a'
 
 export default function Delegations() {
   const { currentRole, currentUser, hasPerm } = useAuth();
-  const { delegations, employees, depts, save, logAct } = useApp();
+  const { delegations, employees, depts, notices, save, logAct } = useApp();
   const [filter, setFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showExtModal, setShowExtModal] = useState(null);
@@ -40,6 +40,16 @@ export default function Delegations() {
     const updated = { ...d, status: newStatus };
     await save('hops-delegations', delegations.map((x) => x.id === d.id ? updated : x));
     await logAct('DELEGATION STATUS: ' + newStatus.toUpperCase(), d.task);
+    // Notify main admin bell when delegation is completed or status changes
+    try {
+      await notifyAdmins({
+        notices, save,
+        subject: newStatus === 'done' ? `✅ ${d.doerName} completed delegation: ${d.task}` : `🔄 ${d.doerName} → ${newStatus.toUpperCase()}: ${d.task}`,
+        message: `Delegation: ${d.task}\nDoer: ${d.doerName}\nNew Status: ${newStatus.toUpperCase()}\n${d.remarks ? 'Remarks: ' + d.remarks : ''}`,
+        type: newStatus === 'done' ? 'delegation_completed' : 'delegation_status',
+        meta: { delegationId: d.id, doer: d.doerName, status: newStatus, taskName: d.task },
+      });
+    } catch (e) { console.error('Admin notify failed:', e); }
   }
 
   async function submitExtension() {

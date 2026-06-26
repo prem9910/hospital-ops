@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { toDay, fDate, exportToExcel } from '../utils';
+import { toDay, fDate, notifyAdmins, exportToExcel } from '../utils';
 import { DeptTag } from '../components/common/Badge';
 import { sendHandoverResponseEmail, sendHandoverTasksEmail } from '../lib/emailService';
 
@@ -28,11 +28,12 @@ const DECISION_CFG = {
 
 export default function MyHandover() {
   const { currentUser } = useAuth();
-  const { tasks, handovers, employees, save, logAct } = useApp();
+  const { tasks, handovers, employees, notices, save, logAct, moveToTrash } = useApp();
 
   const [remarks, setRemarks] = useState({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
 
   // Email popup for missing fromName email
   const [emailPopup, setEmailPopup] = useState(null); // { emp, handover, decision }
@@ -66,6 +67,18 @@ export default function MyHandover() {
     try {
       await save('hops-handovers', handovers.map(x => x.id === h.id ? updated : x));
       await logAct(`HANDOVER ${decision.toUpperCase()}`, `${h.fromName} → ${h.toName} | Remark: ${remark || '-'}`);
+      // Notify main admin bell
+      try {
+        await notifyAdmins({
+          notices, save,
+          subject: decision === 'accepted'
+            ? `✅ ${currentUser.name} accepted handover from ${h.fromName}`
+            : `❌ ${currentUser.name} rejected handover from ${h.fromName}`,
+          message: `From: ${h.fromName}\nTo: ${h.toName}\nDecision: ${decision.toUpperCase()}\n${remark ? 'Remark: ' + remark : ''}\nTasks: ${(h.taskIds || []).length}`,
+          type: 'handover_response',
+          meta: { handoverId: h.id, fromName: h.fromName, toName: h.toName, decision, taskCount: (h.taskIds || []).length },
+        });
+      } catch (e) { console.error('Admin notify failed:', e); }
       setRemarks(r => { const n = { ...r }; delete n[h.id]; return n; });
       setMsg(`✅ Handover ${decision === 'accepted' ? 'accepted' : 'rejected'} successfully!`);
       setTimeout(() => setMsg(''), 3000);
@@ -112,6 +125,23 @@ export default function MyHandover() {
       sendHandoverResponseEmail(handover, empWithEmail, decision);
     }
     setEmailPopup(null);
+  }
+
+  async function handleDelete(h) {
+    if (deletingId) return;
+    if (!window.confirm('Delete this handover from your list? (Admin will still have it on the register.)')) return;
+    setDeletingId(h.id);
+    try {
+      const result = await moveToTrash('handover', h.id);
+      if (result && result.error) {
+        alert('Could not delete from database. Please check your connection and try again.');
+      } else {
+        setMsg('✅ Handover removed.');
+        setTimeout(() => setMsg(''), 2500);
+      }
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -261,22 +291,42 @@ export default function MyHandover() {
                       placeholder="Enter a remark (optional for accept, required for reject)..."
                       style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#1a2535', outline: 'none', minHeight: 60, resize: 'vertical', boxSizing: 'border-box', marginBottom: 10 }}
                     />
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <button
                         onClick={() => handleDecision(h, 'accepted')}
-                        disabled={saving}
+                        disabled={saving || deletingId === h.id}
                         style={{ padding: '8px 20px', borderRadius: 8, background: saving ? '#6b7a90' : '#1a7a4a', color: 'white', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13 }}
                       >
                         {saving ? '⏳...' : '✅ Accept'}
                       </button>
                       <button
                         onClick={() => handleDecision(h, 'rejected')}
-                        disabled={saving}
+                        disabled={saving || deletingId === h.id}
                         style={{ padding: '8px 20px', borderRadius: 8, background: saving ? '#6b7a90' : '#c0392b', color: 'white', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13 }}
                       >
                         {saving ? '⏳...' : '❌ Reject'}
                       </button>
+                      <button
+                        onClick={() => handleDelete(h)}
+                        disabled={saving || deletingId === h.id}
+                        style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 7, background: 'transparent', border: '1px solid #d8e2ef', color: '#c0392b', cursor: deletingId === h.id ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 11.5 }}
+                      >
+                        {deletingId === h.id ? '⏳ Deleting...' : '🗑️ Delete'}
+                      </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Delete button for non-pending handovers (already decided) */}
+                {!isPending && (
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #e4eaf2', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => handleDelete(h)}
+                      disabled={deletingId === h.id}
+                      style={{ padding: '6px 12px', borderRadius: 7, background: 'transparent', border: '1px solid #d8e2ef', color: '#c0392b', cursor: deletingId === h.id ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 11.5 }}
+                    >
+                      {deletingId === h.id ? '⏳ Deleting...' : '🗑️ Delete'}
+                    </button>
                   </div>
                 )}
               </div>

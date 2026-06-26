@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, exportToExcel } from '../utils';
+import { uid, toDay, fDate, fDateTime, notifyAdmins, exportToExcel } from '../utils';
 import { DeptTag, PriorityBadge, StatusBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { EmptyState } from '../components/common/Alert';
@@ -15,7 +15,7 @@ function Field({ label, children }) {
 
 export default function Issues() {
   const { currentRole, currentUser, hasPerm } = useAuth();
-  const { issues, depts, employees, save, logAct, moveToTrash } = useApp();
+  const { issues, depts, employees, notices, save, logAct, moveToTrash } = useApp();
   const [search, setSearch] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -71,6 +71,16 @@ export default function Issues() {
     const updated = { ...showResolve, status: 'resolved', resolveRemark: resRemark.toUpperCase(), resolveBy: resBy.toUpperCase(), resolvedAt: new Date().toISOString() };
     await save('hops-issues', issues.map((i) => i.id === updated.id ? updated : i));
     await logAct('ISSUE RESOLVED', showResolve.title);
+    // Notify main admin bell
+    try {
+      await notifyAdmins({
+        notices, save,
+        subject: `✅ Issue resolved: ${showResolve.title}`,
+        message: `Issue: ${showResolve.title}\nDepartment: ${showResolve.dept}\nResolved By: ${resBy.toUpperCase()}\nRemark: ${resRemark.toUpperCase()}`,
+        type: 'issue_resolved',
+        meta: { issueId: showResolve.id, resolvedBy: resBy.toUpperCase(), title: showResolve.title },
+      });
+    } catch (e) { console.error('Admin notify failed:', e); }
     setShowResolve(null); setResRemark(''); setResBy('');
   }
 

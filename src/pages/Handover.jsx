@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, exportToExcel } from '../utils';
+import { uid, toDay, fDate, notifyAdmins, exportToExcel } from '../utils';
 import { DeptTag, PriorityBadge } from '../components/common/Badge';
 import { EmptyState } from '../components/common/Alert';
 import { Pagination, paginate } from '../components/common/Pagination';
@@ -38,7 +38,7 @@ const STATUS_CFG = {
 
 export default function Handover() {
   const { currentRole, currentUser, hasPerm } = useAuth();
-  const { tasks, handovers, depts, employees, save, logAct, moveToTrash } = useApp();
+  const { tasks, handovers, depts, employees, notices, save, logAct, moveToTrash } = useApp();
 
   const [filterDept, setFilterDept] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -162,6 +162,18 @@ export default function Handover() {
         };
         await save('hops-handovers', [...handovers, obj]);
         await logAct('HANDOVER CREATED', `${obj.fromName} → ${obj.toName} | ${obj.taskIds.length} tasks | ${obj.dateStart} to ${obj.dateEnd}`);
+        // Notify main admin bell (skip if main admin is the creator — no self-notification)
+        if (currentRole !== 'mainadmin') {
+          try {
+            await notifyAdmins({
+              notices, save,
+              subject: `🔄 Handover created: ${obj.fromName} → ${obj.toName}`,
+              message: `From: ${obj.fromName}\nTo: ${obj.toName}\nTasks: ${obj.taskIds.length}\nDuration: ${obj.dateStart} → ${obj.dateEnd}\n${obj.notes ? 'Notes: ' + obj.notes : ''}`,
+              type: 'handover_request',
+              meta: { handoverId: obj.id, fromName: obj.fromName, toName: obj.toName, taskCount: obj.taskIds.length },
+            });
+          } catch (e) { console.error('Admin notify failed:', e); }
+        }
         setMsg('✅ Handover created successfully! The recipient must accept or reject it.');
 
         // Email to recipient (toName)
@@ -511,7 +523,13 @@ export default function Handover() {
                   {(st === 'active' || st === 'upcoming' || h.status === 'pending') && (
                     <button onClick={() => cancelHandover(h)} style={{ padding: '4px 10px', borderRadius: 7, background: 'transparent', border: '1px solid #c0392b', color: '#c0392b', cursor: 'pointer', fontWeight: 700, fontSize: 11 }}>✕ Cancel</button>
                   )}
-                  <button onClick={async () => { if (window.confirm('Delete?')) await moveToTrash('handover', h.id); }} style={{ padding: '4px 9px', borderRadius: 7, background: 'transparent', border: '1px solid #d8e2ef', cursor: 'pointer', fontSize: 12, color: '#c0392b' }}>🗑️</button>
+                  <button onClick={async () => {
+                    if (!window.confirm('Delete?')) return;
+                    const result = await moveToTrash('handover', h.id);
+                    if (result && result.error) {
+                      alert('Could not delete from database. Please check your connection and try again.');
+                    }
+                  }} style={{ padding: '4px 9px', borderRadius: 7, background: 'transparent', border: '1px solid #d8e2ef', cursor: 'pointer', fontSize: 12, color: '#c0392b' }}>🗑️</button>
                 </div>
               )}
             </div>
