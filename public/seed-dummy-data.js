@@ -141,40 +141,25 @@
     ];
   }
 
-  // Build ~30 employees spread across depts, including incharges + admin-permissioned
+  // Build 4 employees spread across 2 departments (1 incharge + 1 staff each)
   function buildEmployees(depts) {
+    // [name, deptName, role]
     const baseNames = [
-      // ICU
-      ['MOHAN KUMAR', 'STAFF'], ['PRIYA SINGH', 'INCHARGE'], ['RAJESH YADAV', 'STAFF'],
-      // EMERGENCY
-      ['VIKRAM MEHTA', 'INCHARGE'], ['SUNITA DEVI', 'STAFF'], ['ARJUN REDDY', 'STAFF'],
-      // PHARMACY
-      ['KAVITA SHARMA', 'INCHARGE'], ['AMIT VERMA', 'STAFF'], ['POOJA NAIDU', 'STAFF'],
-      // HOUSEKEEPING
-      ['RAMESH GUPTA', 'INCHARGE'], ['GEETA LAL', 'STAFF'], ['SURESH KUMAR', 'STAFF'],
-      // ADMIN
-      ['NEHA AGARWAL', 'INCHARGE'], ['MANOJ TIWARI', 'STAFF'],
-      // LAB
-      ['DR. ANIL MISHRA', 'INCHARGE'], ['SANGEETA ROY', 'STAFF'], ['FARHAN KHAN', 'STAFF'],
-      // RADIOLOGY
-      ['DR. SANJAY PATEL', 'INCHARGE'], ['MEERA IYER', 'STAFF'],
-      // NURSING
-      ['LATA WADHWA', 'INCHARGE'], ['NISHA KAPOOR', 'STAFF'], ['DEEPAK SAXENA', 'STAFF'],
-      // Cross-dept staff
-      ['RAVI KIRAN', 'STAFF'], ['ASHA MENON', 'STAFF'], ['BHARAT SHAH', 'STAFF'],
-      ['CHANDNI BAJAJ', 'STAFF'], ['DINESH RAO', 'STAFF'],
+      ['MOHAN KUMAR',  'ICU',          'INCHARGE'],
+      ['PRIYA SINGH',  'ICU',          'STAFF'],
+      ['VIKRAM MEHTA', 'EMERGENCY',    'INCHARGE'],
+      ['KAVITA SHARMA','PHARMACY',     'INCHARGE'],
     ];
     const employees = [];
     baseNames.forEach((row, idx) => {
-      const deptIdx = Math.floor(idx / 3); // group ~3 per dept
-      const dept = depts[Math.min(deptIdx, depts.length - 1)];
-      const isIncharge = row[1] === 'INCHARGE';
+      const dept = depts.find((d) => d.name === row[1]) || depts[0];
+      const isIncharge = row[2] === 'INCHARGE';
       const e = {
         id: uid(),
         name: row[0],
         username: row[0],
         dept: dept.name,
-        designation: row[1],
+        designation: row[2],
         email: row[0].toLowerCase().replace(/[^a-z]/g, '.') + '@hosp.com',
         password: 'Pass@123',
         contact: '98' + String(10000000 + idx).slice(-8),
@@ -184,12 +169,9 @@
       };
       employees.push(e);
     });
-    // Mark a couple of staff as having admin-level permissions
-    const adminPerms = ['tasks_view', 'tasks_add', 'tasks_edit', 'issues_view', 'employees_view', 'departments_view'];
+    // Give one staff a few admin-level permissions so the Admin role can be tested
     const adminPermsLite = ['tasks_view', 'issues_view', 'employees_view'];
-    if (employees[2])  employees[2].perms  = adminPerms;     // ARJUN REDDY — EMERGENCY staff with admin perms
-    if (employees[10]) employees[10].perms = adminPermsLite; // GEETA LAL — HOUSEKEEPING staff with lite admin perms
-    if (employees[22]) employees[22].perms = adminPerms;     // RAVI KIRAN — admin perms
+    if (employees[1]) employees[1].perms = adminPermsLite; // PRIYA SINGH — ICU staff with lite admin perms
     return employees;
   }
 
