@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isTaskDueToday, exportToExcel } from '../utils';
+import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isTaskDueToday, isAssignedTo, notifyAdmins, exportToExcel } from '../utils';
 import { FREQ_LABELS } from '../constants';
 import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
@@ -175,21 +175,30 @@ export default function MyTasks() {
     ) || null;
   }
 
-  // My own pending tasks — exclude grandchild tasks (bug artifacts) and deduplicate parent/child
-  const ownPending = tasks.filter((t) =>
-    t.assignedTo?.includes(currentUser.name) &&
-    t.status === 'pending' &&
-    isTaskDueToday(t) &&
-    !isGrandchild(t) &&
-    !tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(currentUser.name))
-  );
+  // My own pending tasks — show:
+  //   - any pending task assigned to me that's due today (normal case), OR
+  //   - any pending task whose schedDate is today or earlier (overdue / past-due),
+  //     even if freq logic doesn't flag it as due today (e.g. schedDate < today for a
+  //     monthly task the user hasn't been cycled yet for).
+  // This guarantees tasks the admin assigned with a backdated schedDate still show up.
+  const ownPending = tasks.filter((t) => {
+    if (!isAssignedTo(t, currentUser.name)) return false;
+    if (t.status !== 'pending') return false;
+    if (isGrandchild(t)) return false;
+    if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name))) return false;
+    // Normal: freq logic says it's due today
+    if (isTaskDueToday(t)) return true;
+    // Backstop: schedDate is today or in the past — task is overdue, still show it
+    if (t.schedDate && t.schedDate <= today) return true;
+    return false;
+  });
 
   // Handover tasks for me — only match tasks whose own ID is in the handover (not children)
   // Children of handover tasks belong to the original assignee; MOHAN sees them via virtualPending below
   const handoverPendingReal = tasks.filter(t =>
     handoverTaskIdsForMe.has(t.id) &&
     t.status === 'pending' &&
-    !t.assignedTo?.includes(currentUser.name)
+    !isAssignedTo(t, currentUser.name)
   );
   // Daily handover tasks already completed — show again each day (like own-task virtualPending)
   const handoverVirtualPending = tasks.filter(t =>
@@ -203,15 +212,19 @@ export default function MyTasks() {
 
   // Recurring tasks that PREM completed but aren't yet cycled for today
   // Covers case where assignedTo != PREM but PREM was the doer
-  const dueTodayUnCycled = tasks.filter(t =>
-    t.status === 'done' &&
-    !t.parentTaskId &&
-    t.freq !== 'delegation' &&
-    t.lastDone !== today &&
-    isTaskDueToday(t) &&
-    (t.assignedTo?.includes(currentUser.name) || t.doneBy === currentUser.name) &&
-    !tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(currentUser.name))
-  ).map(t => ({ ...t, _virtualPending: true }));
+  const dueTodayUnCycled = tasks.filter(t => {
+    if (t.status !== 'done') return false;
+    if (t.parentTaskId) return false;
+    if (t.freq === 'delegation') return false;
+    if (t.lastDone === today) return false;
+    if (!isAssignedTo(t, currentUser.name) && t.doneBy !== currentUser.name) return false;
+    if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name))) return false;
+    // Normal: freq logic says it's due
+    if (isTaskDueToday(t)) return true;
+    // Backstop: backdated schedDate still pending and in past
+    if (t.schedDate && t.schedDate < today) return true;
+    return false;
+  }).map(t => ({ ...t, _virtualPending: true }));
 
   // Deduplicate: children (with parentTaskId) take priority over parents
   const rawPending = [...ownPending, ...dueTodayUnCycled]
@@ -250,7 +263,7 @@ export default function MyTasks() {
 
   // Done: ALL tasks I completed or were assigned to me (tasks + delegation + handover all combined)
   const myDone = tasks.filter(t =>
-    (t.assignedTo?.includes(currentUser.name) || t.doneBy === currentUser.name ||
+    (isAssignedTo(t, currentUser.name) || t.doneBy === currentUser.name ||
       handoverTaskIdsForMe.has(t.id)) &&
     t.status === 'done'
   );
@@ -263,7 +276,7 @@ export default function MyTasks() {
     const remaining = tasks.filter(tx =>
       tx.id !== completedTaskId &&
       tx.status === 'pending' &&
-      ((tx.assignedTo || []).includes(currentUser.name) || handoverTaskIdsForMe.has(tx.id))
+      (isAssignedTo(tx, currentUser.name) || handoverTaskIdsForMe.has(tx.id))
     ).length;
     if (remaining > 0) return;
     // All tasks done — send dept_change_approval to employee + alert to main admin
@@ -350,6 +363,16 @@ export default function MyTasks() {
     const emp = employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase());
     if (emp) sendTaskCompletedEmail(t, emp);
     try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
+    // Notify main admin bell — covers both employee flow (My Tasks) and admin-self completion
+    try {
+      await notifyAdmins({
+        notices, save,
+        subject: t.isDelayed ? `⚠️ ${currentUser.name} — DELAYED TASK COMPLETED` : `✅ ${currentUser.name} completed: ${t.name}`,
+        message: `Task: ${t.name}\nDepartment: ${t.dept}\nDone By: ${currentUser.name}\nTime: ${t.doneTime || ''}${t.isDelayed ? '\n\n⚠️ Completed late — Reason: ' + (t.delayReason || '—') : ''}${t.doneRemark ? '\nRemark: ' + t.doneRemark : ''}`,
+        type: 'task_completed',
+        meta: { taskId: t.id, doneBy: currentUser.name, isDelayed: t.isDelayed, taskName: t.name },
+      });
+    } catch (e) { console.error('Admin notify failed:', e); }
     setShowDone(null);
   }
 
@@ -372,6 +395,16 @@ export default function MyTasks() {
     };
     await save('hops-tasks', tasks.map((x) => x.id === t.id ? updated : x));
     await logAct('EXTENSION REQUESTED', t.name);
+    // Notify main admin bell
+    try {
+      await notifyAdmins({
+        notices, save,
+        subject: `🔄 ${currentUser.name} requested extension`,
+        message: `Task: ${t.name}\nRequested by: ${currentUser.name}\nNew Due Date: ${fDate(newDate) || newDate}\nReason: ${reason}`,
+        type: 'extension_requested',
+        meta: { taskId: t.id, reqBy: currentUser.name, newDate, reason },
+      });
+    } catch (e) { console.error('Admin notify failed:', e); }
     setShowExtReq(null);
   }
 
@@ -416,7 +449,15 @@ export default function MyTasks() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7, alignItems: 'center' }}>
                 <DeptTag name={t.dept} />
                 <FreqBadge freq={t.freq} />
-                {t.schedDate && <span style={{ fontSize: 11, color: '#0d7377', fontWeight: 600 }}>📅 Due: {fDate(t.schedDate)}</span>}
+                {t.schedDate && (
+                  t.schedDate < today ? (
+                    <span style={{ fontSize: 11, color: '#c0392b', fontWeight: 800, background: '#fde8e8', padding: '2px 8px', borderRadius: 8 }}>
+                      ⚠️ OVERDUE — Due: {fDate(t.schedDate)}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#0d7377', fontWeight: 600 }}>📅 Due: {fDate(t.schedDate)}</span>
+                  )
+                )}
                 {t.time && <span style={{ fontSize: 11, color: '#6b7a90' }}>⏰ {t.time}</span>}
                 {t.createdBy && t.createdBy !== 'SYSTEM' && (
                   <span style={{ fontSize: 11, color: '#6b7a90', background: '#f3f7fc', padding: '2px 8px', borderRadius: 8, fontWeight: 700 }}>

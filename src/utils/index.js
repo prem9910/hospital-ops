@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { supabase } from '../lib/supabase';
 
 export const uid = () => 'id-' + Date.now() + Math.random().toString(36).slice(2, 6);
 export const toDay = () => {
@@ -29,6 +30,16 @@ export const parseTimeToMinutes = (ts) => {
   if (ap === 'PM' && h !== 12) h += 12;
   if (ap === 'AM' && h === 12) h = 0;
   return h * 60 + min;
+};
+
+// Case-insensitive assignedTo check. Admin can enter names with any case
+// (the form auto-uppercases the task name, but the picker uses the raw
+// employee name) and login normalizes the staff name — so we always compare
+// uppercase to avoid "PREM PRAKASH" vs "Prem Prakash" mismatches.
+export const isAssignedTo = (task, userName) => {
+  if (!task || !userName) return false;
+  const target = userName.toUpperCase();
+  return Array.isArray(task.assignedTo) && task.assignedTo.some((n) => (n || '').toUpperCase() === target);
 };
 
 export const isTaskDueToday = (task) => {
@@ -165,3 +176,31 @@ export const purgeOldTrash = (trashItems, ONE_YEAR_MS) => {
   const now = Date.now();
   return trashItems.filter((t) => now - new Date(t.deletedAt).getTime() < ONE_YEAR_MS);
 };
+
+// Build a notice addressed to the main admin (bell icon + activity feed).
+// `type` is one of: 'admin_alert' (default), 'task_completed', 'dept_change_accepted',
+//                  'extension_requested', 'handover_request', 'handover_response',
+//                  'delegation_completed', 'issue_reported', 'issue_resolved', etc.
+export const buildAdminAlert = ({ subject, message, type = 'admin_alert', meta = null }) => ({
+  id: uid(),
+  toEmpId: 'MAINADMIN',
+  toName: 'MAIN ADMIN',
+  fromName: 'SYSTEM',
+  subject,
+  message,
+  type,
+  isRead: false,
+  sentAt: new Date().toISOString(),
+  meta,
+});
+
+// Async helper: append an admin alert to existing notices and persist.
+export async function notifyAdmins({ notices, save, subject, message, type, meta }) {
+  const alert = buildAdminAlert({ subject, message, type, meta });
+  try {
+    await save('hops-notices', [...(notices || []), alert]);
+  } catch (e) {
+    console.error('notifyAdmins failed:', e);
+  }
+  return alert;
+}

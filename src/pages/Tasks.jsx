@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, exportToExcel } from '../utils';
+import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isAssignedTo, notifyAdmins, exportToExcel } from '../utils';
 import { FREQ_LABELS, FREQ_OPTIONS, PRIORITY_OPTIONS } from '../constants';
 import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
@@ -92,7 +92,7 @@ function TaskDetailModal({ task, open, onClose, onDone, canEdit, onEdit, onDelet
       </Section>
 
       {/* Actions */}
-      {!isDone && task.assignedTo?.includes(currentUser?.name) && (
+      {!isDone && isAssignedTo(task, currentUser?.name) && (
         <button onClick={() => { onClose(); onDone(task); }} style={{ marginTop: 8, padding: '9px 16px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
           ✅ Mark Complete
         </button>
@@ -344,7 +344,7 @@ function ExtensionApprovalModal({ task, open, onClose, onDecide, currentUser }) 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Tasks() {
   const { currentRole, currentUser, hasPerm } = useAuth();
-  const { tasks, depts, employees, save, logAct, moveToTrash } = useApp();
+  const { tasks, depts, employees, notices, save, logAct, moveToTrash } = useApp();
   const [search, setSearch] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -367,7 +367,7 @@ export default function Tasks() {
 
   // My Tasks = tasks assigned to me OR created by me
   const myTasks = tasks.filter((t) =>
-    t.assignedTo?.includes(currentUser.name) || t.createdBy === currentUser.name
+    isAssignedTo(t, currentUser.name) || t.createdBy === currentUser.name
   );
 
   // Source list depends on tab + permissions
@@ -468,6 +468,14 @@ export default function Tasks() {
     const newTasks = tasks.map((x) => x.id === t.id ? updated : x);
     await save('hops-tasks', newTasks);
     await logAct('TASK COMPLETED', t.name + (isDelayed ? ' [DELAYED]' : ''));
+    // Notify main admin bell
+    await notifyAdmins({
+      notices, save,
+      subject: isDelayed ? `⚠️ ${currentUser.name} — DELAYED TASK COMPLETED` : `✅ ${currentUser.name} completed: ${t.name}`,
+      message: `Task: ${t.name}\nDepartment: ${t.dept}\nDone By: ${currentUser.name}\nTime: ${nowStr}${isDelayed ? '\n\n⚠️ Completed late — Reason: ' + (delayReason || '—') : ''}${remark ? '\nRemark: ' + remark : ''}`,
+      type: 'task_completed',
+      meta: { taskId: t.id, doneBy: currentUser.name, isDelayed, taskName: t.name },
+    });
     setShowDone(null);
   }
 
@@ -608,7 +616,7 @@ export default function Tasks() {
                             🔄 {(t.extensions || []).length}/3{(t.extensions || []).some((x) => x.status === 'pending') ? ' ⚠️' : ''}
                           </button>
                         )}
-                        {!isDone && t.assignedTo?.includes(currentUser.name) && (
+                        {!isDone && isAssignedTo(t, currentUser.name) && (
                           <button onClick={() => setShowDone(t)} style={{ background: 'none', border: '1px solid #d8e2ef', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, color: '#1a7a4a' }}>✅</button>
                         )}
                         {canEditRow(t) && <button onClick={() => { setEditTask(t); setShowForm(true); }} style={{ background: 'none', border: '1px solid #d8e2ef', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}>✏️</button>}

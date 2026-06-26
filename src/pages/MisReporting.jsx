@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { wasCompletedLate, fDate, toDay, exportToExcel } from '../utils';
+import { wasCompletedLate, fDate, toDay, exportToExcel, isAssignedTo } from '../utils';
 import { DeptTag } from '../components/common/Badge';
 import { DateRangeExportModal } from '../components/common/DateRangeExportModal';
 
@@ -94,7 +94,7 @@ function calcEmpStats(name, tasks, handovers) {
   );
 
   // Originally assigned tasks
-  const originalTasks = tasks.filter(t => t.assignedTo?.includes(name));
+  const originalTasks = tasks.filter(t => isAssignedTo(t, name));
 
   // Exclude handed-over tasks that were completed by someone else (they go to the recipient's head)
   const handedOverDoneByOther = originalTasks.filter(t =>
@@ -102,7 +102,7 @@ function calcEmpStats(name, tasks, handovers) {
   );
 
   // Received handover tasks (not originally assigned to this person)
-  const receivedTasks = tasks.filter(t => receivedIds.has(t.id) && !t.assignedTo?.includes(name));
+  const receivedTasks = tasks.filter(t => receivedIds.has(t.id) && !isAssignedTo(t, name));
 
   const assigned = originalTasks.length - handedOverDoneByOther.length + receivedTasks.length;
 
@@ -110,7 +110,7 @@ function calcEmpStats(name, tasks, handovers) {
   const completedByMe = tasks.filter(t =>
     t.status === 'done' && (
       t.doneBy === name ||
-      (!t.doneBy && t.assignedTo?.includes(name) && !handedOverIds.has(t.id))
+      (!t.doneBy && isAssignedTo(t, name) && !handedOverIds.has(t.id))
     )
   );
 

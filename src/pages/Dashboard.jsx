@@ -1,6 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { wasCompletedLate, isTaskDueToday, fDate } from '../utils';
+import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate } from '../utils';
 import { DeptTag, PriorityBadge } from '../components/common/Badge';
 
 // ─── Charts ──────────────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ export default function Dashboard() {
 
   // Employee performance scores
   const empScores = employees.map((e) => {
-    const mine = tasks.filter((t) => t.assignedTo?.includes(e.name));
+    const mine = tasks.filter((t) => isAssignedTo(t, e.name));
     const comp = mine.filter((t) => t.status === 'done');
     const late = comp.filter((t) => wasCompletedLate(t)).length;
     const base = mine.length > 0 ? (comp.length / mine.length) * 100 : 100;
@@ -296,19 +296,24 @@ function StaffDashboard() {
   tasks.forEach(t => { taskMap[t.id] = t; });
   const isGC = (t) => !!(t.parentTaskId && taskMap[t.parentTaskId]?.parentTaskId);
 
-  const myTasksBase = tasks.filter((t) =>
-    t.assignedTo?.includes(currentUser.name) && isTaskDueToday(t) && !isGC(t)
-  );
+  const myTasksBase = tasks.filter((t) => {
+    if (!isAssignedTo(t, currentUser.name)) return false;
+    if (isGC(t)) return false;
+    // Show task if it's due today (freq logic) OR if schedDate is today/past (overdue)
+    if (isTaskDueToday(t)) return true;
+    if (t.schedDate && t.schedDate <= new Date().toISOString().slice(0, 10)) return true;
+    return false;
+  });
   // Deduplicate: if pending child exists, hide parent
   const myTasks = myTasksBase.filter((t) =>
-    !(t.status === 'pending' && tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(currentUser.name)))
+    !(t.status === 'pending' && tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name)))
   );
   const myPending = myTasks.filter((t) => t.status === 'pending');
   const myDone = myTasks.filter((t) => t.status === 'done');
   const myDelayed = myTasks.filter((t) => wasCompletedLate(t));
   const myDels = delegations.filter((d) => d.doerName === currentUser.name && (d.status === 'pending' || d.status === 'accepted'));
-  const allDone = tasks.filter((t) => t.assignedTo?.includes(currentUser.name) && t.status === 'done' && !isGC(t));
-  const allMine = tasks.filter((t) => t.assignedTo?.includes(currentUser.name) && !isGC(t));
+  const allDone = tasks.filter((t) => isAssignedTo(t, currentUser.name) && t.status === 'done' && !isGC(t));
+  const allMine = tasks.filter((t) => isAssignedTo(t, currentUser.name) && !isGC(t));
   const myDelayAll = allDone.filter((t) => wasCompletedLate(t)).length;
   const myScore = allMine.length > 0 ? Math.max(0, Math.round((allDone.length / allMine.length) * 100 - myDelayAll * 10)) : 100;
 

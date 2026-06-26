@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { isTaskDueToday, toDay } from '../utils';
+import { isTaskDueToday, isAssignedTo, toDay } from '../utils';
 import { sendReminderEmail } from '../lib/emailService';
 
 const INTERVAL_MS = 60 * 60 * 1000; // 60 minutes
@@ -64,12 +64,17 @@ export function useTaskNotifications(tasks, handovers, currentUser, currentRole,
     const hoverTaskIds = new Set(activeHovers.flatMap(hv => hv.taskIds || []));
 
     return t
-      .filter(tk =>
-        tk.status === 'pending' && (
-          (tk.assignedTo?.includes(myName) && (isTaskDueToday(tk) || tk.freq === 'delegation')) ||
-          hoverTaskIds.has(tk.id) || hoverTaskIds.has(tk.parentTaskId)
-        )
-      )
+      .filter(tk => {
+        if (tk.status !== 'pending') return false;
+        if (isAssignedTo(tk, myName)) {
+          if (tk.freq === 'delegation') return true;
+          if (isTaskDueToday(tk)) return true;
+          // Overdue backstop — task with past/today schedDate still belongs in reminders
+          if (tk.schedDate && tk.schedDate <= today) return true;
+          return false;
+        }
+        return hoverTaskIds.has(tk.id) || hoverTaskIds.has(tk.parentTaskId);
+      })
       .map(tk => {
         const isHandover   = hoverTaskIds.has(tk.id) || hoverTaskIds.has(tk.parentTaskId);
         const isDelegation = tk.freq === 'delegation';
@@ -88,10 +93,7 @@ export function useTaskNotifications(tasks, handovers, currentUser, currentRole,
     const ssKeyAssigned = ssKey(myName, 'assigned');
 
     const myTasks = tasks.filter(tk =>
-      tk.status === 'pending' && (
-        tk.assignedTo?.includes(myName) ||
-        tk.assignedTo?.some(n => n.toUpperCase() === myName.toUpperCase())
-      )
+      tk.status === 'pending' && isAssignedTo(tk, myName)
     );
 
     if (!assignedReady.current) {

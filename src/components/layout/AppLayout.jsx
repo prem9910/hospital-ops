@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAuth as useAuthHook } from '../../context/AuthContext';
 import { useApp as useAppForSaving } from '../../context/AppContext';
 import { useApp } from '../../context/AppContext';
-import { isTaskDueToday, toDay, uid } from '../../utils';
+import { isTaskDueToday, isAssignedTo, notifyAdmins, toDay, uid } from '../../utils';
 import { useTaskNotifications } from '../../hooks/useTaskNotifications';
 
 function useDarkTheme() {
@@ -45,7 +45,9 @@ export default function AppLayout() {
   if (!currentRole) return <Navigate to="/login" replace />;
 
   const isMain = currentRole === 'mainadmin';
-  const myUnread = isMain ? [] : (notices || []).filter(n => n.toEmpId === currentUser?.empId && !n.isRead);
+  const myUnread = isMain
+    ? (notices || []).filter(n => (n.toEmpId === 'MAINADMIN' || n.toName === 'MAIN ADMIN') && !n.isRead)
+    : (notices || []).filter(n => n.toEmpId === currentUser?.empId && !n.isRead);
 
   async function openNotice(n) {
     setShowNotifDrop(false);
@@ -68,7 +70,7 @@ export default function AppLayout() {
     const updatedNotices = (notices || []).map(x =>
       x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr } } : x
     );
-    // Confirmation notice
+    // Confirmation notice (to employee)
     const confirmNotice = {
       id: uid(), toEmpId: n.toEmpId, toName: n.toName,
       fromName: 'MAIN ADMIN',
@@ -76,7 +78,16 @@ export default function AppLayout() {
       message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\nPlease report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
       type: 'general', isRead: false, sentAt: nowStr, meta: null,
     };
-    await save('hops-notices', [...updatedNotices, confirmNotice]);
+    // Admin bell alert — employee accepted the dept change
+    const adminAlert = {
+      id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',
+      fromName: n.toName,
+      subject: `✅ ${n.toName} accepted dept change`,
+      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".`,
+      type: 'dept_change_accepted', isRead: false, sentAt: nowStr,
+      meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept },
+    };
+    await save('hops-notices', [...updatedNotices, confirmNotice, adminAlert]);
     setActiveNotice(null);
   }
 
@@ -128,9 +139,8 @@ export default function AppLayout() {
               </div>
             )}
 
-            {/* Notice bell — only for staff/admin, never mainadmin */}
-            {currentRole !== 'mainadmin' && (
-              <div style={{ position: 'relative' }}>
+            {/* Notice bell — visible for all roles including mainadmin */}
+            <div style={{ position: 'relative' }}>
                 <button onClick={() => setShowNotifDrop(s => !s)}
                   style={{ position: 'relative', height: 36, borderRadius: 9, border: '1px solid #d8e2ef', background: myUnread.length > 0 ? '#fff7ed' : '#f3f7fc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, padding: '0 12px', fontSize: 17 }}>
                   <span style={{ fontSize: 13, lineHeight: 1 }}>🔔</span>
@@ -188,7 +198,6 @@ export default function AppLayout() {
                   </>
                 )}
               </div>
-            )}
 
             <div style={{ fontSize: 12, color: '#6b7a90', fontWeight: 600, background: '#f3f7fc', padding: '5px 10px', borderRadius: 7, border: '1px solid #d8e2ef' }}>
               {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
@@ -319,7 +328,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
 
   const myTasksBase = isMain || hasPerm('all_task_details')
     ? tasks
-    : tasks.filter((t) => t.assignedTo?.includes(currentUser.name) || t.createdBy === currentUser.name);
+    : tasks.filter((t) => isAssignedTo(t, currentUser.name) || t.createdBy === currentUser.name);
 
   const badges = {
     tasks: myTasksBase.filter((t) => t.status === 'pending').length,
@@ -334,19 +343,24 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
       const hoverTaskIds = new Set(activeHovers.flatMap(h => h.taskIds || []));
       const tById = {};
       tasks.forEach(t => { tById[t.id] = t; });
-      // Own pending — exclude grandchild bug artifacts, deduplicate parent/child
+      // Own pending — exclude grandchild bug artifacts, deduplicate parent/child.
+      // Backstop: any pending task whose schedDate is today or in the past also counts
+      // (covers overdue tasks with a backdated schedDate that freq logic doesn't flag).
       const ownCount = tasks.filter(t => {
-        if (!t.assignedTo?.includes(myName) || t.status !== 'pending') return false;
-        if (!(t.freq === 'delegation' || isTaskDueToday(t))) return false;
+        if (!isAssignedTo(t, myName) || t.status !== 'pending') return false;
         // Skip grandchild tasks (parent also has parentTaskId)
         if (t.parentTaskId && tById[t.parentTaskId]?.parentTaskId) return false;
         // Skip parent if a pending child exists for me
-        if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(myName))) return false;
-        return true;
+        if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, myName))) return false;
+        // Delegation always counts; otherwise freq logic OR backdated schedDate
+        if (t.freq === 'delegation') return true;
+        if (isTaskDueToday(t)) return true;
+        if (t.schedDate && t.schedDate <= today) return true;
+        return false;
       }).length;
       // Handover received — only original task IDs (not children)
       const handoverRealCount = tasks.filter(t =>
-        hoverTaskIds.has(t.id) && t.status === 'pending' && !t.assignedTo?.includes(myName)
+        hoverTaskIds.has(t.id) && t.status === 'pending' && !isAssignedTo(t, myName)
       ).length;
       // Handover received — daily done tasks needing repeat today (virtual pending)
       const handoverVirtualCount = tasks.filter(t =>
@@ -364,7 +378,11 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
     checklist: tasks.filter((t) => isTaskDueToday(t) && t.status === 'pending').length,
     employees: employees.length,
     depts: depts.length,
-    notices: (notices || []).filter(n => n.toEmpId === currentUser?.empId && !n.isRead).length,
+    notices: (notices || []).filter(n => {
+      if (n.isRead) return false;
+      if (isMain) return n.toEmpId === 'MAINADMIN' || n.toName === 'MAIN ADMIN';
+      return n.toEmpId === currentUser?.empId;
+    }).length,
   };
 
   const chipLabel = isMain ? '👑 MAIN ADMIN' : isAdmin ? '👨‍💼 ADMIN' : '👷 STAFF';
