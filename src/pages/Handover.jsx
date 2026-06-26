@@ -61,12 +61,23 @@ export default function Handover() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [page, setPage] = useState(1);
 
+  // Department filters for the form dropdowns
+  const [fromDept, setFromDept] = useState(''); // admin only: filter "Handover From" list
+  const [toDept, setToDept] = useState('');     // both: filter "Handover To" list
+
   // Pending tasks of the selected "from" employee
   const fromEmployee = employees.find(e => e.name.toUpperCase() === (form.fromName || '').toUpperCase());
   const fromEmpName = fromEmployee?.name || form.fromName;
   const eligibleTasks = tasks.filter(t =>
     t.assignedTo?.some(n => n.toUpperCase() === (form.fromName || '').toUpperCase()) &&
     t.status === 'pending'
+  );
+
+  // Filtered employee lists for the form
+  const fromEmpList = employees.filter(e => !fromDept || e.dept === fromDept);
+  const toEmpList = employees.filter(e =>
+    (!toDept || e.dept === toDept) &&
+    e.name.toUpperCase() !== (form.fromName || '').toUpperCase()
   );
 
   function toggleTask(id) {
@@ -90,6 +101,10 @@ export default function Handover() {
       dateEnd: h.dateEnd || '',
       notes: h.notes || '',
     });
+    const fromEmp = employees.find(e => e.name.toUpperCase() === (h.fromName || '').toUpperCase());
+    const toEmp = employees.find(e => e.name.toUpperCase() === (h.toName || '').toUpperCase());
+    setFromDept(fromEmp?.dept || '');
+    setToDept(toEmp?.dept || '');
     setSelectedIds(new Set(h.taskIds || []));
     setEditingId(h.id);
     setShowForm(true);
@@ -98,6 +113,8 @@ export default function Handover() {
 
   function resetForm() {
     setForm(defaultForm);
+    setFromDept('');
+    setToDept('');
     setSelectedIds(new Set());
     setEditingId(null);
     setShowForm(false);
@@ -267,31 +284,56 @@ export default function Handover() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
-            <Field label="Handover From *">
-              {isMain ? (
-                <select value={form.fromName} onChange={e => { setForm({ ...form, fromName: e.target.value }); setSelectedIds(new Set()); }} style={IS}>
-                  <option value="">Select Employee...</option>
-                  {employees.map(e => <option key={e.id} value={e.name.toUpperCase()}>{e.name} {e.dept ? `(${e.dept})` : ''}</option>)}
-                </select>
-              ) : (
-                <input value={form.fromName} disabled style={{ ...IS, background: '#f5f8fc', color: '#6b7a90' }} />
-              )}
-            </Field>
-            <Field label="Handover To *">
-              <select value={form.toName} onChange={e => setForm({ ...form, toName: e.target.value })} style={IS}>
-                <option value="">Select Employee...</option>
-                {employees.filter(e => e.name.toUpperCase() !== form.fromName.toUpperCase()).map(e => (
-                  <option key={e.id} value={e.name.toUpperCase()}>{e.name} {e.dept ? `(${e.dept})` : ''}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Department">
-              <select value={form.dept} onChange={e => setForm({ ...form, dept: e.target.value })} style={IS}>
-                <option value="">Select...</option>
-                {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-              </select>
-            </Field>
-            <div />
+            {isMain ? (
+              <>
+                {/* Admin: From Department → From Employee */}
+                <Field label="From Department *">
+                  <select value={fromDept} onChange={e => { setFromDept(e.target.value); setForm(f => ({ ...f, fromName: '' })); setSelectedIds(new Set()); }} style={IS}>
+                    <option value="">Select Department...</option>
+                    {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                </Field>
+                {/* Admin: To Department → To Employee */}
+                <Field label="To Department *">
+                  <select value={toDept} onChange={e => { setToDept(e.target.value); setForm(f => ({ ...f, toName: '' })); }} style={IS}>
+                    <option value="">Select Department...</option>
+                    {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Handover From *">
+                  <select value={form.fromName} onChange={e => { setForm(f => ({ ...f, fromName: e.target.value })); setSelectedIds(new Set()); }} style={IS} disabled={!fromDept}>
+                    <option value="">{fromDept ? 'Select Employee...' : 'Select a department first'}</option>
+                    {fromEmpList.map(e => <option key={e.id} value={e.name.toUpperCase()}>{e.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Handover To *">
+                  <select value={form.toName} onChange={e => setForm(f => ({ ...f, toName: e.target.value }))} style={IS} disabled={!toDept}>
+                    <option value="">{toDept ? 'Select Employee...' : 'Select a department first'}</option>
+                    {toEmpList.map(e => <option key={e.id} value={e.name.toUpperCase()}>{e.name}</option>)}
+                  </select>
+                </Field>
+              </>
+            ) : (
+              <>
+                {/* Employee: Handover From = fixed; select dept first, then Handover To */}
+                <Field label="Handover From">
+                  <input value={form.fromName} disabled style={{ ...IS, background: '#f5f8fc', color: '#6b7a90' }} />
+                </Field>
+                <Field label="To Department *">
+                  <select value={toDept} onChange={e => { setToDept(e.target.value); setForm(f => ({ ...f, toName: '' })); }} style={IS}>
+                    <option value="">Select Department...</option>
+                    {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                </Field>
+                <div /> {/* empty cell to keep grid alignment */}
+                <Field label="Handover To *">
+                  <select value={form.toName} onChange={e => setForm(f => ({ ...f, toName: e.target.value }))} style={IS} disabled={!toDept}>
+                    <option value="">{toDept ? 'Select Employee...' : 'Select a department first'}</option>
+                    {toEmpList.map(e => <option key={e.id} value={e.name.toUpperCase()}>{e.name}</option>)}
+                  </select>
+                </Field>
+              </>
+            )}
             <Field label="Date Start *">
               <input type="date" value={form.dateStart} min={isMain ? undefined : toDay()} onChange={e => setForm({ ...form, dateStart: e.target.value })} style={IS} />
             </Field>
