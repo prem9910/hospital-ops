@@ -47,6 +47,15 @@ export default function Settings() {
   const [pwMsg,  setPwMsg]  = useState('');
   const [showPw, setShowPw] = useState(false);
 
+  const [profileForm, setProfileForm] = useState({ contact: '', email: '' });
+  const [profileMsg,  setProfileMsg]  = useState('');
+
+  useEffect(() => {
+    if (currentRole !== 'staff' && currentRole !== 'admin') return;
+    const emp = employees.find(e => e.id === currentUser.empId);
+    if (emp) setProfileForm({ contact: emp.contact || '', email: emp.email || '' });
+  }, [employees, currentUser.empId, currentRole]);
+
   const saved = (() => { try { return JSON.parse(localStorage.getItem('hops-emailcfg') || '{}'); } catch { return {}; } })();
   const [emailForm, setEmailForm] = useState({
     hospitalName: saved.hospitalName || 'Hospital Operations',
@@ -93,6 +102,16 @@ export default function Settings() {
     }
   }
 
+  async function saveProfile() {
+    const emp = employees.find(e => e.id === currentUser.empId);
+    if (!emp) { setProfileMsg('❌ Employee record not found!'); return; }
+    await save('hops-employees', employees.map(e =>
+      e.id === emp.id ? { ...e, contact: profileForm.contact, email: profileForm.email } : e
+    ));
+    await logAct('PROFILE UPDATED', currentUser.name);
+    setProfileMsg('✅ Profile updated successfully!');
+  }
+
   async function changePw() {
     if (!pwForm.newPw.trim())                    { setPwMsg('❌ Password required!');      return; }
     if (pwForm.newPw !== pwForm.confirm)          { setPwMsg('❌ Passwords do not match!'); return; }
@@ -124,6 +143,34 @@ export default function Settings() {
   return (
     <div>
       <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d', marginBottom: 20 }}>⚙️ Settings</h2>
+
+      {/* ── My Profile — staff/admin only ── */}
+      {(currentRole === 'staff' || currentRole === 'admin') && (
+        <Card title="👤 My Profile">
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: '#f3f7fc', border: '1px solid #e4eaf2' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10.5, color: '#6b7a90', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>Name</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2535' }}>{currentUser.name}</div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10.5, color: '#6b7a90', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>Department</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2535' }}>{currentUser.dept || '—'}</div>
+            </div>
+          </div>
+          {profileMsg && (
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: profileMsg.startsWith('✅') ? '#d4edda' : '#fde8e8', color: profileMsg.startsWith('✅') ? '#1a7a4a' : '#c0392b', fontWeight: 700, fontSize: 12 }}>
+              {profileMsg}
+            </div>
+          )}
+          <Field label="Contact / Phone">
+            <input value={profileForm.contact} onChange={e => setProfileForm({ ...profileForm, contact: e.target.value })} placeholder="PHONE NUMBER" style={IS} />
+          </Field>
+          <Field label="Email">
+            <input value={profileForm.email} onChange={e => setProfileForm({ ...profileForm, email: e.target.value })} placeholder="EMAIL ADDRESS" style={IS} />
+          </Field>
+          <button onClick={saveProfile} style={{ padding: '9px 20px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>💾 Save Profile</button>
+        </Card>
+      )}
 
       {/* ── Password ── */}
       <Card title="🔐 Change Password">
