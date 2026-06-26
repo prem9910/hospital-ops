@@ -58,6 +58,10 @@ export function AppProvider({ children }) {
     if (!stateKey) return;
     setIsSaving(true);
     ls.set(hopKey, newArr);
+    console.log('[save]', hopKey, '→', newArr.length, 'rows; localStorage now:', ls.get(hopKey, []).length);
+    // Stamp local-write time BEFORE awaiting the network call so realtime/refresh
+    // paths can recognise rows we just wrote but Supabase hasn't echoed back yet.
+    ls.set('hops-last-local-write', { key: hopKey, at: Date.now() });
     dispatch({ type: 'SET_KEY', key: stateKey, value: newArr });
     // Refresh current employee's perms live if their record was updated
     if (hopKey === 'hops-employees') refreshPermsFromEmployees(newArr);
@@ -69,6 +73,8 @@ export function AppProvider({ children }) {
     if (!stateKey) return;
     setIsSaving(true);
     ls.set(hopKey, items);
+    console.log('[saveSingle]', hopKey, 'item.id=', item?.id, 'rows=', items.length);
+    ls.set('hops-last-local-write', { key: hopKey, at: Date.now() });
     dispatch({ type: 'SET_KEY', key: stateKey, value: items });
     try { await upsertSingle(hopKey, item); } catch (e) { console.error('SaveSingle error:', e); } finally { setIsSaving(false); }
   }, []);
@@ -91,9 +97,10 @@ export function AppProvider({ children }) {
       return merged;
     }
 
-    // Safety: if Supabase hangs, fall back to localStorage after 8 seconds
+    // Safety: if Supabase hangs, warn (don't stamp stale LS into state — that can
+    // resurrect rows the user just deleted server-side via the dashboard).
     const fallbackTimer = setTimeout(() => {
-      dispatch({ type: 'SET_ALL', payload: loadFromLS() });
+      console.warn('[init] Supabase slow — state still loading (not stamping stale localStorage)');
     }, 8000);
 
     async function init() {
@@ -104,16 +111,32 @@ export function AppProvider({ children }) {
         const results = await Promise.all(keys.map((k) => loadAll(k)));
         const merged = {};
 
+        // Timestamp of the last successful sync — anything older is treated
+        // as a stale localStorage leftover (e.g. a row the user deleted
+        // server-side via the Supabase dashboard), NOT a pending write.
+        const lastSyncAt = ls.get('hops-last-sync', 0);
+
         keys.forEach((k, i) => {
           const sbData = results[i] || [];
           const lsData = fromLS[k] || [];
           const sbIds = new Set(sbData.map((x) => x.id));
-          const missing = lsData.filter((x) => x.id && !sbIds.has(x.id));
-          const all = [...sbData, ...missing];
-          merged[KEY_MAP[k]] = all;
-          ls.set(k, all);
-          if (missing.length > 0) upsertRecord(k, missing);
+          const lsOnly = lsData.filter((x) => x.id && !sbIds.has(x.id));
+          // Treat any LS-only row written after the last sync as pending.
+          // updatedAt/createdAt may be ISO strings OR epoch numbers — normalise.
+          const pending = lsOnly.filter((x) => {
+            const tsRaw = x.updatedAt || x.createdAt || 0;
+            const ts = typeof tsRaw === 'number' ? tsRaw : new Date(tsRaw).getTime();
+            return (Number.isFinite(ts) ? ts : 0) > lastSyncAt;
+          });
+          const stale = lsOnly.filter((x) => !pending.includes(x));
+          merged[KEY_MAP[k]] = [...sbData, ...pending];
+          ls.set(k, [...sbData, ...pending]);
+          if (stale.length) {
+            console.warn(`[init] Dropping ${stale.length} stale LS-only records for ${k} (likely deleted server-side)`);
+          }
+          if (pending.length) upsertRecord(k, pending);
         });
+        ls.set('hops-last-sync', Date.now());
 
         merged.emailCfg = ls.get('hops-email', initialState.emailCfg);
         merged.trash = purgeOldTrash(merged.trash || [], ONE_YEAR_MS);
@@ -155,11 +178,27 @@ export function AppProvider({ children }) {
       const stateKey = KEY_MAP[key];
       if (!stateKey) return;
 
+      // Preserve any locally-written rows that Supabase hasn't echoed back yet.
+      // This guards against the realtime event firing before the new row is
+      // visible to subsequent reads — without this, an in-flight task would be
+      // wiped out the moment realtime fired.
+      const lastWrite = ls.get('hops-last-local-write', null);
+      const freshIds = new Set(fresh.map((x) => x.id));
+      const localPending = (lastWrite && lastWrite.key === key)
+        ? ls.get(key, []).filter((row) => {
+            if (!row || !row.id) return false;
+            if (freshIds.has(row.id)) return false;
+            const ts = Number(row.updatedAt || row.createdAt || 0);
+            return ts >= lastWrite.at - 1000; // 1s slack for clock skew
+          })
+        : [];
+      const merged = localPending.length ? [...fresh, ...localPending] : fresh;
+
       if (key === 'hops-tasks') {
         // Always apply autoCycle on fresh Supabase data so cycled tasks survive realtime refreshes
-        const cycled = autoCycleTasks(fresh);
+        const cycled = autoCycleTasks(merged);
         if (cycled.length) {
-          const withCycles = [...fresh, ...cycled];
+          const withCycles = [...merged, ...cycled];
           ls.set(key, withCycles);
           dispatch({ type: 'SET_KEY', key: stateKey, value: withCycles });
           upsertRecord(key, cycled); // persist cycles to Supabase (triggers realtime again, but autoCycle is idempotent)
@@ -167,9 +206,13 @@ export function AppProvider({ children }) {
         }
       }
 
-      ls.set(key, fresh);
-      dispatch({ type: 'SET_KEY', key: stateKey, value: fresh });
-      if (key === 'hops-employees') refreshPermsFromEmployees(fresh);
+      ls.set(key, merged);
+      dispatch({ type: 'SET_KEY', key: stateKey, value: merged });
+      if (key === 'hops-employees') refreshPermsFromEmployees(merged);
+      if (localPending.length) {
+        // Re-push pending rows so Supabase eventually catches up
+        upsertRecord(key, localPending);
+      }
     });
     return cleanup;
   }, [refreshPermsFromEmployees]);
@@ -226,7 +269,14 @@ export function AppProvider({ children }) {
       const newArr = cfg.arr.filter((x) => x.id !== id);
       ls.set(cfg.key, newArr);
       dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: newArr });
-      await deleteRecord(type, id);
+      const delResult = await deleteRecord(type, id);
+      if (!delResult || !delResult.ok) {
+        // DB delete failed (row gone, RLS, network). Roll back LS + state so UI matches DB.
+        console.error('moveToTrash: deleteRecord failed', { type, id, delResult });
+        ls.set(cfg.key, cfg.arr);
+        dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: cfg.arr });
+        return { error: true, reason: delResult?.reason || 'unknown', message: delResult?.message || '' };
+      }
       const trashItem = {
         id: uid(), type, data, deletedBy: currentUser?.name || 'ADMIN',
         deletedAt: new Date().toISOString(),

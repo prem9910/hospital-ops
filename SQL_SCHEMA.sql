@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   activity_log       JSONB DEFAULT '[]',
   completion_history JSONB DEFAULT '[]',
   parent_task_id     TEXT DEFAULT '',
+  extensions         JSONB DEFAULT '[]',
   created_at         TIMESTAMPTZ DEFAULT now()
 );
 
@@ -198,6 +199,17 @@ ALTER TABLE employees   ADD COLUMN IF NOT EXISTS perms JSONB DEFAULT '[]';
 ALTER TABLE employees   ADD COLUMN IF NOT EXISTS pending_dept TEXT DEFAULT '';
 ALTER TABLE notices     ADD COLUMN IF NOT EXISTS meta TEXT DEFAULT '';
 
+-- Sync bookkeeping: client uses updated_at to distinguish local-only
+-- pending writes from stale localStorage leftovers after a server-side delete.
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE employees   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE admins      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS extensions JSONB DEFAULT '[]';
+ALTER TABLE issues      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE delegations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- Using service_role key from frontend — RLS is enforced at DB level
@@ -237,12 +249,12 @@ CREATE POLICY "service_role_all_notices" ON notices FOR ALL USING (true) WITH CH
 -- REALTIME (Enable for live subscriptions)
 -- ============================================================
 -- Run in Supabase Dashboard → Database → Replication → Add table to realtime:
--- tasks, issues, departments, employees, delegations, admins
+-- tasks, issues, departments, employees, delegations, admins, handovers, notices, trash
 
 -- ============================================================
 -- SAMPLE: Enable realtime via SQL
 -- ============================================================
 BEGIN;
   DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE tasks, issues, departments, employees, delegations, admins, notices;
+  CREATE PUBLICATION supabase_realtime FOR TABLE tasks, issues, departments, employees, delegations, admins, notices, handovers, trash;
 COMMIT;
