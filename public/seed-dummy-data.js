@@ -541,14 +541,16 @@
 
   // ---------- PACK (UI → snake_case for Supabase) ----------
   // These mirror the pack() functions in src/services/db.js exactly.
+  const seedNowIso = () => new Date().toISOString();
   function packDept(o) {
-    return { id: o.id, name: o.name || '', head: o.hod || o.head || '', contact: o.phone || o.contact || '', email: o.email || '', floor: o.floor || '' };
+    return { id: o.id, name: o.name || '', head: o.hod || o.head || '', contact: o.phone || o.contact || '', email: o.email || '', floor: o.floor || '', updated_at: seedNowIso() };
   }
   function packEmployee(o) {
     return {
       id: o.id, name: o.name || '', username: o.username || o.name || '', dept: o.dept || '',
       designation: o.designation || o.role || '', email: o.email || '', password: o.password || '',
       contact: o.contact || '', perms: o.perms || [], is_incharge: !!o.isIncharge, pending_dept: o.pendingDept || '',
+      updated_at: seedNowIso(),
     };
   }
   function packAdmin(o) {
@@ -556,6 +558,7 @@
       id: o.id, name: o.name || '', username: o.username || '', email: o.email || '',
       password: o.password || '', role: o.role || '', dept: o.dept || '',
       perms: o.perms || [], created_by: o.createdBy || '',
+      updated_at: seedNowIso(),
     };
   }
   function packTask(o) {
@@ -570,6 +573,7 @@
       activity_log: o.activityLog || [], completion_history: o.completionHistory || [],
       parent_task_id: o.parentTaskId || '',
       extensions: o.extensions || [],
+      updated_at: seedNowIso(),
     };
   }
   function packIssue(o) {
@@ -578,6 +582,7 @@
       reporter: o.reporter || '', assigned: o.assigned || '', description: o.desc || '',
       status: o.status || 'open', date: o.date || '',
       resolve_remark: o.resolveRemark || '', resolve_by: o.resolveBy || '', resolved_at: o.resolvedAt || null,
+      updated_at: seedNowIso(),
     };
   }
   function packHandover(o) {
@@ -593,6 +598,7 @@
       supervisor: '',
       status: o.status || 'active',
       created_by: o.createdAt || '',
+      updated_at: seedNowIso(),
     };
   }
   function packDelegation(o) {
@@ -604,6 +610,7 @@
       created_date: o.createdAt || '', actual_date: o.actualDate || '', actual_time: o.actualTime || '',
       done_remark: o.doneRemark || '', delay_reason: o.delayReason || '', is_delayed: !!o.isDelayed,
       extensions: o.extensionRequests || o.extensions || [], activity_log: o.activityLog || [],
+      updated_at: seedNowIso(),
     };
   }
   function packActLog(o) {
