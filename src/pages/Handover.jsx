@@ -315,23 +315,33 @@ export default function Handover() {
               </>
             ) : (
               <>
-                {/* Employee: Handover From = fixed; select dept first, then Handover To */}
-                <Field label="Handover From">
-                  <input value={form.fromName} disabled style={{ ...IS, background: '#f5f8fc', color: '#6b7a90' }} />
-                </Field>
-                <Field label="To Department *">
-                  <select value={toDept} onChange={e => { setToDept(e.target.value); setForm(f => ({ ...f, toName: '' })); }} style={IS}>
-                    <option value="">Select Department...</option>
-                    {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                  </select>
-                </Field>
-                <div /> {/* empty cell to keep grid alignment */}
-                <Field label="Handover To *">
-                  <select value={form.toName} onChange={e => setForm(f => ({ ...f, toName: e.target.value }))} style={IS} disabled={!toDept}>
-                    <option value="">{toDept ? 'Select Employee...' : 'Select a department first'}</option>
-                    {toEmpList.map(e => <option key={e.id} value={e.name.toUpperCase()}>{e.name}</option>)}
-                  </select>
-                </Field>
+                {/* Employee: Handover From fixed (full width) */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label="Handover From">
+                    <input value={form.fromName} disabled style={{ ...IS, background: '#f5f8fc', color: '#6b7a90' }} />
+                  </Field>
+                </div>
+
+                {/* Handover To section with heading */}
+                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #e8eef5', paddingTop: 14, marginTop: 2 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#0d7377', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
+                    📤 Handover To — Select department first, then employee
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <Field label="Department *">
+                      <select value={toDept} onChange={e => { setToDept(e.target.value); setForm(f => ({ ...f, toName: '' })); }} style={IS}>
+                        <option value="">Select Department...</option>
+                        {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Employee *">
+                      <select value={form.toName} onChange={e => setForm(f => ({ ...f, toName: e.target.value }))} style={IS} disabled={!toDept}>
+                        <option value="">{toDept ? 'Select Employee...' : 'Select a department first'}</option>
+                        {toEmpList.map(e => <option key={e.id} value={e.name.toUpperCase()}>{e.name}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                </div>
               </>
             )}
             <Field label="Date Start *">
