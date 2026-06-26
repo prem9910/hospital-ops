@@ -26,8 +26,8 @@ function EmpPwField({ value, onChange }) {
 }
 
 export default function Staff() {
-  const { hasPerm, currentRole } = useAuth();
-  const { employees, depts, save, logAct, moveToTrash } = useApp();
+  const { hasPerm, currentRole, currentUser } = useAuth();
+  const { employees, depts, tasks, notices, save, logAct, moveToTrash } = useApp();
   const [search, setSearch] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -35,6 +35,7 @@ export default function Staff() {
   const [form, setForm] = useState({ name: '', dept: '', role: '', contact: '', email: '', password: '' });
   const [perms, setPerms] = useState([]);
   const [page, setPage] = useState(1);
+  const [pendingTaskModal, setPendingTaskModal] = useState(null); // { emp, pendingCount, newDept, noticeMsg }
 
   const canEdit = currentRole === 'mainadmin' || hasPerm('employees_edit');
 
@@ -53,12 +54,33 @@ export default function Staff() {
     if (!editEmp && !form.password.trim()) { alert('Password is required for new staff!'); return; }
     const obj = { id: editEmp?.id || uid(), name: form.name.toUpperCase().trim(), dept: form.dept, role: form.isIncharge ? 'INCHARGE' : 'STAFF', isIncharge: form.isIncharge, contact: form.contact, email: form.email, password: form.password || editEmp?.password || '', perms };
     const isNew = !editEmp;
-    const newEmps = editEmp ? employees.map((e) => e.id === obj.id ? obj : e) : [...employees, obj];
+    const deptChanged = editEmp && editEmp.dept !== obj.dept;
+    const empPendingCount = deptChanged ? tasks.filter(t => (t.assignedTo || []).includes(obj.name) && t.status === 'pending').length : 0;
+
+    // Keep old dept until employee accepts; record new target dept in pendingDept
+    const objToSave = deptChanged
+      ? { ...obj, dept: editEmp.dept, pendingDept: obj.dept }
+      : obj;
+    const newEmps = editEmp ? employees.map((e) => e.id === obj.id ? objToSave : e) : [...employees, obj];
     await save('hops-employees', newEmps);
+
+    if (deptChanged) {
+      if (empPendingCount === 0) {
+        // No pending tasks → auto-send dept_change_approval notice right now
+        const notice = {
+          id: uid(), toEmpId: obj.id, toName: obj.name,
+          fromName: 'MAIN ADMIN',
+          subject: 'DEPARTMENT CHANGE REQUEST',
+          message: `Dear ${obj.name},\n\nYour department is being changed from "${editEmp.dept}" to "${obj.dept}".\n\nPlease accept this change at your earliest convenience.\n\nRegards,\nMAIN ADMIN`,
+          type: 'dept_change_approval', isRead: false, sentAt: new Date().toISOString(),
+          meta: { newDept: obj.dept, oldDept: editEmp.dept, empId: obj.id },
+        };
+        await save('hops-notices', [...(notices || []), notice]);
+      }
+    }
 
     // Sync isIncharge → department's hod field
     if (form.isIncharge) {
-      // Set as incharge of their dept; clear them from any other dept they may have been incharge of
       const updatedDepts = depts.map(d => {
         if (d.name === obj.dept) return { ...d, hod: obj.name };
         if ((d.hod || '').toUpperCase() === obj.name) return { ...d, hod: '' };
@@ -66,7 +88,6 @@ export default function Staff() {
       });
       await save('hops-depts', updatedDepts);
     } else {
-      // Unchecked — remove this employee as incharge from whichever dept had them
       const hadDept = depts.find(d => (d.hod || '').toUpperCase() === obj.name);
       if (hadDept) {
         await save('hops-depts', depts.map(d => (d.hod || '').toUpperCase() === obj.name ? { ...d, hod: '' } : d));
@@ -76,6 +97,30 @@ export default function Staff() {
     await logAct(editEmp ? 'EMPLOYEE UPDATED' : 'EMPLOYEE ADDED', obj.name);
     if (isNew && obj.email) sendWelcomeEmail(obj);
     setShowForm(false);
+
+    // If pending tasks exist → show popup so admin can send a task-reminder notice manually
+    if (deptChanged && empPendingCount > 0) {
+      setPendingTaskModal({
+        emp: obj,
+        pendingCount: empPendingCount,
+        newDept: obj.dept,
+        noticeMsg: `Dear ${obj.name},\n\nYour department is being changed to "${obj.dept}". However, you have ${empPendingCount} pending task(s) that need to be completed first.\n\nPlease complete your pending tasks as soon as possible.\n\nRegards,\nMAIN ADMIN`,
+      });
+    }
+  }
+
+  async function sendPendingNotice() {
+    if (!pendingTaskModal) return;
+    const notice = {
+      id: uid(), toEmpId: pendingTaskModal.emp.id, toName: pendingTaskModal.emp.name,
+      fromName: 'MAIN ADMIN',
+      subject: 'COMPLETE YOUR PENDING TASKS',
+      message: pendingTaskModal.noticeMsg,
+      type: 'task_reminder', isRead: false, sentAt: new Date().toISOString(), meta: null,
+    };
+    await save('hops-notices', [...(notices || []), notice]);
+    await logAct('NOTICE SENT', `Pending task reminder to ${pendingTaskModal.emp.name}`);
+    setPendingTaskModal(null);
   }
 
   return (
@@ -203,6 +248,41 @@ export default function Staff() {
           <button onClick={() => setShowForm(false)} style={{ padding: '9px 18px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>Cancel</button>
         </div>
       </Modal>
+
+      {/* Pending task popup — admin manually sends task-reminder notice */}
+      {pendingTaskModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 16, maxWidth: 480, width: '100%', boxShadow: '0 16px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#c0392b,#e74c3c)', padding: '16px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>⚠️</div>
+                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: 'white', fontWeight: 700 }}>Pending Tasks — Dept Change Blocked</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 3 }}>
+                  <strong>{pendingTaskModal.emp.name}</strong> has <strong>{pendingTaskModal.pendingCount} pending task(s)</strong>. Dept will change to <strong>"{pendingTaskModal.newDept}"</strong> only after all tasks are done.
+                </div>
+              </div>
+              <button onClick={() => setPendingTaskModal(null)} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 10 }}>✕</button>
+            </div>
+            <div style={{ padding: '18px 20px' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Notice Message (Editable)</div>
+              <textarea
+                value={pendingTaskModal.noticeMsg}
+                onChange={e => setPendingTaskModal({ ...pendingTaskModal, noticeMsg: e.target.value })}
+                rows={6}
+                style={{ width: '100%', padding: '9px 13px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 12, color: '#1a2535', outline: 'none', background: '#f8fbff', fontWeight: 600, resize: 'vertical', lineHeight: 1.65, boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button onClick={sendPendingNotice} style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                  📨 Send Notice to Employee
+                </button>
+                <button onClick={() => setPendingTaskModal(null)} style={{ flex: 1, padding: '9px', borderRadius: 8, background: 'transparent', color: '#6b7a90', border: '1.5px solid #d8e2ef', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

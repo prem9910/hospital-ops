@@ -386,9 +386,30 @@ export default function Tasks() {
     return getTs(b.id) - getTs(a.id);
   });
 
-  // Deduplicate: per parent, show only the most recent pending child (hide older duplicate cycles)
+  // Build a quick lookup for parent resolution
+  const taskById = {};
+  tasks.forEach(t => { taskById[t.id] = t; });
+
+  const doneSignatures = new Set();
   const seenPendingParents = new Set();
   const filtered = rawFiltered.filter(t => {
+    // Hide grandchild tasks (parent also has a parentTaskId) — bug artifacts
+    if (t.parentTaskId) {
+      const parent = taskById[t.parentTaskId];
+      if (parent?.parentTaskId) return false;
+    }
+    // Deduplicate identical done records (same name+assigned+schedDate+doneTime = true duplicate)
+    if (t.status === 'done') {
+      const sig = `${t.name}|${(t.assignedTo || []).slice().sort().join(',')}|${t.schedDate}|${t.doneTime}`;
+      if (doneSignatures.has(sig)) return false;
+      doneSignatures.add(sig);
+    }
+    // Hide done parent when a pending child exists (child represents the current state)
+    if (t.status === 'done') {
+      const hasPendingChild = tasks.some(x => x.parentTaskId === t.id && x.status === 'pending');
+      if (hasPendingChild) return false;
+    }
+    // Deduplicate multiple pending siblings (keep only one per parent)
     if (t.status !== 'pending' || !t.parentTaskId) return true;
     if (seenPendingParents.has(t.parentTaskId)) return false;
     seenPendingParents.add(t.parentTaskId);

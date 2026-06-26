@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS employees (
   email       TEXT DEFAULT '',
   password    TEXT DEFAULT '',
   contact     TEXT DEFAULT '',
+  pending_dept TEXT DEFAULT '',
   created_at  TIMESTAMPTZ DEFAULT now()
 );
 
@@ -184,6 +185,7 @@ CREATE TABLE IF NOT EXISTS notices (
   type       TEXT DEFAULT 'general',
   is_read    BOOLEAN DEFAULT false,
   sent_at    TEXT DEFAULT '',
+  meta       TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -193,6 +195,8 @@ CREATE TABLE IF NOT EXISTS notices (
 ALTER TABLE departments ADD COLUMN IF NOT EXISTS head TEXT DEFAULT '';
 ALTER TABLE employees   ADD COLUMN IF NOT EXISTS is_incharge BOOLEAN DEFAULT false;
 ALTER TABLE employees   ADD COLUMN IF NOT EXISTS perms JSONB DEFAULT '[]';
+ALTER TABLE employees   ADD COLUMN IF NOT EXISTS pending_dept TEXT DEFAULT '';
+ALTER TABLE notices     ADD COLUMN IF NOT EXISTS meta TEXT DEFAULT '';
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES

@@ -9,8 +9,8 @@ const TABLES = {
   },
   'hops-employees': {
     table: 'employees',
-    pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || o.name || '', dept: o.dept || '', designation: o.role || o.designation || '', email: o.email || '', password: o.password || '', contact: o.contact || '', perms: o.perms || [], is_incharge: o.isIncharge || false }),
-    unpack: (r) => ({ id: r.id, name: r.name || '', username: r.username || r.name || '', dept: r.dept || '', role: r.designation || '', designation: r.designation || '', email: r.email || '', password: r.password || '', contact: r.contact || '', perms: Array.isArray(r.perms) ? r.perms : [], isIncharge: r.is_incharge || false }),
+    pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || o.name || '', dept: o.dept || '', designation: o.role || o.designation || '', email: o.email || '', password: o.password || '', contact: o.contact || '', perms: o.perms || [], is_incharge: o.isIncharge || false, pending_dept: o.pendingDept || '' }),
+    unpack: (r) => ({ id: r.id, name: r.name || '', username: r.username || r.name || '', dept: r.dept || '', role: r.designation || '', designation: r.designation || '', email: r.email || '', password: r.password || '', contact: r.contact || '', perms: Array.isArray(r.perms) ? r.perms : [], isIncharge: r.is_incharge || false, pendingDept: r.pending_dept || '' }),
   },
   'hops-admins': {
     table: 'admins',
@@ -103,8 +103,8 @@ const TABLES = {
   },
   'hops-notices': {
     table: 'notices',
-    pack: (o) => ({ id: o.id, to_emp_id: o.toEmpId || '', to_name: o.toName || '', from_name: o.fromName || '', subject: o.subject || '', message: o.message || '', type: o.type || 'general', is_read: o.isRead || false, sent_at: o.sentAt || '' }),
-    unpack: (r) => ({ id: r.id, toEmpId: r.to_emp_id || '', toName: r.to_name || '', fromName: r.from_name || '', subject: r.subject || '', message: r.message || '', type: r.type || 'general', isRead: r.is_read || false, sentAt: r.sent_at || '' }),
+    pack: (o) => ({ id: o.id, to_emp_id: o.toEmpId || '', to_name: o.toName || '', from_name: o.fromName || '', subject: o.subject || '', message: o.message || '', type: o.type || 'general', is_read: o.isRead || false, sent_at: o.sentAt || '', meta: o.meta ? JSON.stringify(o.meta) : '' }),
+    unpack: (r) => ({ id: r.id, toEmpId: r.to_emp_id || '', toName: r.to_name || '', fromName: r.from_name || '', subject: r.subject || '', message: r.message || '', type: r.type || 'general', isRead: r.is_read || false, sentAt: r.sent_at || '', meta: r.meta ? (() => { try { return JSON.parse(r.meta); } catch { return null; } })() : null }),
   },
 };
 

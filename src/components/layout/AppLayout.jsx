@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAuth as useAuthHook } from '../../context/AuthContext';
 import { useApp as useAppForSaving } from '../../context/AppContext';
 import { useApp } from '../../context/AppContext';
-import { isTaskDueToday, toDay } from '../../utils';
+import { isTaskDueToday, toDay, uid } from '../../utils';
 import { useTaskNotifications } from '../../hooks/useTaskNotifications';
 
 function useDarkTheme() {
@@ -35,7 +35,7 @@ const PAGE_TITLES = {
 
 export default function AppLayout() {
   const { currentRole, currentUser, logout, inactivityPct, inactivityWarning, inactivitySeconds, showSessionModal, continueSession } = useAuth();
-  const { isSaving, notices, save } = useAppForSaving();
+  const { isSaving, notices, employees, save } = useAppForSaving();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -50,9 +50,34 @@ export default function AppLayout() {
   async function openNotice(n) {
     setShowNotifDrop(false);
     setActiveNotice(n);
-    if (!n.isRead) {
+    // dept_change_approval stays unread until explicitly accepted
+    if (!n.isRead && n.type !== 'dept_change_approval') {
       await save('hops-notices', (notices || []).map(x => x.id === n.id ? { ...x, isRead: true } : x));
     }
+  }
+
+  async function acceptDeptChange(n) {
+    if (!n.meta?.newDept || !n.meta?.empId) return;
+    const nowStr = new Date().toISOString();
+    // Apply dept change + clear pendingDept
+    const updatedEmps = (employees || []).map(e =>
+      e.id === n.meta.empId ? { ...e, dept: n.meta.newDept, pendingDept: '' } : e
+    );
+    await save('hops-employees', updatedEmps);
+    // Mark approval notice as read AND record acceptance in meta
+    const updatedNotices = (notices || []).map(x =>
+      x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr } } : x
+    );
+    // Confirmation notice
+    const confirmNotice = {
+      id: uid(), toEmpId: n.toEmpId, toName: n.toName,
+      fromName: 'MAIN ADMIN',
+      subject: 'DEPARTMENT CHANGED SUCCESSFULLY',
+      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\nPlease report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
+      type: 'general', isRead: false, sentAt: nowStr, meta: null,
+    };
+    await save('hops-notices', [...updatedNotices, confirmNotice]);
+    setActiveNotice(null);
   }
 
   function fDate(iso) {
@@ -103,12 +128,13 @@ export default function AppLayout() {
               </div>
             )}
 
-            {/* Notice bell — only for non-mainadmin */}
-            {!isMain && (
+            {/* Notice bell — only for staff/admin, never mainadmin */}
+            {currentRole !== 'mainadmin' && (
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setShowNotifDrop(s => !s)}
-                  style={{ position: 'relative', width: 36, height: 36, borderRadius: 9, border: '1px solid #d8e2ef', background: myUnread.length > 0 ? '#fff7ed' : '#f3f7fc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>
-                  🔔
+                  style={{ position: 'relative', height: 36, borderRadius: 9, border: '1px solid #d8e2ef', background: myUnread.length > 0 ? '#fff7ed' : '#f3f7fc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, padding: '0 12px', fontSize: 17 }}>
+                  <span style={{ fontSize: 13, lineHeight: 1 }}>🔔</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: myUnread.length > 0 ? '#c2410c' : '#6b7a90' }}>Notice</span>
                   {myUnread.length > 0 && (
                     <span style={{ position: 'absolute', top: -5, right: -5, background: '#ef4444', color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 20, padding: '1px 5px', minWidth: 16, textAlign: 'center', border: '2px solid white' }}>
                       {myUnread.length}
@@ -124,27 +150,40 @@ export default function AppLayout() {
                         <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, fontWeight: 700, color: '#0b1e3d' }}>📬 Notices</span>
                         <span style={{ fontSize: 11, color: '#6b7a90', fontWeight: 600 }}>{myUnread.length} unread</span>
                       </div>
-                      {myUnread.length === 0 ? (
-                        <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>No new notices</div>
-                      ) : (
-                        <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-                          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fff7ed', border: '2px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 12px' }}>🔔</div>
-                          <div style={{ fontSize: 15, fontWeight: 800, color: '#0b1e3d', marginBottom: 6 }}>
-                            You have {myUnread.length} new notice{myUnread.length > 1 ? 's' : ''}
+                      {myUnread.length > 0 ? (
+                        <>
+                          <div style={{ padding: '8px 14px', background: '#fff7ed', borderBottom: '1px solid #f0f4f8', fontSize: 11, fontWeight: 800, color: '#c2410c' }}>
+                            {myUnread.length} unread notice{myUnread.length > 1 ? 's' : ''}
                           </div>
-                          <div style={{ fontSize: 12, color: '#6b7a90', marginBottom: 14 }}>Click below to view your notices</div>
-                          <button onClick={() => { setShowNotifDrop(false); openNotice(myUnread[0]); }}
-                            style={{ width: '100%', padding: '9px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
-                            📨 View Notice
+                          <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                            {myUnread.map((n, i) => (
+                              <button key={n.id} onClick={() => openNotice(n)}
+                                style={{ width: '100%', textAlign: 'left', padding: '11px 16px', border: 'none', borderBottom: i < myUnread.length - 1 ? '1px solid #f0f4f8' : 'none', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#f0f7ff'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                  <span style={{ fontSize: 18, flexShrink: 0 }}>{n.type === 'task_reminder' ? '⏰' : n.type === 'dept_change_approval' ? '🏢' : '📋'}</span>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 800, color: '#0b1e3d', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 190 }}>{n.subject}</div>
+                                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>From: {n.fromName} · {fDate(n.sentAt)}</div>
+                                  </div>
+                                </div>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: '#1d4ed8', background: '#dbeafe', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>NEW</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#6b7a90', marginBottom: 4 }}>No new notices</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 14 }}>All caught up!</div>
+                          <button onClick={() => { setShowNotifDrop(false); navigate('/notices'); }}
+                            style={{ width: '100%', padding: '9px', borderRadius: 8, background: '#f0f7ff', color: '#0d7377', border: '1px solid #cce0f0', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                            📋 Notice History
                           </button>
                         </div>
                       )}
-                      <div style={{ padding: '10px 16px', borderTop: '1px solid #f0f4f8' }}>
-                        <button onClick={() => { setShowNotifDrop(false); navigate('/notices'); }}
-                          style={{ width: '100%', padding: '7px', borderRadius: 7, background: '#f0f7ff', color: '#0d7377', border: '1px solid #cce0f0', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
-                          📋 View Notice History
-                        </button>
-                      </div>
                     </div>
                   </>
                 )}
@@ -164,7 +203,7 @@ export default function AppLayout() {
               <div style={{ background: 'linear-gradient(135deg,#0d7377,#0b5e62)', padding: '18px 22px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.65)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-                    {activeNotice.type === 'task_reminder' ? '⏰ Task Reminder' : '📋 Notice'} · From: {activeNotice.fromName}
+                    {activeNotice.type === 'task_reminder' ? '⏰ Task Reminder' : activeNotice.type === 'dept_change_approval' ? '🏢 Department Change' : '📋 Notice'} · From: {activeNotice.fromName}
                   </div>
                   <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: 'white', fontWeight: 700 }}>{activeNotice.subject}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>{fDate(activeNotice.sentAt)}</div>
@@ -174,16 +213,29 @@ export default function AppLayout() {
               </div>
               <div style={{ padding: '20px 22px' }}>
                 <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>{activeNotice.message}</div>
-                <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0f4f8', display: 'flex', gap: 8 }}>
-                  <button onClick={() => setActiveNotice(null)}
-                    style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
-                    ✓ Got It
-                  </button>
-                  <button onClick={() => { setActiveNotice(null); navigate('/notices'); }}
-                    style={{ flex: 1, padding: '9px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
-                    📋 View History
-                  </button>
-                </div>
+                {activeNotice.type === 'dept_change_approval' ? (
+                  <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0f4f8', display: 'flex', gap: 8 }}>
+                    <button onClick={() => acceptDeptChange(activeNotice)}
+                      style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                      ✅ Accept
+                    </button>
+                    <button onClick={() => setActiveNotice(null)}
+                      style={{ flex: 1, padding: '9px', borderRadius: 8, background: 'transparent', color: '#d4920a', border: '1.5px solid #d4920a', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                      🔔 Remind Me Later
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0f4f8', display: 'flex', gap: 8 }}>
+                    <button onClick={() => setActiveNotice(null)}
+                      style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                      ✓ Got It
+                    </button>
+                    <button onClick={() => { setActiveNotice(null); navigate('/notices'); }}
+                      style={{ flex: 1, padding: '9px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                      📋 View History
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -280,9 +332,29 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
         today >= h.dateStart && today <= h.dateEnd
       );
       const hoverTaskIds = new Set(activeHovers.flatMap(h => h.taskIds || []));
-      const handoverCount = tasks.filter(t => hoverTaskIds.has(t.id) && t.status === 'pending' && !t.assignedTo?.includes(myName)).length;
-      const ownCount = tasks.filter(t => t.assignedTo?.includes(myName) && t.status === 'pending' && (t.freq === 'delegation' || t.parentTaskId || isTaskDueToday(t))).length;
-      return ownCount + handoverCount;
+      const tById = {};
+      tasks.forEach(t => { tById[t.id] = t; });
+      // Own pending — exclude grandchild bug artifacts, deduplicate parent/child
+      const ownCount = tasks.filter(t => {
+        if (!t.assignedTo?.includes(myName) || t.status !== 'pending') return false;
+        if (!(t.freq === 'delegation' || isTaskDueToday(t))) return false;
+        // Skip grandchild tasks (parent also has parentTaskId)
+        if (t.parentTaskId && tById[t.parentTaskId]?.parentTaskId) return false;
+        // Skip parent if a pending child exists for me
+        if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(myName))) return false;
+        return true;
+      }).length;
+      // Handover received — only original task IDs (not children)
+      const handoverRealCount = tasks.filter(t =>
+        hoverTaskIds.has(t.id) && t.status === 'pending' && !t.assignedTo?.includes(myName)
+      ).length;
+      // Handover received — daily done tasks needing repeat today (virtual pending)
+      const handoverVirtualCount = tasks.filter(t =>
+        hoverTaskIds.has(t.id) && t.status === 'done' && t.freq === 'daily' &&
+        t.lastDone < today &&
+        !tasks.some(x => x.parentTaskId === t.id && x.status === 'pending')
+      ).length;
+      return ownCount + handoverRealCount + handoverVirtualCount;
     })(),
     issues: issues.filter((i) => i.status !== 'resolved').length,
     escalation: issues.filter((i) => i.priority === 'high' && i.status === 'open').length,
@@ -396,6 +468,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
             {(isMain || hasPerm('tracking_view')) && <NavItem id="tracking" label="Live Tracking" icon="📈" />}
             {isMain && <>
               <Group label="MAIN ADMIN" />
+              <NavItem id="notices" label="Notices" icon="📨" />
               <NavItem id="activity" label="Activity Log" icon="📜" />
               <NavItem id="mis" label="MIS Reporting" icon="📑" />
             </>}

@@ -291,13 +291,24 @@ function StaffDashboard() {
   const { currentUser } = useAuth();
   const { tasks, issues, delegations } = useApp();
 
-  const myTasks = tasks.filter((t) => t.assignedTo?.includes(currentUser.name) && isTaskDueToday(t));
+  // Build taskMap for grandchild detection
+  const taskMap = {};
+  tasks.forEach(t => { taskMap[t.id] = t; });
+  const isGC = (t) => !!(t.parentTaskId && taskMap[t.parentTaskId]?.parentTaskId);
+
+  const myTasksBase = tasks.filter((t) =>
+    t.assignedTo?.includes(currentUser.name) && isTaskDueToday(t) && !isGC(t)
+  );
+  // Deduplicate: if pending child exists, hide parent
+  const myTasks = myTasksBase.filter((t) =>
+    !(t.status === 'pending' && tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(currentUser.name)))
+  );
   const myPending = myTasks.filter((t) => t.status === 'pending');
   const myDone = myTasks.filter((t) => t.status === 'done');
   const myDelayed = myTasks.filter((t) => wasCompletedLate(t));
   const myDels = delegations.filter((d) => d.doerName === currentUser.name && (d.status === 'pending' || d.status === 'accepted'));
-  const allDone = tasks.filter((t) => t.assignedTo?.includes(currentUser.name) && t.status === 'done');
-  const allMine = tasks.filter((t) => t.assignedTo?.includes(currentUser.name));
+  const allDone = tasks.filter((t) => t.assignedTo?.includes(currentUser.name) && t.status === 'done' && !isGC(t));
+  const allMine = tasks.filter((t) => t.assignedTo?.includes(currentUser.name) && !isGC(t));
   const myDelayAll = allDone.filter((t) => wasCompletedLate(t)).length;
   const myScore = allMine.length > 0 ? Math.max(0, Math.round((allDone.length / allMine.length) * 100 - myDelayAll * 10)) : 100;
 

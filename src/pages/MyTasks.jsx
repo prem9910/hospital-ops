@@ -95,7 +95,7 @@ function ExtensionRequestModal({ task, open, onClose, onSubmit }) {
 
 export default function MyTasks() {
   const { currentUser } = useAuth();
-  const { tasks, handovers, employees, save, saveSingle, logAct, ensureCycles } = useApp();
+  const { tasks, handovers, employees, notices, save, saveSingle, logAct, ensureCycles } = useApp();
   const [tab, setTab] = useState('task');
 
   // Ensure auto-cycled pending tasks exist as soon as this page loads
@@ -103,10 +103,23 @@ export default function MyTasks() {
 
   const [showDone, setShowDone] = useState(null);
   const [showExtReq, setShowExtReq] = useState(null);
-  const [page, setPage] = useState(1);
+  const [pageTask, setPageTask] = useState(1);
+  const [pageDelegation, setPageDelegation] = useState(1);
+  const [pageHandoverFrom, setPageHandoverFrom] = useState(1);
+  const [pageHandoverTo, setPageHandoverTo] = useState(1);
+  const [pageDone, setPageDone] = useState(1);
 
   const today = toDay();
   const myName = currentUser.name.toUpperCase();
+
+  // Quick lookup to detect grandchild tasks (bug artifacts from duplicate handover completions)
+  const taskById = {};
+  tasks.forEach(t => { taskById[t.id] = t; });
+  const isGrandchild = (t) => {
+    if (!t.parentTaskId) return false;
+    const parent = taskById[t.parentTaskId];
+    return !!(parent?.parentTaskId);
+  };
 
   // Active handovers TO me (within date range, only accepted ones)
   const activeHandoversToMe = handovers.filter(h =>
@@ -162,33 +175,31 @@ export default function MyTasks() {
     ) || null;
   }
 
-  // My own pending tasks — exclude parent if a pending child already assigned to me exists
+  // My own pending tasks — exclude grandchild tasks (bug artifacts) and deduplicate parent/child
   const ownPending = tasks.filter((t) =>
     t.assignedTo?.includes(currentUser.name) &&
     t.status === 'pending' &&
     isTaskDueToday(t) &&
+    !isGrandchild(t) &&
     !tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && x.assignedTo?.includes(currentUser.name))
   );
 
-  // Handover tasks for me — also include cycled children of handovered parent tasks
-  // so daily recurring tasks continue showing in Handover tab for all 5 days
-  // Deduplicated: per root task only one pending shown (most recent child wins)
-  const handoverPendingAll = tasks.filter(t =>
-    (handoverTaskIdsForMe.has(t.id) || handoverTaskIdsForMe.has(t.parentTaskId)) &&
+  // Handover tasks for me — only match tasks whose own ID is in the handover (not children)
+  // Children of handover tasks belong to the original assignee; MOHAN sees them via virtualPending below
+  const handoverPendingReal = tasks.filter(t =>
+    handoverTaskIdsForMe.has(t.id) &&
     t.status === 'pending' &&
     !t.assignedTo?.includes(currentUser.name)
-  ).sort((a, b) => {
-    if (a.parentTaskId && !b.parentTaskId) return -1;
-    if (!a.parentTaskId && b.parentTaskId) return 1;
-    return (b.schedDate || '').localeCompare(a.schedDate || '');
-  });
-  const seenHandoverRoots = new Set();
-  const handoverPending = handoverPendingAll.filter(t => {
-    const rootId = t.parentTaskId || t.id;
-    if (seenHandoverRoots.has(rootId)) return false;
-    seenHandoverRoots.add(rootId);
-    return true;
-  });
+  );
+  // Daily handover tasks already completed — show again each day (like own-task virtualPending)
+  const handoverVirtualPending = tasks.filter(t =>
+    handoverTaskIdsForMe.has(t.id) &&
+    t.status === 'done' &&
+    t.freq === 'daily' &&
+    t.lastDone < today &&
+    !tasks.some(x => x.parentTaskId === t.id && x.status === 'pending')
+  ).map(t => ({ ...t, _virtualPending: true }));
+  const handoverPending = [...handoverPendingReal, ...handoverVirtualPending];
 
   // Recurring tasks that PREM completed but aren't yet cycled for today
   // Covers case where assignedTo != PREM but PREM was the doer
@@ -244,6 +255,40 @@ export default function MyTasks() {
     t.status === 'done'
   );
 
+  // After any task completion, check if employee has a pending dept change and all tasks are now done
+  async function checkPendingDeptChange(completedTaskId) {
+    const emp = employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase());
+    if (!emp?.pendingDept) return;
+    // Count remaining pending tasks excluding the one just completed
+    const remaining = tasks.filter(tx =>
+      tx.id !== completedTaskId &&
+      tx.status === 'pending' &&
+      ((tx.assignedTo || []).includes(currentUser.name) || handoverTaskIdsForMe.has(tx.id))
+    ).length;
+    if (remaining > 0) return;
+    // All tasks done — send dept_change_approval to employee + alert to main admin
+    const nowIso = new Date().toISOString();
+    const approvalNotice = {
+      id: uid(), toEmpId: emp.id, toName: emp.name,
+      fromName: 'MAIN ADMIN',
+      subject: 'DEPARTMENT CHANGE REQUEST',
+      message: `Dear ${emp.name},\n\nYou have completed all your pending tasks. Your department is now being changed from "${emp.dept}" to "${emp.pendingDept}".\n\nPlease accept this change at your earliest convenience.\n\nRegards,\nMAIN ADMIN`,
+      type: 'dept_change_approval', isRead: false, sentAt: nowIso,
+      meta: { newDept: emp.pendingDept, oldDept: emp.dept, empId: emp.id },
+    };
+    const adminAlert = {
+      id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',
+      fromName: emp.name,
+      subject: `${emp.name} — ALL TASKS COMPLETED`,
+      message: `${emp.name} has completed all pending tasks.\n\nDepartment change from "${emp.dept}" to "${emp.pendingDept}" approval has been sent to the employee.`,
+      type: 'admin_alert', isRead: false, sentAt: nowIso, meta: null,
+    };
+    // Clear pendingDept from employee record
+    const updatedEmps = employees.map(e => e.id === emp.id ? { ...e, pendingDept: '' } : e);
+    await save('hops-employees', updatedEmps);
+    await save('hops-notices', [...(notices || []), approvalNotice, adminAlert]);
+  }
+
   async function handleDone({ remark, delayReason, isDelayed }) {
     const t = showDone;
     const nowStr = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -266,10 +311,10 @@ export default function MyTasks() {
         parentTaskId: t.id,
       };
       const newAll = [...tasks.map(x => x.id === t.id ? parentUpdated : x), child];
-      // Fast: update state + localStorage fully, but only send 2 changed records to Supabase
       await saveSingle('hops-tasks', child, newAll);
       await saveSingle('hops-tasks', parentUpdated, newAll);
       await logAct('TASK COMPLETED', t.name);
+      try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
       setShowDone(null);
       return;
     }
@@ -298,14 +343,13 @@ export default function MyTasks() {
       await saveSingle('hops-tasks', updated, newAll);
       await saveSingle('hops-tasks', child, newAll);
     } else {
-      // Fast path: only upsert the single changed task to Supabase
       const newAll = tasks.map(x => x.id === t.id ? updated : x);
       await saveSingle('hops-tasks', updated, newAll);
     }
     await logAct('TASK COMPLETED', t.name);
-    // Send completion email to the employee who completed it
     const emp = employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase());
     if (emp) sendTaskCompletedEmail(t, emp);
+    try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
     setShowDone(null);
   }
 
@@ -331,18 +375,27 @@ export default function MyTasks() {
     setShowExtReq(null);
   }
 
-  const activeList = tab === 'done' ? myDone : tab === 'delegation' ? delegationPending : tab === 'handover' ? handoverFromTasks : taskPending;
-  const paged = paginate(activeList, page);
+  // Sort each list: latest schedDate first, done tasks by lastDone desc
+  const sortedTaskPending = [...taskPending].sort((a, b) => (b.schedDate || '').localeCompare(a.schedDate || ''));
+  const sortedDelegationPending = [...delegationPending].sort((a, b) => (b.schedDate || '').localeCompare(a.schedDate || ''));
+  const sortedHandoverFrom = [...handoverFromTasks].sort((a, b) => (b.schedDate || '').localeCompare(a.schedDate || ''));
+  const sortedDone = [...myDone].sort((a, b) => (b.lastDone || '').localeCompare(a.lastDone || ''));
+
+  const pagedTask = paginate(sortedTaskPending, pageTask);
+  const pagedDelegation = paginate(sortedDelegationPending, pageDelegation);
+  const pagedHandoverFrom = paginate(sortedHandoverFrom, pageHandoverFrom);
+  const pagedHandoverTo = paginate(handoverToList, pageHandoverTo);
+  const pagedDone = paginate(sortedDone, pageDone);
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>My Tasks</h2>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => { setTab('task'); setPage(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'task' ? '#0d7377' : '#f3f7fc', color: tab === 'task' ? 'white' : '#1a2535' }}>📋 Task ({taskPending.length})</button>
-          <button onClick={() => { setTab('handover'); setPage(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'handover' ? '#d4920a' : '#f3f7fc', color: tab === 'handover' ? 'white' : '#1a2535' }}>🔄 Handover ({handoverCount})</button>
-          <button onClick={() => { setTab('delegation'); setPage(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'delegation' ? '#7c3aed' : '#f3f7fc', color: tab === 'delegation' ? 'white' : '#1a2535' }}>📤 Delegation ({delegationPending.length})</button>
-          <button onClick={() => { setTab('done'); setPage(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'done' ? '#1a7a4a' : '#f3f7fc', color: tab === 'done' ? 'white' : '#1a2535' }}>✅ Done ({myDone.length})</button>
+          <button onClick={() => { setTab('task'); setPageTask(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'task' ? '#0d7377' : '#f3f7fc', color: tab === 'task' ? 'white' : '#1a2535' }}>📋 Task ({taskPending.length})</button>
+          <button onClick={() => { setTab('handover'); setPageHandoverFrom(1); setPageHandoverTo(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'handover' ? '#d4920a' : '#f3f7fc', color: tab === 'handover' ? 'white' : '#1a2535' }}>🔄 Handover ({handoverCount})</button>
+          <button onClick={() => { setTab('delegation'); setPageDelegation(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'delegation' ? '#7c3aed' : '#f3f7fc', color: tab === 'delegation' ? 'white' : '#1a2535' }}>📤 Delegation ({delegationPending.length})</button>
+          <button onClick={() => { setTab('done'); setPageDone(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'done' ? '#1a7a4a' : '#f3f7fc', color: tab === 'done' ? 'white' : '#1a2535' }}>✅ Done ({myDone.length})</button>
           <button onClick={() => exportToExcel((tab === 'done' ? myDone : tab === 'delegation' ? delegationPending : taskPending).map(t => ({ Task: t.name, Department: t.dept, Frequency: t.freq, Status: t.status, 'Sched. Date': t.schedDate, 'Done By': t.doneBy, 'Done Time': t.doneTime, Delayed: t.isDelayed ? 'YES' : 'NO' })), 'my-tasks')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
         </div>
@@ -350,7 +403,7 @@ export default function MyTasks() {
 
       {tab === 'task' && (
         <div>
-          {paged.items.length ? paged.items.map((t) => (
+          {pagedTask.items.length ? pagedTask.items.map((t) => (
             <div key={t.id} style={{
               background: 'white', borderRadius: 11,
               border: '1px solid #d8e2ef', padding: '14px 16px', marginBottom: 10,
@@ -376,13 +429,13 @@ export default function MyTasks() {
               </div>
             </div>
           )) : <EmptyState icon="✅" message="NO PENDING TASKS — ALL DONE!" />}
-          <Pagination {...paged} onPage={(p) => setPage(p)} />
+          <Pagination {...pagedTask} onPage={(p) => setPageTask(p)} />
         </div>
       )}
 
       {tab === 'delegation' && (
         <div>
-          {paged.items.length ? paged.items.map((t) => {
+          {pagedDelegation.items.length ? pagedDelegation.items.map((t) => {
             const exts = t.extensions || [];
             const hasPendingExt = exts.some((x) => x.status === 'pending');
             const canRequestExt = exts.length < 3 && !hasPendingExt;
@@ -438,13 +491,13 @@ export default function MyTasks() {
               </div>
             );
           }) : <EmptyState icon="📤" message="NO PENDING DELEGATIONS" />}
-          <Pagination {...paged} onPage={(p) => setPage(p)} />
+          <Pagination {...pagedDelegation} onPage={(p) => setPageDelegation(p)} />
         </div>
       )}
 
       {tab === 'done' && (
         <div>
-          {paged.items.length ? paged.items.map((t) => {
+          {pagedDone.items.length ? pagedDone.items.map((t) => {
             const delayed = wasCompletedLate(t);
             const isDelegation = t.freq === 'delegation';
             // Handover TO me (I completed someone else's task)
@@ -501,7 +554,7 @@ export default function MyTasks() {
               </div>
             );
           }) : <EmptyState icon="📋" message="NO TASKS FOUND" />}
-          <Pagination {...paged} onPage={(p) => setPage(p)} />
+          <Pagination {...pagedDone} onPage={(p) => setPageDone(p)} />
         </div>
       )}
 
@@ -513,7 +566,7 @@ export default function MyTasks() {
               📥 Handover From — Received by Me
               <span style={{ background: '#1a7a4a', color: 'white', borderRadius: 20, fontSize: 10, fontWeight: 800, padding: '2px 8px' }}>{handoverFromTasks.length}</span>
             </div>
-            {paged.items.length ? paged.items.map((t) => {
+            {pagedHandoverFrom.items.length ? pagedHandoverFrom.items.map((t) => {
               const handoverInfo = getHandoverInfo(t.id);
               return (
                 <div key={t.id} style={{ background: '#f0fdf4', borderRadius: 11, border: '1px solid #86efac', padding: '14px 16px', marginBottom: 10, borderLeft: '4px solid #1a7a4a' }}>
@@ -539,7 +592,7 @@ export default function MyTasks() {
                 </div>
               );
             }) : <div style={{ background: 'white', borderRadius: 10, border: '1px solid #d8e2ef', padding: '20px', textAlign: 'center', color: '#6b7a90', fontSize: 13 }}>📭 No handovers received yet</div>}
-            <Pagination {...paged} onPage={(p) => setPage(p)} />
+            <Pagination {...pagedHandoverFrom} onPage={(p) => setPageHandoverFrom(p)} />
           </div>
 
           {/* Handover To — tasks given by me */}
@@ -548,7 +601,7 @@ export default function MyTasks() {
               📤 Handover To — Given by Me
               <span style={{ background: '#d4920a', color: 'white', borderRadius: 20, fontSize: 10, fontWeight: 800, padding: '2px 8px' }}>{handoverToList.length}</span>
             </div>
-            {handoverToList.length ? handoverToList.map((h) => {
+            {pagedHandoverTo.items.length ? pagedHandoverTo.items.map((h) => {
               const STATUS_CFG = {
                 pending:  { bg: '#fff3cd', color: '#7a4800', label: '⏳ PENDING' },
                 accepted: { bg: '#d4edda', color: '#155724', label: '✅ ACCEPTED' },
@@ -582,6 +635,7 @@ export default function MyTasks() {
                 </div>
               );
             }) : <div style={{ background: 'white', borderRadius: 10, border: '1px solid #d8e2ef', padding: '20px', textAlign: 'center', color: '#6b7a90', fontSize: 13 }}>📭 No handovers given yet</div>}
+            <Pagination {...pagedHandoverTo} onPage={(p) => setPageHandoverTo(p)} />
           </div>
         </div>
       )}

@@ -16,11 +16,11 @@ function Field({ label, children }) {
 
 export default function Notices() {
   const { currentRole, currentUser } = useAuth();
-  const { notices, employees, save, logAct } = useApp();
+  const { notices, employees, depts, save, logAct } = useApp();
   const isMain = currentRole === 'mainadmin';
 
   // Send notice form (mainadmin only)
-  const [form, setForm] = useState({ toEmpId: '', subject: '', message: '' });
+  const [form, setForm] = useState({ dept: '', toEmpId: '', subject: '', message: '' });
   const [sendMsg, setSendMsg] = useState('');
 
   async function sendNotice() {
@@ -43,7 +43,7 @@ export default function Notices() {
     };
     await save('hops-notices', [...notices, notice]);
     await logAct('NOTICE SENT', `To: ${emp.name} — ${form.subject}`);
-    setForm({ toEmpId: '', subject: '', message: '' });
+    setForm({ dept: '', toEmpId: '', subject: '', message: '' });
     setSendMsg('✅ Notice sent successfully!');
     setTimeout(() => setSendMsg(''), 3000);
   }
@@ -59,12 +59,18 @@ export default function Notices() {
     await save('hops-notices', notices.map(n => n.toEmpId === currentUser?.empId ? { ...n, isRead: true } : n));
   }
 
-  // Employees see full history (all received). Mainadmin sees sent history.
+  // Employees: all received notices. Mainadmin: all sent notices.
   const myNotices = isMain
-    ? notices.filter(n => n.fromName === (currentUser?.name || 'MAIN ADMIN') || n.fromName === 'MAIN ADMIN').sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt))
+    ? notices.filter(n => (n.fromName === 'MAIN ADMIN') && n.toEmpId !== 'MAINADMIN').sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt))
     : notices.filter(n => n.toEmpId === currentUser?.empId).sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt));
 
+  // Admin alerts sent to MAINADMIN (e.g. employee completed all tasks)
+  const adminAlerts = isMain
+    ? notices.filter(n => n.toEmpId === 'MAINADMIN').sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt))
+    : [];
+
   const unreadCount = myNotices.filter(n => !n.isRead).length;
+  const unreadAlerts = adminAlerts.filter(n => !n.isRead).length;
 
   function fDate(iso) {
     if (!iso) return '';
@@ -73,9 +79,15 @@ export default function Notices() {
     } catch { return iso; }
   }
 
+  async function markAlertRead(id) {
+    await save('hops-notices', notices.map(n => n.id === id ? { ...n, isRead: true } : n));
+  }
+
   const typeColors = {
     task_reminder: { bg: '#fff7ed', border: '#fed7aa', color: '#c2410c', label: '⏰ Task Reminder' },
+    dept_change_approval: { bg: '#f0fdf4', border: '#86efac', color: '#166534', label: '🏢 Dept Change' },
     general: { bg: '#f0f7ff', border: '#bfdbfe', color: '#1d4ed8', label: '📋 Notice' },
+    admin_alert: { bg: '#fef9c3', border: '#fde047', color: '#854d0e', label: '🔔 Alert' },
   };
 
   return (
@@ -88,16 +100,24 @@ export default function Notices() {
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 3 }}>Send a notice to any employee</div>
           </div>
           <div style={{ padding: '18px 20px' }}>
+            <Field label="Select Department *">
+              <select value={form.dept} onChange={e => setForm({ ...form, dept: e.target.value, toEmpId: '' })} style={IS}>
+                <option value="">— Select Department —</option>
+                {depts.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Select Employee *">
-              <select value={form.toEmpId} onChange={e => setForm({ ...form, toEmpId: e.target.value })} style={IS}>
+              <select value={form.toEmpId} onChange={e => setForm({ ...form, toEmpId: e.target.value })} style={IS} disabled={!form.dept}>
                 <option value="">— Select Employee —</option>
-                {employees.map(e => (
-                  <option key={e.id} value={e.id}>{e.name}{e.dept ? ` (${e.dept})` : ''}</option>
+                {employees.filter(e => e.dept === form.dept).map(e => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
             </Field>
             <Field label="Subject *">
-              <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="Notice subject..." style={IS} />
+              <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value.toUpperCase() })} placeholder="NOTICE SUBJECT..." style={IS} />
             </Field>
             <Field label="Message *">
               <textarea value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} placeholder="Write your notice here..." rows={5}
@@ -118,65 +138,100 @@ export default function Notices() {
         </div>
       )}
 
-      {/* Notices list */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-          <div>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: '#0b1e3d', marginBottom: 2 }}>
-              {isMain ? '📤 Sent Notices' : '📋 Notice History'}
-            </h2>
-            <div style={{ fontSize: 12, color: '#6b7a90' }}>
-              {isMain ? `${myNotices.length} notice(s) sent` : `${myNotices.length} notice(s) total · ${unreadCount} unread`}
-            </div>
-          </div>
-        </div>
+      {/* Right column: admin alerts + sent notices (for admin) OR notice history (for employee) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {myNotices.length === 0 ? (
-          <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e0e8f0', padding: '48px 24px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
-            <div style={{ fontSize: 14, color: '#6b7a90', fontWeight: 700 }}>
-              {isMain ? 'No notices sent yet' : 'No notice history yet'}
+        {/* Admin alerts panel */}
+        {isMain && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d' }}>🔔 Admin Alerts</h2>
+              {unreadAlerts > 0 && <span style={{ background: '#ef4444', color: 'white', borderRadius: 20, fontSize: 10, fontWeight: 800, padding: '2px 8px' }}>{unreadAlerts} new</span>}
             </div>
-            {!isMain && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Notices sent to you will appear here after you read them</div>}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {myNotices.map(n => {
-              const tc = typeColors[n.type] || typeColors.general;
-              const isUnread = !isMain && !n.isRead;
-              return (
-                <div key={n.id} onClick={() => !isMain && !n.isRead && markRead(n.id)}
-                  style={{ background: isUnread ? '#fafcff' : 'white', borderRadius: 12, border: `1px solid ${isUnread ? '#93c5fd' : '#e0e8f0'}`, padding: '14px 18px', cursor: isUnread ? 'pointer' : 'default', transition: 'box-shadow 0.15s',
-                    boxShadow: isUnread ? '0 2px 10px rgba(13,115,119,0.08)' : 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.color, border: `1px solid ${tc.border}` }}>
-                          {tc.label}
-                        </span>
-                        {isUnread && <span style={{ fontSize: 9, fontWeight: 800, color: '#1d4ed8', background: '#dbeafe', padding: '2px 7px', borderRadius: 20 }}>NEW</span>}
-                        {isMain && (
-                          <span style={{ fontSize: 11, color: '#0d7377', fontWeight: 700 }}>→ {n.toName}</span>
-                        )}
+            {adminAlerts.length === 0 ? (
+              <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e0e8f0', padding: '24px', textAlign: 'center', color: '#6b7a90', fontSize: 13 }}>📭 No alerts yet</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {adminAlerts.map(n => (
+                  <div key={n.id} onClick={() => !n.isRead && markAlertRead(n.id)}
+                    style={{ background: !n.isRead ? '#fffbeb' : 'white', borderRadius: 10, border: `1px solid ${!n.isRead ? '#fde047' : '#e0e8f0'}`, padding: '12px 16px', cursor: !n.isRead ? 'pointer' : 'default' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#854d0e', marginBottom: 3 }}>{n.subject}</div>
+                        <div style={{ fontSize: 11, color: '#475569', whiteSpace: 'pre-wrap' }}>{n.message}</div>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0b1e3d', marginBottom: 5 }}>{n.subject}</div>
-                      <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{n.message}</div>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>{fDate(n.sentAt)}</div>
-                      {!isMain && (
-                        <div style={{ fontSize: 10, color: '#6b7a90', marginTop: 3 }}>From: {n.fromName}</div>
-                      )}
-                      {!isMain && n.isRead && (
-                        <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, marginTop: 3 }}>✓ Read</div>
-                      )}
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fDate(n.sentAt)}</div>
+                        {n.isRead && <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, marginTop: 3 }}>✓ Read</div>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            )}
           </div>
         )}
+
+        {/* Notices list */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: isMain ? 16 : 18, color: '#0b1e3d', marginBottom: 2 }}>
+                {isMain ? '📤 Sent Notices' : '📋 Notice History'}
+              </h2>
+              <div style={{ fontSize: 12, color: '#6b7a90' }}>
+                {isMain ? `${myNotices.length} notice(s) sent` : `${myNotices.length} total · ${unreadCount} unread`}
+              </div>
+            </div>
+          </div>
+
+          {myNotices.length === 0 ? (
+            <div style={{ background: 'white', borderRadius: 14, border: '1px solid #e0e8f0', padding: '36px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>📭</div>
+              <div style={{ fontSize: 13, color: '#6b7a90', fontWeight: 700 }}>{isMain ? 'No notices sent yet' : 'No notice history yet'}</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {myNotices.map(n => {
+                const tc = typeColors[n.type] || typeColors.general;
+                const isUnread = !isMain && !n.isRead;
+                const isDeptApproval = n.type === 'dept_change_approval';
+                return (
+                  <div key={n.id} onClick={() => !isMain && !n.isRead && !isDeptApproval && markRead(n.id)}
+                    style={{ background: isUnread ? '#fafcff' : 'white', borderRadius: 12, border: `1px solid ${isUnread ? '#93c5fd' : '#e0e8f0'}`, padding: '14px 18px', cursor: isUnread && !isDeptApproval ? 'pointer' : 'default', transition: 'box-shadow 0.15s', boxShadow: isUnread ? '0 2px 10px rgba(13,115,119,0.08)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.color, border: `1px solid ${tc.border}` }}>{tc.label}</span>
+                          {isUnread && <span style={{ fontSize: 9, fontWeight: 800, color: '#1d4ed8', background: '#dbeafe', padding: '2px 7px', borderRadius: 20 }}>NEW</span>}
+                          {isMain && <span style={{ fontSize: 11, color: '#0d7377', fontWeight: 700 }}>→ {n.toName}</span>}
+                          {/* Acceptance status badge for dept_change_approval */}
+                          {isDeptApproval && isMain && (
+                            n.meta?.accepted
+                              ? <span style={{ fontSize: 9, fontWeight: 800, color: '#166534', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>✅ Accepted {n.meta.acceptedAt ? fDate(n.meta.acceptedAt) : ''}</span>
+                              : <span style={{ fontSize: 9, fontWeight: 800, color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: 20 }}>⏳ Pending</span>
+                          )}
+                          {isDeptApproval && !isMain && (
+                            n.meta?.accepted
+                              ? <span style={{ fontSize: 9, fontWeight: 800, color: '#166534', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>✅ Accepted</span>
+                              : <span style={{ fontSize: 9, fontWeight: 800, color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: 20 }}>⏳ Awaiting your acceptance</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0b1e3d', marginBottom: 5 }}>{n.subject}</div>
+                        <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{n.message}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>{fDate(n.sentAt)}</div>
+                        {!isMain && <div style={{ fontSize: 10, color: '#6b7a90', marginTop: 3 }}>From: {n.fromName}</div>}
+                        {!isMain && n.isRead && !isDeptApproval && <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, marginTop: 3 }}>✓ Read</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
