@@ -28,15 +28,25 @@ export default function Departments() {
     const newDepts = editDept ? depts.map((d) => d.id === obj.id ? obj : d) : [...depts, obj];
     await save('hops-depts', newDepts);
 
-    // Sync hod → employee's isIncharge field
+    // Sync dept name change → update employees whose dept matched the old name
+    const prevName = (editDept?.name || '').toUpperCase();
+    const newName = obj.name.toUpperCase();
     const prevHod = (editDept?.hod || '').toUpperCase();
     const newHod = obj.hod.toUpperCase();
-    if (prevHod !== newHod) {
+
+    const nameChanged = editDept && prevName && prevName !== newName;
+    const hodChanged = prevHod !== newHod;
+
+    if (nameChanged || hodChanged) {
       const updatedEmps = employees.map(e => {
         const n = e.name.toUpperCase();
-        if (newHod && n === newHod) return { ...e, isIncharge: true };   // new incharge
-        if (prevHod && n === prevHod) return { ...e, isIncharge: false }; // old incharge cleared
-        return e;
+        let updated = { ...e };
+        if (nameChanged && e.dept === editDept.name) updated.dept = obj.name; // update dept name
+        if (hodChanged) {
+          if (newHod && n === newHod) updated.isIncharge = true;
+          if (prevHod && n === prevHod) updated.isIncharge = false;
+        }
+        return updated;
       });
       await save('hops-employees', updatedEmps);
     }
