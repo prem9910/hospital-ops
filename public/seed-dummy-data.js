@@ -625,6 +625,42 @@
     };
   }
 
+  // ---------- Standalone cleaners (don't require re-seeding everything) ----------
+  async function clearLocalTasks() {
+    lsSet(LS_KEYS.tasks, []);
+    lsSet(LS_KEYS.handovers, []);
+    console.log('✅ localStorage: hops-tasks and hops-handovers cleared');
+  }
+  async function clearLocalAll() {
+    Object.values(LS_KEYS).forEach((k) => lsSet(k, []));
+    console.log('✅ localStorage: all hops-* keys cleared');
+  }
+  // Supabase deleter (reused)
+  async function deleteAll(table) {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?id=neq.__none__', {
+      method: 'DELETE',
+      headers: HEADERS,
+    });
+    if (!res.ok && res.status !== 404) {
+      console.warn('deleteAll', table, res.status, await res.text());
+    } else {
+      console.log('  ✅ Supabase ' + table + ' cleared');
+    }
+  }
+  // Clear tasks + affected handovers both locally and in Supabase
+  async function clearTasks(opts) {
+    opts = opts || {};
+    console.group('🧹 Clearing Tasks & Handovers');
+    if (opts.local !== false) await clearLocalTasks();
+    if (opts.remote !== false) {
+      console.log('☁️  Clearing Supabase...');
+      await deleteAll('tasks');
+      await deleteAll('handovers');
+    }
+    console.log('👉 Refresh the page (F5) to see changes.');
+    console.groupEnd();
+  }
+
   // ---------- MAIN ----------
   async function runSeed(opts) {
     opts = opts || {};
@@ -716,5 +752,12 @@
 
   // Expose globally
   window.runSeed = runSeed;
-  console.log('✅ runSeed() loaded. Run:  await runSeed({ wipe: true })');
+  window.clearTasks = clearTasks;
+  window.clearLocalTasks = clearLocalTasks;
+  window.clearLocalAll = clearLocalAll;
+  console.log('✅ runSeed() loaded. Commands available:');
+  console.log('   • await runSeed({ wipe: true })  — full reseed');
+  console.log('   • await clearTasks()              — delete all tasks + handovers (Supabase + local)');
+  console.log('   • await clearLocalTasks()         — delete tasks + handovers from localStorage only');
+  console.log('   • await clearLocalAll()           — delete everything from localStorage');
 })();
