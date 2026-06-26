@@ -11,37 +11,35 @@ function Field({ label, children }) {
 }
 
 export default function Departments() {
-  const { hasPerm, currentRole } = useAuth();
-  const { depts, employees, tasks, issues, save, logAct, moveToTrash } = useApp();
+  const { hasPerm, currentRole, currentUser } = useAuth();
+  const { depts, employees, tasks, issues, notices, save, logAct, moveToTrash } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editDept, setEditDept] = useState(null);
   const [form, setForm] = useState({ name: '', hod: '', phone: '', email: '', floor: '' });
+  const [pendingModal, setPendingModal] = useState(null); // { empsWithTasks, obj, newDepts, editDept }
+  const [noticeSent, setNoticeSent] = useState(false);
 
   const canEdit = currentRole === 'mainadmin' || hasPerm('departments_edit');
 
   function openNew() { setForm({ name: '', hod: '', phone: '', email: '', floor: '' }); setEditDept(null); setShowForm(true); }
   function openEdit(d) { setForm({ name: d.name, hod: d.hod || '', phone: d.phone || '', email: d.email || '', floor: d.floor || '' }); setEditDept(d); setShowForm(true); }
 
-  async function handleSave() {
-    if (!form.name.trim()) { alert('Department name is required!'); return; }
-    const obj = { id: editDept?.id || uid(), name: form.name.toUpperCase().trim(), hod: form.hod ? form.hod.toUpperCase() : '', phone: form.phone, email: form.email, floor: form.floor };
-    const newDepts = editDept ? depts.map((d) => d.id === obj.id ? obj : d) : [...depts, obj];
+  async function doSave(obj, ed) {
+    const newDepts = ed ? depts.map((d) => d.id === obj.id ? obj : d) : [...depts, obj];
     await save('hops-depts', newDepts);
 
-    // Sync dept name change → update employees whose dept matched the old name
-    const prevName = (editDept?.name || '').toUpperCase();
+    const prevName = (ed?.name || '').toUpperCase();
     const newName = obj.name.toUpperCase();
-    const prevHod = (editDept?.hod || '').toUpperCase();
+    const prevHod = (ed?.hod || '').toUpperCase();
     const newHod = obj.hod.toUpperCase();
-
-    const nameChanged = editDept && prevName && prevName !== newName;
+    const nameChanged = ed && prevName && prevName !== newName;
     const hodChanged = prevHod !== newHod;
 
     if (nameChanged || hodChanged) {
       const updatedEmps = employees.map(e => {
         const n = e.name.toUpperCase();
         let updated = { ...e };
-        if (nameChanged && e.dept === editDept.name) updated.dept = obj.name; // update dept name
+        if (nameChanged && e.dept === ed.name) updated.dept = obj.name;
         if (hodChanged) {
           if (newHod && n === newHod) updated.isIncharge = true;
           if (prevHod && n === prevHod) updated.isIncharge = false;
@@ -51,8 +49,49 @@ export default function Departments() {
       await save('hops-employees', updatedEmps);
     }
 
-    await logAct(editDept ? 'DEPT UPDATED' : 'DEPT ADDED', obj.name);
+    await logAct(ed ? 'DEPT UPDATED' : 'DEPT ADDED', obj.name);
     setShowForm(false);
+    setPendingModal(null);
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) { alert('Department name is required!'); return; }
+    const obj = { id: editDept?.id || uid(), name: form.name.toUpperCase().trim(), hod: form.hod ? form.hod.toUpperCase() : '', phone: form.phone, email: form.email, floor: form.floor };
+
+    // Block dept rename if any employee in that dept has pending tasks
+    if (editDept && obj.name !== editDept.name) {
+      const empsInDept = employees.filter(e => e.dept === editDept.name);
+      const empsWithTasks = empsInDept.map(e => ({
+        ...e,
+        pendingCount: tasks.filter(t => (t.assignedTo || []).includes(e.name) && t.status === 'pending').length,
+      })).filter(e => e.pendingCount > 0);
+
+      if (empsWithTasks.length > 0) {
+        setPendingModal({ empsWithTasks, obj, editDept });
+        setNoticeSent(false);
+        return;
+      }
+    }
+
+    await doSave(obj, editDept);
+  }
+
+  async function sendNoticesAndClose() {
+    if (!pendingModal) return;
+    const newNotices = pendingModal.empsWithTasks.map(e => ({
+      id: uid(),
+      toEmpId: e.id,
+      toName: e.name,
+      fromName: currentUser?.name || 'MAIN ADMIN',
+      subject: 'Pending Task Completion Required',
+      message: `You have ${e.pendingCount} pending task(s) in the ${pendingModal.editDept.name} department. Please complete them as soon as possible. The department is currently undergoing changes and all tasks must be resolved.`,
+      type: 'task_reminder',
+      isRead: false,
+      sentAt: new Date().toISOString(),
+    }));
+    await save('hops-notices', [...notices, ...newNotices]);
+    await logAct('NOTICES SENT', `Task reminder sent to ${pendingModal.empsWithTasks.length} employee(s) in ${pendingModal.editDept.name}`);
+    setNoticeSent(true);
   }
 
   // Employees available as incharge: not already incharge of another department
@@ -129,6 +168,54 @@ export default function Departments() {
           );
         }) : <div style={{ gridColumn: '1/-1' }}><EmptyState icon="🏢" message="NO DEPARTMENTS FOUND" /></div>}
       </div>
+
+      {/* Pending tasks blocking modal */}
+      {pendingModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 16, maxWidth: 480, width: '100%', boxShadow: '0 16px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#c0392b,#e74c3c)', padding: '18px 22px' }}>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>⚠️</div>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: 'white', fontWeight: 700 }}>Department Cannot Be Renamed</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>
+                Employees in <strong>{pendingModal.editDept.name}</strong> have pending tasks. Complete them before renaming.
+              </div>
+            </div>
+            <div style={{ padding: '18px 22px' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+                Employees with Pending Tasks
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {pendingModal.empsWithTasks.map(e => (
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: '#fff5f5', borderRadius: 9, border: '1px solid #fecaca' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0b1e3d' }}>{e.name}</div>
+                      <div style={{ fontSize: 11, color: '#6b7a90' }}>{e.dept}</div>
+                    </div>
+                    <span style={{ background: '#fef2f2', color: '#c0392b', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20, border: '1px solid #fecaca' }}>
+                      {e.pendingCount} pending
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {noticeSent && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#166534', fontWeight: 700 }}>
+                  ✅ Notice sent to {pendingModal.empsWithTasks.length} employee(s) successfully!
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!noticeSent && (
+                  <button onClick={sendNoticesAndClose} style={{ flex: 1, padding: '9px 14px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
+                    📨 Send Notice to Employees
+                  </button>
+                )}
+                <button onClick={() => setPendingModal(null)} style={{ flex: 1, padding: '9px 14px', borderRadius: 8, background: 'transparent', color: '#6b7a90', border: '1.5px solid #d8e2ef', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
+                  ✕ Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editDept ? 'Edit Department' : 'Add Department'}>
         <Field label="Department Name *"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. ICU" style={IS} autoFocus /></Field>

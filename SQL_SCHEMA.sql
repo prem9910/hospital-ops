@@ -173,6 +173,20 @@ CREATE TABLE IF NOT EXISTS user_links (
 
 CREATE INDEX IF NOT EXISTS idx_links_username ON user_links(username);
 
+-- ─── NOTICES ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notices (
+  id         TEXT PRIMARY KEY,
+  to_emp_id  TEXT DEFAULT '',
+  to_name    TEXT DEFAULT '',
+  from_name  TEXT DEFAULT '',
+  subject    TEXT DEFAULT '',
+  message    TEXT DEFAULT '',
+  type       TEXT DEFAULT 'general',
+  is_read    BOOLEAN DEFAULT false,
+  sent_at    TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ============================================================
 -- MIGRATIONS — Run these if tables already exist (adds missing columns)
 -- ============================================================
@@ -212,6 +226,8 @@ CREATE POLICY "service_role_all_delegations" ON delegations FOR ALL USING (true)
 CREATE POLICY "service_role_all_actlog" ON activity_log FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all_trash" ON trash FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_all_links" ON user_links FOR ALL USING (true) WITH CHECK (true);
+ALTER TABLE notices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_all_notices" ON notices FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================================
 -- REALTIME (Enable for live subscriptions)
@@ -224,5 +240,5 @@ CREATE POLICY "service_role_all_links" ON user_links FOR ALL USING (true) WITH C
 -- ============================================================
 BEGIN;
   DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE tasks, issues, departments, employees, delegations, admins;
+  CREATE PUBLICATION supabase_realtime FOR TABLE tasks, issues, departments, employees, delegations, admins, notices;
 COMMIT;

@@ -101,6 +101,11 @@ const TABLES = {
     pack: (o) => ({ id: o.id, type: o.type || '', data: o.data || {}, deleted_by: o.deletedBy || '', deleted_at: o.deletedAt || new Date().toISOString(), auto_delete_at: o.autoDeleteAt || '' }),
     unpack: (r) => ({ id: r.id, type: r.type || '', data: r.data || {}, deletedBy: r.deleted_by || '', deletedAt: r.deleted_at || '', autoDeleteAt: r.auto_delete_at || '' }),
   },
+  'hops-notices': {
+    table: 'notices',
+    pack: (o) => ({ id: o.id, to_emp_id: o.toEmpId || '', to_name: o.toName || '', from_name: o.fromName || '', subject: o.subject || '', message: o.message || '', type: o.type || 'general', is_read: o.isRead || false, sent_at: o.sentAt || '' }),
+    unpack: (r) => ({ id: r.id, toEmpId: r.to_emp_id || '', toName: r.to_name || '', fromName: r.from_name || '', subject: r.subject || '', message: r.message || '', type: r.type || 'general', isRead: r.is_read || false, sentAt: r.sent_at || '' }),
+  },
 };
 
 const LINKS_TABLE = 'user_links';
@@ -166,7 +171,7 @@ export async function deleteLinkRecord(id) {
 }
 
 export function setupRealtime(onUpdate) {
-  const tables = ['tasks', 'issues', 'departments', 'employees', 'delegations', 'admins', 'handovers'];
+  const tables = ['tasks', 'issues', 'departments', 'employees', 'delegations', 'admins', 'handovers', 'notices'];
   const channels = tables.map((tbl) =>
     supabase.channel('rt-' + tbl)
       .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, () => {

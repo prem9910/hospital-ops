@@ -25,6 +25,7 @@ import Escalation from './pages/Escalation';
 import LiveTracking from './pages/LiveTracking';
 import ActivityLog from './pages/ActivityLog';
 import MisReporting from './pages/MisReporting';
+import Notices from './pages/Notices';
 
 function ThemeToggle() {
   const [dark, setDark] = useState(() => localStorage.getItem('hops-theme') === 'dark');
@@ -89,6 +90,8 @@ export default function App() {
               <Route path="/activity" element={<ActivityLog />} />
               <Route path="/mis" element={<MisReporting />} />
               <Route path="/trash" element={<Trash />} />
+
+              <Route path="/notices" element={<Notices />} />
 
               {/* Staff */}
               <Route path="/my-tasks" element={<MyTasks />} />

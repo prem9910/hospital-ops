@@ -16,6 +16,7 @@ const initialState = {
   delegations: [],
   actLog: [],
   trash: [],
+  notices: [],
   emailCfg: { publicKey: '', serviceId: '', templateId: '', reminderId: '', assignEnabled: true, remindEnabled: true },
   loaded: false,
 };
@@ -39,6 +40,7 @@ const KEY_MAP = {
   'hops-delegations': 'delegations',
   'hops-actlog': 'actLog',
   'hops-trash': 'trash',
+  'hops-notices': 'notices',
 };
 
 export function AppProvider({ children }) {

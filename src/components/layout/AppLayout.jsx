@@ -30,6 +30,7 @@ const PAGE_TITLES = {
   '/activity': 'Activity Log', '/mis': 'MIS Reporting',
   '/trash': 'Trash (Auto-Delete After 1 Year)', '/link-box': '🔗 Link Box',
   '/settings': 'Settings', '/report-issue': 'Report a Problem',
+  '/notices': 'Notices',
 };
 
 export default function AppLayout() {
@@ -130,7 +131,7 @@ export default function AppLayout() {
 }
 
 function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, currentRole, currentUser, logout }) {
-  const { tasks, issues, handovers, delegations, employees, depts, isSaving } = useApp();
+  const { tasks, issues, handovers, delegations, employees, depts, notices, isSaving } = useApp();
   const { hasPerm } = useAuthHook();
   const { toasts, dismissToast, dismissAll } = useTaskNotifications(tasks, handovers, currentUser, currentRole, employees);
   const isDark = useDarkTheme();
@@ -192,6 +193,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
     checklist: tasks.filter((t) => isTaskDueToday(t) && t.status === 'pending').length,
     employees: employees.length,
     depts: depts.length,
+    notices: (notices || []).filter(n => n.toEmpId === currentUser?.empId && !n.isRead).length,
   };
 
   const chipLabel = isMain ? '👑 MAIN ADMIN' : isAdmin ? '👨‍💼 ADMIN' : '👷 STAFF';
@@ -279,6 +281,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
             {!isMain && <>
               <Group label="MY WORK" />
               <NavItem id="my-tasks" label="My Tasks" icon="📋" badge="myTasks" />
+              <NavItem id="notices" label="Notices" icon="📨" badge="notices" />
               <NavItem id="my-handover" label="Incoming Handovers" icon="📥" />
             </>}
 
@@ -295,6 +298,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
             {(isMain || hasPerm('tracking_view')) && <NavItem id="tracking" label="Live Tracking" icon="📈" />}
             {isMain && <>
               <Group label="MAIN ADMIN" />
+              <NavItem id="notices" label="Notices" icon="📨" />
               <NavItem id="activity" label="Activity Log" icon="📜" />
               <NavItem id="mis" label="MIS Reporting" icon="📑" />
             </>}
@@ -311,6 +315,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
           {isStaff && <>
             <Group label="MY WORK" />
             <NavItem id="my-tasks" label="My Tasks" icon="✅" badge="myTasks" />
+            <NavItem id="notices" label="Notices" icon="📨" badge="notices" />
             <NavItem id="assign-task" label="Assign Task" icon="📋" />
             <NavItem id="my-handover" label="Incoming Handovers" icon="📥" />
             <NavItem id="my-delegation" label="My Delegations" icon="📤" badge="myDelegation" />
