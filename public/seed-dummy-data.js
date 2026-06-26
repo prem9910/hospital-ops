@@ -258,8 +258,14 @@
     ];
 
     function pushTask(name, time, priority, deptName, freq, status) {
-      const dept = depts.find((d) => d.name === deptName) || depts[0];
-      const eligible = employees.filter((e) => e.dept === deptName);
+      // If the requested dept has no employees, redistribute to the first dept that has one
+      let eligible = employees.filter((e) => e.dept === deptName);
+      let effectiveDept = deptName;
+      if (!eligible.length) {
+        const fallbackDept = employees[0].dept;
+        eligible = employees.filter((e) => e.dept === fallbackDept);
+        effectiveDept = fallbackDept;
+      }
       const assignee = eligible[Math.floor(Math.random() * eligible.length)] || employees[0];
       const schedDate = freq === 'delegation' ? addDays(Math.floor(Math.random() * 7) + 1) :
                         status === 'done' ? addDays(-Math.floor(Math.random() * 25) - 1) :
@@ -269,7 +275,7 @@
       const t = {
         id: uid(),
         name: name.toUpperCase(),
-        dept: deptName,
+        dept: effectiveDept,
         freq: freq || 'daily',
         assignedTo: [assignee.name],
         assigneeEmails: [assignee.email],
@@ -360,24 +366,31 @@
     return issues;
   }
 
-  // ~6 handovers across depts
+  // ~6 handovers — only between the 4 existing employees
   function buildHandovers(employees, tasks) {
     const handovers = [];
+    // Pick only employees that exist in the trimmed employee list
+    const empNames = employees.map((e) => e.name);
     const fixtures = [
-      { from: 'MOHAN KUMAR',  to: 'RAJESH YADAV',    dept: ICU,          start: -2, end: 2,  status: 'accepted', note: 'ON LEAVE — PLEASE COVER WARD ROUNDS' },
-      { from: 'KAVITA SHARMA',to: 'AMIT VERMA',      dept: PHARMACY,     start: -5, end: -1, status: 'completed',note: 'ANNUAL LEAVE — INVENTORY DELEGATED' },
-      { from: 'PRIYA SINGH',  to: 'VIKRAM MEHTA',    dept: ICU,          start: 1,  end: 5,  status: 'pending',  note: 'CONFERENCE ATTENDANCE — HANDING OVER NIGHT SHIFT' },
-      { from: 'RAMESH GUPTA', to: 'SURESH KUMAR',    dept: HOUSEKEEPING, start: 0,  end: 3,  status: 'accepted', note: 'SICK LEAVE — COVER HOUSEKEEPING DUTIES' },
-      { from: 'NEHA AGARWAL', to: 'MANOJ TIWARI',    dept: ADMINISTRATION,start: 7,  end: 14, status: 'pending',  note: 'TRAINING PROGRAM — DELEGATE APPROVALS' },
-      { from: 'DR. ANIL MISHRA',to: 'SANGEETA ROY', dept: LAB,          start: -1, end: 4,  status: 'rejected', note: 'PERSONAL LEAVE — TOO SHORT NOTICE' },
+      { from: 'MOHAN KUMAR',  to: 'PRIYA SINGH',  dept: ICU,          start: -2, end: 2,  status: 'accepted', note: 'ON LEAVE — PLEASE COVER WARD ROUNDS' },
+      { from: 'KAVITA SHARMA',to: 'VIKRAM MEHTA', dept: PHARMACY,     start: -5, end: -1, status: 'completed',note: 'ANNUAL LEAVE — INVENTORY DELEGATED' },
+      { from: 'PRIYA SINGH',  to: 'MOHAN KUMAR',  dept: ICU,          start: 1,  end: 5,  status: 'pending',  note: 'CONFERENCE ATTENDANCE — HANDING OVER NIGHT SHIFT' },
+      { from: 'VIKRAM MEHTA', to: 'KAVITA SHARMA',dept: EMERGENCY,    start: 0,  end: 3,  status: 'accepted', note: 'SICK LEAVE — COVER EMERGENCY DUTIES' },
+      { from: 'MOHAN KUMAR',  to: 'VIKRAM MEHTA', dept: ICU,          start: 7,  end: 14, status: 'pending',  note: 'TRAINING PROGRAM — DELEGATE APPROVALS' },
+      { from: 'KAVITA SHARMA',to: 'PRIYA SINGH',  dept: PHARMACY,     start: -1, end: 4,  status: 'rejected', note: 'PERSONAL LEAVE — TOO SHORT NOTICE' },
     ];
     fixtures.forEach((f, i) => {
-      const someTasks = tasks.filter((t) => t.dept === f.dept && t.status === 'pending').slice(0, 2 + (i % 2));
+      // Filter to handovers where both from and to are real employees
+      const fromEmp = employees.find((e) => e.name === f.from);
+      const toEmp   = employees.find((e) => e.name === f.to);
+      if (!fromEmp || !toEmp) return;
+      const effectiveDept = fromEmp.dept; // use the actual employee's dept
+      const someTasks = tasks.filter((t) => t.dept === effectiveDept && t.status === 'pending').slice(0, 2 + (i % 2));
       handovers.push({
         id: uid(),
         fromName: f.from,
         toName: f.to,
-        dept: f.dept,
+        dept: effectiveDept,
         dateStart: addDays(f.start),
         dateEnd: addDays(f.end),
         notes: f.note,
@@ -390,60 +403,64 @@
     return handovers;
   }
 
-  // ~5 delegations
+  // ~5 delegations — doers must be in the trimmed 4-employee list
   function buildDelegations(employees) {
     const today = toDay();
+    const empByName = Object.fromEntries(employees.map((e) => [e.name, e]));
     const fixtures = [
-      { task: 'AUDIT PHARMACY STOCK',            doer: 'AMIT VERMA',      dept: PHARMACY,    due: addDays(7),  status: 'pending',  ext: [] },
-      { task: 'FOLLOW UP CT SCANNER VENDOR',     doer: 'DR. SANJAY PATEL',dept: RADIOLOGY,   due: addDays(3),  status: 'extension-requested', ext: [{ requestedAt: nowIso(), reason: 'VENDOR DELAYED', newDate: addDays(10), status: 'pending' }] },
-      { task: 'RENEW FIRE NOC',                  doer: 'NEHA AGARWAL',    dept: ADMINISTRATION, due: addDays(14), status: 'pending',  ext: [] },
-      { task: 'STAFF TRAINING COORDINATION',     doer: 'LATA WADHWA',     dept: NURSING,     due: addDays(5),  status: 'extended', ext: [{ requestedAt: addDays(-2), reason: 'TRAINER UNAVAILABLE', newDate: addDays(5), status: 'approved' }] },
-      { task: 'BIO-MED WASTE PICKUP COORDINATION', doer: 'RAMESH GUPTA',  dept: HOUSEKEEPING,due: addDays(-2), status: 'done',    ext: [] },
+      { task: 'AUDIT PHARMACY STOCK',            doer: 'KAVITA SHARMA', dept: 'PHARMACY',     due: addDays(7),  status: 'pending',           ext: [] },
+      { task: 'FOLLOW UP ICU EQUIPMENT VENDOR',  doer: 'MOHAN KUMAR',   dept: 'ICU',          due: addDays(3),  status: 'extension-requested',ext: [{ requestedAt: nowIso(), reason: 'VENDOR DELAYED', newDate: addDays(10), status: 'pending' }] },
+      { task: 'EMERGENCY DRILL COORDINATION',    doer: 'VIKRAM MEHTA',  dept: 'EMERGENCY',    due: addDays(14), status: 'pending',           ext: [] },
+      { task: 'STAFF TRAINING COORDINATION',     doer: 'PRIYA SINGH',   dept: 'ICU',          due: addDays(5),  status: 'extended',          ext: [{ requestedAt: addDays(-2), reason: 'TRAINER UNAVAILABLE', newDate: addDays(5), status: 'approved' }] },
+      { task: 'PHARMACY STOCK RECONCILIATION',   doer: 'KAVITA SHARMA', dept: 'PHARMACY',     due: addDays(-2), status: 'done',              ext: [] },
     ];
-    return fixtures.map((f) => ({
-      id: uid(),
-      task: f.task.toUpperCase(),
-      taskName: f.task.toUpperCase(),
-      doerName: f.doer,
-      doerId: '',
-      dept: f.dept,
-      priority: 'medium',
-      dueDate: f.due,
-      expTime: '17:00',
-      remarks: '',
-      notes: '',
-      status: f.status,
-      createdBy: 'VIBHAV',
-      createdAt: addDays(-7),
-      createdDate: addDays(-7),
-      actualDate: f.status === 'done' ? toDay() : '',
-      actualTime: f.status === 'done' ? '16:30' : '',
-      doneRemark: f.status === 'done' ? 'COORDINATED SUCCESSFULLY' : '',
-      delayReason: '',
-      isDelayed: false,
-      extensionRequests: f.ext,
-      activityLog: [
-        { at: addDays(-7), by: 'VIBHAV', action: 'DELEGATED', details: 'Initial delegation' },
-      ],
-    }));
+    return fixtures
+      .filter((f) => empByName[f.doer]) // skip delegations for unknown doers
+      .map((f) => ({
+        id: uid(),
+        task: f.task.toUpperCase(),
+        taskName: f.task.toUpperCase(),
+        doerName: f.doer,
+        doerId: empByName[f.doer].id,
+        dept: empByName[f.doer].dept, // use the actual employee's dept
+        priority: 'medium',
+        dueDate: f.due,
+        expTime: '17:00',
+        remarks: '',
+        notes: '',
+        status: f.status,
+        createdBy: 'VIBHAV',
+        createdAt: addDays(-7),
+        createdDate: addDays(-7),
+        actualDate: f.status === 'done' ? toDay() : '',
+        actualTime: f.status === 'done' ? '16:30' : '',
+        doneRemark: f.status === 'done' ? 'COORDINATED SUCCESSFULLY' : '',
+        delayReason: '',
+        isDelayed: false,
+        extensionRequests: f.ext,
+        activityLog: [
+          { at: addDays(-7), by: 'VIBHAV', action: 'DELEGATED', details: 'Initial delegation' },
+        ],
+      }));
   }
 
   // ~12 notices (mix of types)
   function buildNotices(employees) {
     const notices = [];
+    // Only target the 4 employees + MAINADMIN (admin_alert)
     const sample = [
       { type: 'general',                to: 'MOHAN KUMAR',     subject: 'ICU STAFF MEETING',         message: 'ICU team meeting at 10 AM tomorrow in conference room.' },
       { type: 'general',                to: 'PRIYA SINGH',     subject: 'NEW SHIFT ROSTER',          message: 'Please check the new shift roster on the notice board.' },
       { type: 'task_reminder',          to: 'KAVITA SHARMA',   subject: 'PENDING PHARMACY TASKS',    message: 'You have 3 pending tasks — please complete by EOD.' },
-      { type: 'task_reminder',          to: 'RAMESH GUPTA',    subject: 'HOUSEKEEPING FOLLOW-UP',    message: 'Biohazard bin replacement pending — please expedite.' },
-      { type: 'dept_change_approval',   to: 'AMIT VERMA',      subject: 'DEPARTMENT TRANSFER REQUEST',message: 'You have been requested to move to ADMINISTRATION. Accept or remind later.', meta: { newDept: 'ADMINISTRATION', accepted: false } },
-      { type: 'dept_change_approval',   to: 'MEERA IYER',      subject: 'DEPARTMENT TRANSFER APPROVED',message: 'Welcome to your new department.', meta: { newDept: 'RADIOLOGY', accepted: true } },
+      { type: 'task_reminder',          to: 'VIKRAM MEHTA',    subject: 'EMERGENCY OXYGEN CHECK',    message: 'Daily oxygen check overdue — please complete.' },
+      { type: 'dept_change_approval',   to: 'PRIYA SINGH',     subject: 'DEPARTMENT TRANSFER REQUEST',message: 'You have been requested to move to EMERGENCY. Accept or remind later.', meta: { newDept: 'EMERGENCY', accepted: false } },
+      { type: 'dept_change_approval',   to: 'MOHAN KUMAR',     subject: 'DEPARTMENT TRANSFER APPROVED',message: 'Welcome to your new department.', meta: { newDept: 'ICU', accepted: true } },
       { type: 'admin_alert',            to: 'MAINADMIN',       subject: 'TASK BACKLOG ALERT',        message: 'ICU has 5 pending tasks older than 3 days.' },
       { type: 'admin_alert',            to: 'MAINADMIN',       subject: 'HIGH PRIORITY ISSUE OPEN',  message: 'Oxygen flow meter stuck in ICU — needs immediate attention.' },
-      { type: 'general',                to: 'DR. ANIL MISHRA', subject: 'LAB EQUIPMENT CALIBRATION', message: 'Calibration schedule updated for this quarter.' },
-      { type: 'general',                to: 'LATA WADHWA',     subject: 'NABH AUDIT PREPARATION',    message: 'Prepare documentation for upcoming NABH audit.' },
-      { type: 'task_reminder',          to: 'VIKRAM MEHTA',    subject: 'EMERGENCY OXYGEN CHECK',    message: 'Daily oxygen check overdue — please complete.' },
-      { type: 'general',                to: 'NEHA AGARWAL',    subject: 'MONTHLY ADMIN REVIEW',      message: 'Admin review meeting scheduled for next Monday.' },
+      { type: 'general',                to: 'MOHAN KUMAR',     subject: 'ICU EQUIPMENT CHECK',       message: 'Schedule ICU equipment inspection this week.' },
+      { type: 'general',                to: 'KAVITA SHARMA',   subject: 'PHARMACY AUDIT PREP',       message: 'Prepare documentation for upcoming NABH audit.' },
+      { type: 'task_reminder',          to: 'VIKRAM MEHTA',    subject: 'EMERGENCY TRIAGE REVIEW',   message: 'Review emergency triage logs from last week.' },
+      { type: 'general',                to: 'PRIYA SINGH',     subject: 'WEEKLY ADMIN REVIEW',       message: 'Admin review meeting scheduled for next Monday.' },
     ];
     sample.forEach((s, i) => {
       const toEmp = s.to === 'MAINADMIN'
@@ -472,15 +489,15 @@
       ['TASK COMPLETED', 'CLEAN ICU BEDS marked done by PRIYA SINGH'],
       ['TASK COMPLETED', 'CHECK EMERGENCY OXYGEN CYLINDERS marked done by VIKRAM MEHTA'],
       ['DEPT ADDED',     'ICU department created'],
-      ['DEPT ADDED',     'RADIOLOGY department created'],
+      ['DEPT ADDED',     'PHARMACY department created'],
       ['EMPLOYEE ADDED', 'MOHAN KUMAR added to ICU'],
-      ['EMPLOYEE ADDED', 'DR. SANJAY PATEL added to RADIOLOGY'],
+      ['EMPLOYEE ADDED', 'KAVITA SHARMA added to PHARMACY'],
       ['ISSUE REPORTED', 'AC NOT COOLING IN ICU-2'],
       ['ISSUE RESOLVED', 'PHARMACY PRINTER OUT OF TONER — resolved by VIBHAV'],
-      ['HANDOVER CREATED','MOHAN KUMAR → RAJESH YADAV (ICU)'],
-      ['HANDOVER ACCEPTED','Handover accepted by RAJESH YADAV'],
-      ['DELEGATION CREATED','AUDIT PHARMACY STOCK delegated to AMIT VERMA'],
-      ['EXTENSION REQUESTED','CT SCANNER VENDOR FOLLOW-UP — new date requested'],
+      ['HANDOVER CREATED','MOHAN KUMAR → PRIYA SINGH (ICU)'],
+      ['HANDOVER ACCEPTED','Handover accepted by PRIYA SINGH'],
+      ['DELEGATION CREATED','AUDIT PHARMACY STOCK delegated to KAVITA SHARMA'],
+      ['EXTENSION REQUESTED','ICU EQUIPMENT VENDOR FOLLOW-UP — new date requested'],
       ['NOTICE SENT',   'ICU STAFF MEETING sent to MOHAN KUMAR'],
       ['LOGIN',         'VIBHAV logged in as mainadmin'],
       ['LINK ADDED',    'HOSPITAL PORTAL bookmark added'],
