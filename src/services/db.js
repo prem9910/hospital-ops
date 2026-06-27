@@ -66,6 +66,9 @@ const TABLES = {
       supervisor: '',
       status: o.status || 'active',
       created_by: o.createdAt || '',
+      decision_remark: o.decisionRemark || '',
+      decision_by: o.decisionBy || '',
+      decision_at: o.decisionAt || null,
       updated_at: o.updatedAt || _nowIso(),
     }),
     unpack: (r) => {
@@ -82,6 +85,9 @@ const TABLES = {
         notes: r.pending || '',
         status: r.status || 'active',
         createdAt: r.created_by || '',
+        decisionRemark: r.decision_remark || '',
+        decisionBy: r.decision_by || '',
+        decisionAt: r.decision_at || '',
         updatedAt: r.updated_at || '',
         // backward compat for old records
         date: r.date || '',

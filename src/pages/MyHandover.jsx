@@ -79,6 +79,44 @@ export default function MyHandover() {
           meta: { handoverId: h.id, fromName: h.fromName, toName: h.toName, decision, taskCount: (h.taskIds || []).length },
         });
       } catch (e) { console.error('Admin notify failed:', e); }
+
+      // Notify the original creator (fromName) with a personal bell notice
+      // — only if the creator exists in the employees table. Notice includes
+      //   the decision remark so the creator knows exactly why their handover
+      //   was accepted/rejected without having to open the handover register.
+      const fromEmp = employees.find(e => e.name.toUpperCase() === (h.fromName || '').toUpperCase());
+      try {
+        if (fromEmp) {
+          const creatorNotice = {
+            id: 'notice_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+            toEmpId: fromEmp.id,
+            toName: fromEmp.name,
+            fromName: currentUser.name,
+            subject: decision === 'accepted'
+              ? `✅ ${currentUser.name} accepted your handover`
+              : `❌ ${currentUser.name} rejected your handover`,
+            message:
+              `Your handover to ${h.toName} was ${decision.toUpperCase()} by ${currentUser.name}.\n` +
+              `Department: ${h.dept || '—'}\n` +
+              `Tasks included: ${(h.taskIds || []).length}\n` +
+              (remark ? `\n💬 Remark: ${remark}` : ''),
+            type: 'handover_response',
+            isRead: false,
+            sentAt: new Date().toISOString(),
+            meta: {
+              handoverId: h.id,
+              fromName: h.fromName,
+              toName: h.toName,
+              decision,
+              taskCount: (h.taskIds || []).length,
+              remark,
+              decidedBy: currentUser.name,
+            },
+          };
+          await save('hops-notices', [...(notices || []), creatorNotice]);
+        }
+      } catch (e) { console.error('Creator notify failed:', e); }
+
       setRemarks(r => { const n = { ...r }; delete n[h.id]; return n; });
       setMsg(`✅ Handover ${decision === 'accepted' ? 'accepted' : 'rejected'} successfully!`);
       setTimeout(() => setMsg(''), 3000);
@@ -100,8 +138,7 @@ export default function MyHandover() {
         }
       }
 
-      // Email to fromName (creator)
-      const fromEmp = employees.find(e => e.name.toUpperCase() === (h.fromName || '').toUpperCase());
+      // Email to fromName (creator) — reuse fromEmp lookup from notice block above
       if (fromEmp) {
         if (fromEmp.email) {
           sendHandoverResponseEmail(updated, fromEmp, decision);

@@ -109,7 +109,11 @@ CREATE TABLE IF NOT EXISTS handovers (
   supervisor  TEXT DEFAULT '',
   status      TEXT DEFAULT 'pending',
   created_by  TEXT DEFAULT '',
-  created_at  TIMESTAMPTZ DEFAULT now()
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  -- Decision fields (set when recipient clicks Accept/Reject with remark)
+  decision_remark TEXT DEFAULT '',
+  decision_by     TEXT DEFAULT '',
+  decision_at     TIMESTAMPTZ
 );
 
 -- ─── DELEGATIONS ─────────────────────────────────────────────
@@ -208,6 +212,9 @@ ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS extensions JSONB DEFAULT '[]';
 ALTER TABLE issues      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS decision_remark TEXT DEFAULT '';
+ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS decision_by     TEXT DEFAULT '';
+ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS decision_at     TIMESTAMPTZ;
 ALTER TABLE delegations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
 -- ============================================================
