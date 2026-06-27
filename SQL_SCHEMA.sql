@@ -212,38 +212,57 @@ ALTER TABLE delegations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
--- Using service_role key from frontend — RLS is enforced at DB level
--- For production, switch to anon key + RLS policies below
+-- App uses the ANON key (public) from the browser.
+-- For an internal hospital-ops app with no end-user sign-up,
+-- we allow the anon role full CRUD on all data tables.
+-- This mirrors the previous service-role behaviour.
+-- For a future multi-tenant setup, replace these with
+-- per-user / per-department policies.
 -- ============================================================
 
 -- Enable RLS on all tables
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE issues ENABLE ROW LEVEL SECURITY;
-ALTER TABLE handovers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE employees   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admins      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE issues      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE handovers   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delegations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trash ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trash       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_links  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notices     ENABLE ROW LEVEL SECURITY;
 
--- Since we use service_role key, allow all for now
--- (service_role bypasses RLS by default)
--- For anon key: replace with specific authenticated user policies
+-- Drop any old service-role-only policies so they don't shadow the new ones
+DROP POLICY IF EXISTS "service_role_all_departments"  ON departments;
+DROP POLICY IF EXISTS "service_role_all_employees"    ON employees;
+DROP POLICY IF EXISTS "service_role_all_admins"       ON admins;
+DROP POLICY IF EXISTS "service_role_all_tasks"        ON tasks;
+DROP POLICY IF EXISTS "service_role_all_issues"       ON issues;
+DROP POLICY IF EXISTS "service_role_all_handovers"    ON handovers;
+DROP POLICY IF EXISTS "service_role_all_delegations"  ON delegations;
+DROP POLICY IF EXISTS "service_role_all_actlog"       ON activity_log;
+DROP POLICY IF EXISTS "service_role_all_trash"        ON trash;
+DROP POLICY IF EXISTS "service_role_all_links"        ON user_links;
+DROP POLICY IF EXISTS "service_role_all_notices"      ON notices;
 
-CREATE POLICY "service_role_all_departments" ON departments FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_employees" ON employees FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_admins" ON admins FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_tasks" ON tasks FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_issues" ON issues FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_handovers" ON handovers FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_delegations" ON delegations FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_actlog" ON activity_log FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_trash" ON trash FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_all_links" ON user_links FOR ALL USING (true) WITH CHECK (true);
-ALTER TABLE notices ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "service_role_all_notices" ON notices FOR ALL USING (true) WITH CHECK (true);
+-- Anon CRUD policies (one per table, named clearly)
+CREATE POLICY "anon_all_departments"  ON departments  FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_employees"    ON employees    FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_admins"       ON admins       FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_tasks"        ON tasks        FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_issues"       ON issues       FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_handovers"    ON handovers    FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_delegations"  ON delegations  FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_actlog"       ON activity_log FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_trash"        ON trash        FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_links"        ON user_links   FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all_notices"      ON notices      FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- Realtime also needs SELECT granted to anon
+GRANT USAGE ON SCHEMA public TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO anon;
+GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO anon;
 
 -- ============================================================
 -- REALTIME (Enable for live subscriptions)

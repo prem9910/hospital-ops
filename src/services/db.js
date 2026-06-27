@@ -120,7 +120,12 @@ export async function upsertRecord(key, val) {
   const cfg = TABLES[key];
   const rows = val.map(cfg.pack);
   const { error } = await supabase.from(cfg.table).upsert(rows, { onConflict: 'id' });
-  if (error) console.error('❌ Upsert [' + key + ']:', error.message);
+  if (error) {
+    console.error('❌ Upsert [' + key + ']:', error.message);
+    if (/row-level security|permission denied|unauthorized/i.test(error.message || '')) {
+      console.error('   → RLS policy missing for anon role. Run SQL_SCHEMA.sql in Supabase SQL editor.');
+    }
+  }
 }
 
 export async function upsertSingle(key, obj) {
@@ -128,7 +133,12 @@ export async function upsertSingle(key, obj) {
   const cfg = TABLES[key];
   const row = cfg.pack(obj);
   const { error } = await supabase.from(cfg.table).upsert(row, { onConflict: 'id' });
-  if (error) console.error('❌ Upsert single [' + key + ']:', error.message);
+  if (error) {
+    console.error('❌ Upsert single [' + key + ']:', error.message);
+    if (/row-level security|permission denied|unauthorized/i.test(error.message || '')) {
+      console.error('   → RLS policy missing for anon role. Run SQL_SCHEMA.sql in Supabase SQL editor.');
+    }
+  }
 }
 
 export async function loadAll(key) {
