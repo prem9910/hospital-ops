@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { wasCompletedLate, fDate, toDay, exportToExcel, isAssignedTo, currentMonthRange, inDateRange } from '../utils';
 import { DeptTag } from '../components/common/Badge';
 import { DateRangePicker } from '../components/common/DateRangePicker';
@@ -247,8 +248,55 @@ const FIELD_OPTIONS = {
 
 export default function MisReporting() {
   const { tasks, issues, depts, employees, handovers } = useApp();
+  const { currentRole, currentUser } = useAuth();
   const [tab, setTab] = useState('employee');
   const [filterDept, setFilterDept] = useState('');
+  const [filterEmp, setFilterEmp] = useState('');
+
+  // Role gating — main admin / admin with mis_view see everything; employees
+  // get their data only. `isMain` controls the global aggregate view; for
+  // employees both filters are hidden and locked to themselves.
+  const isMain = currentRole === 'mainadmin';
+  const isAdminRole = isMain || currentRole === 'admin';
+  // For employees: force filterDept to their dept and filterEmp to their name
+  // (so all data is scoped). Reset the user-facing filters below.
+  const myEmpName = (currentUser?.name || '').toUpperCase();
+  const myEmpRecord = useMemo(
+    () => (employees || []).find((e) => (e.name || '').toUpperCase() === myEmpName),
+    [employees, myEmpName]
+  );
+  // Effective filters — what the data layer actually uses.
+  const effDept = isAdminRole ? filterDept : (myEmpRecord?.dept || currentUser?.dept || '');
+  const effEmp = isAdminRole ? filterEmp : (currentUser?.name || '');
+
+  // Reset user-facing filters when role changes (defensive — usually a no-op).
+  // When a non-admin lands on this page, the dept/emp dropdowns are hidden
+  // and the data is locked to themselves, so we don't even render them.
+  // Employee dropdown options — filtered by selected dept.
+  const empOptions = useMemo(() => {
+    return employees
+      .filter((e) => !filterDept || e.dept === filterDept)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [employees, filterDept]);
+
+  // When the admin picks an employee, lock the dept dropdown to that employee's
+  // department so the two filters stay consistent (and the table doesn't show
+  // employees from other depts as the dept label changes underneath).
+  function handleEmpChange(name) {
+    setFilterEmp(name);
+    if (name) {
+      const e = employees.find((x) => x.name === name);
+      if (e?.dept) setFilterDept(e.dept);
+    }
+  }
+  function handleDeptChange(d) {
+    setFilterDept(d);
+    // Clear the employee filter if they no longer belong to the new dept.
+    if (filterEmp) {
+      const e = employees.find((x) => x.name === filterEmp);
+      if (!e || e.dept !== d) setFilterEmp('');
+    }
+  }
 
   // One date range per tab so switching tabs preserves the filter the
   // user set on each one. Each entry is { preset, from, to, field? }.
@@ -274,10 +322,24 @@ export default function MisReporting() {
   }, [handovers, range.from, range.to, range.field]);
 
   // ─── Employee stats (driven by filteredTasks) ───────────────────────────────
-  const empStats = employees
-    .filter(e => !filterDept || e.dept === filterDept)
-    .map(e => ({ emp: e, ...calcEmpStats(e.name, filteredTasks, filteredHandovers) }))
-    .sort((a, b) => b.score - a.score);
+  // Scope rules:
+  //   • Employee role: only their own row
+  //   • Admin with filterEmp: only that employee's row
+  //   • Admin with filterDept (no filterEmp): all employees in that dept
+  //   • Admin with no filters: all employees (aggregate view)
+  const empStats = useMemo(() => {
+    let pool = employees;
+    if (!isAdminRole) {
+      // Employee role — only self
+      pool = employees.filter((e) => (e.name || '').toUpperCase() === myEmpName);
+    } else {
+      if (effDept) pool = pool.filter((e) => e.dept === effDept);
+      if (effEmp)  pool = pool.filter((e) => e.name === effEmp);
+    }
+    return pool
+      .map((e) => ({ emp: e, ...calcEmpStats(e.name, filteredTasks, filteredHandovers) }))
+      .sort((a, b) => b.score - a.score);
+  }, [employees, filteredTasks, filteredHandovers, effDept, effEmp, isAdminRole, myEmpName]);
 
   const totAssigned = empStats.reduce((s, e) => s + e.assigned, 0);
   const totCompleted = empStats.reduce((s, e) => s + e.completed, 0);
@@ -287,25 +349,72 @@ export default function MisReporting() {
   const maxAssigned = Math.max(...empStats.map(e => e.assigned), 1);
 
   // ─── Delegation stats (driven by filteredTasks for consistency) ─────────────
-  const delegTasks = filteredTasks.filter(t => t.freq === 'delegation');
+  // Scope: admin sees all delegation tasks; employee only sees their own
+  // (where they're in assignedTo). When filterEmp is set (admin only),
+  // restrict to that employee's delegations too.
+  const delegTasks = useMemo(() => {
+    let pool = filteredTasks.filter((t) => t.freq === 'delegation');
+    if (!isAdminRole) {
+      pool = pool.filter((t) => isAssignedTo(t, currentUser.name));
+    } else if (effEmp) {
+      pool = pool.filter((t) => isAssignedTo(t, effEmp));
+    } else if (effDept) {
+      pool = pool.filter((t) => t.dept === effDept);
+    }
+    return pool;
+  }, [filteredTasks, isAdminRole, effEmp, effDept, currentUser]);
   const delegDone = delegTasks.filter(t => t.status === 'done');
   const delegPending = delegTasks.filter(t => t.status === 'pending');
   const totalExts = delegTasks.reduce((s, t) => s + (t.extensions || []).length, 0);
 
   // ─── Dept stats (driven by filteredTasks + issues) ──────────────────────────
-  const deptStats = depts.map(d => {
-    const dTasks = filteredTasks.filter(t => t.dept === d.name);
-    const done = dTasks.filter(t => t.status === 'done');
-    const delayed = done.filter(t => wasCompletedLate(t));
-    const openIss = issues.filter(i => i.dept === d.name && i.status !== 'resolved').length;
-    const resolvedIss = issues.filter(i => i.dept === d.name && i.status === 'resolved').length;
-    const taskComp = dTasks.length ? Math.round(done.length / dTasks.length * 100) : 100;
-    const delayPct = done.length ? Math.round(delayed.length / done.length * 100) : 0;
-    const issuePct = (openIss + resolvedIss) ? Math.round(resolvedIss / (openIss + resolvedIss) * 100) : 100;
-    const healthScore = Math.round((taskComp * 0.5) + ((100 - delayPct) * 0.3) + (issuePct * 0.2));
-    return { dept: d.name, total: dTasks.length, done: done.length, pending: dTasks.length - done.length, delayed: delayed.length, openIss, resolvedIss, staff: employees.filter(e => e.dept === d.name).length, taskComp, delayPct, issuePct, healthScore };
-  });
+  // Scope: admin without filters sees all depts; admin with effDept sees only
+  // that dept; admin with effEmp sees that employee's dept; employee sees only
+  // their own dept.
+  const deptStats = useMemo(() => {
+    let pool = depts;
+    if (!isAdminRole) {
+      pool = depts.filter((d) => d.name === (myEmpRecord?.dept || currentUser?.dept));
+    } else if (effEmp) {
+      const eRec = employees.find((x) => x.name === effEmp);
+      pool = depts.filter((d) => d.name === eRec?.dept);
+    } else if (effDept) {
+      pool = depts.filter((d) => d.name === effDept);
+    }
+    return pool.map(d => {
+      const dTasks = filteredTasks.filter(t => t.dept === d.name);
+      const done = dTasks.filter(t => t.status === 'done');
+      const delayed = done.filter(t => wasCompletedLate(t));
+      const openIss = issues.filter(i => i.dept === d.name && i.status !== 'resolved').length;
+      const resolvedIss = issues.filter(i => i.dept === d.name && i.status === 'resolved').length;
+      const taskComp = dTasks.length ? Math.round(done.length / dTasks.length * 100) : 100;
+      const delayPct = done.length ? Math.round(delayed.length / done.length * 100) : 0;
+      const issuePct = (openIss + resolvedIss) ? Math.round(resolvedIss / (openIss + resolvedIss) * 100) : 100;
+      const healthScore = Math.round((taskComp * 0.5) + ((100 - delayPct) * 0.3) + (issuePct * 0.2));
+      return { dept: d.name, total: dTasks.length, done: done.length, pending: dTasks.length - done.length, delayed: delayed.length, openIss, resolvedIss, staff: employees.filter(e => e.dept === d.name).length, taskComp, delayPct, issuePct, healthScore };
+    });
+  }, [depts, filteredTasks, issues, employees, effDept, effEmp, isAdminRole, myEmpRecord, currentUser]);
   const avgHealth = deptStats.length ? Math.round(deptStats.reduce((s, d) => s + d.healthScore, 0) / deptStats.length) : 100;
+
+  // ─── Handover scope — applied alongside the date filter ─────────────────────
+  // Employee role: handovers where they are from or to.
+  // Admin + effEmp: handovers involving that employee.
+  // Admin + effDept: handovers in that department.
+  // Admin no filters: all.
+  const scopedHandovers = useMemo(() => {
+    let pool = filteredHandovers;
+    if (!isAdminRole) {
+      pool = pool.filter((h) =>
+        (h.fromName || '').toUpperCase() === myEmpName ||
+        (h.toName || '').toUpperCase() === myEmpName
+      );
+    } else if (effEmp) {
+      pool = pool.filter((h) => h.fromName === effEmp || h.toName === effEmp);
+    } else if (effDept) {
+      pool = pool.filter((h) => h.dept === effDept);
+    }
+    return pool;
+  }, [filteredHandovers, isAdminRole, effEmp, effDept, myEmpName]);
 
   // Reset to default range (current month, default field) for the active tab.
   function resetActiveRange() {
@@ -346,7 +455,7 @@ export default function MisReporting() {
         };
       }), `MIS_Delegation_${suffix}`);
     } else if (tab === 'handover') {
-      exportToExcel(filteredHandovers.map(h => {
+      exportToExcel(scopedHandovers.map(h => {
         const taskNames = (h.taskIds || []).map(id => tasks.find(t => t.id === id)?.name).filter(Boolean).join(', ');
         const doneCount = (h.taskIds || []).filter(id => tasks.find(t => t.id === id && t.status === 'done')).length;
         return {
@@ -369,14 +478,16 @@ export default function MisReporting() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <div>
+      <div className="page-header">
+        <div className="page-header-title">
           <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>📑 MIS Reporting</h2>
           <div style={{ fontSize: 11.5, color: '#6b7a90', marginTop: 2 }}>
-            Filter by date range across every tab · <RangePill />
+            {isAdminRole
+              ? <>Filter by date range across every tab · <RangePill /></>
+              : <>Showing <strong style={{ color: '#0d7377' }}>your personal</strong> MIS report · <RangePill /></>}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="page-header-actions">
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a2535', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨️ Print</button>
           <button onClick={handleExport} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>📊 Excel</button>
         </div>
@@ -416,15 +527,28 @@ export default function MisReporting() {
             <SummaryCard label="Total Completed" val={totCompleted} color="#1a7a4a" />
             <SummaryCard label="On Time" val={totOnTime} color="#0d7377" />
             <SummaryCard label="Delayed" val={totDelayed} color="#c0392b" />
-            <SummaryCard label="Employees" val={employees.length} color="#6d28d9" />
+            <SummaryCard label={isAdminRole && !effEmp ? 'Employees' : 'Records'} val={empStats.length} color="#6d28d9" />
           </div>
 
           {/* Filter */}
-          <div style={{ marginBottom: 14 }}>
-            <select value={filterDept} onChange={e => setFilterDept(e.target.value)} style={IS}>
-              <option value="">ALL DEPARTMENTS</option>
-              {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-            </select>
+          <div style={{ marginBottom: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {isAdminRole && (
+              <>
+                <select value={filterDept} onChange={e => handleDeptChange(e.target.value)} style={IS}>
+                  <option value="">ALL DEPARTMENTS</option>
+                  {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+                <select value={filterEmp} onChange={e => handleEmpChange(e.target.value)} style={IS}>
+                  <option value="">{filterDept ? `ALL ${filterDept} EMPLOYEES` : 'ALL EMPLOYEES'}</option>
+                  {empOptions.map(e => <option key={e.id} value={e.name}>{e.name}{e.role ? ` · ${e.role}` : ''}</option>)}
+                </select>
+              </>
+            )}
+            {!isAdminRole && (
+              <div style={{ fontSize: 12, color: '#0d7377', fontWeight: 800, background: '#e8f4fd', border: '1px solid #bae6fd', padding: '6px 14px', borderRadius: 7 }}>
+                👤 Showing your personal performance — {currentUser?.name}{myEmpRecord?.dept ? ` · ${myEmpRecord.dept}` : ''}
+              </div>
+            )}
           </div>
 
           {/* Charts row */}
@@ -656,7 +780,7 @@ export default function MisReporting() {
       {/* ══════════ HANDOVER TAB ══════════ */}
       {tab === 'handover' && (() => {
         const today = toDay();
-        const newHandovers = filteredHandovers.filter(h => h.dateStart);
+        const newHandovers = scopedHandovers.filter(h => h.dateStart);
         const activeH = newHandovers.filter(h => today >= h.dateStart && today <= h.dateEnd);
         const upcomingH = newHandovers.filter(h => today < h.dateStart);
         const completedH = newHandovers.filter(h => today > h.dateEnd);
@@ -779,20 +903,22 @@ export default function MisReporting() {
       {/* ══════════ DEPARTMENT TAB ══════════ */}
       {tab === 'department' && (
         <div>
-          {/* Overall health card */}
-          <div style={{ background: 'white', borderRadius: 14, border: '1px solid #d8e2ef', padding: 20, marginBottom: 18, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: scoreColor(avgHealth) }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d' }}>Hospital Health Score</div>
-                <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 3 }}>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+          {/* Overall health card — only meaningful for unscoped admin view */}
+          {(!isAdminRole || (!effDept && !effEmp)) && isAdminRole && (
+            <div style={{ background: 'white', borderRadius: 14, border: '1px solid #d8e2ef', padding: 20, marginBottom: 18, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: scoreColor(avgHealth) }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d' }}>Hospital Health Score</div>
+                  <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 3 }}>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 52, color: scoreColor(avgHealth), lineHeight: 1 }}>{avgHealth}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: scoreColor(avgHealth) }}>{scoreEmoji(avgHealth)} {scoreLabel(avgHealth)}</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 52, color: scoreColor(avgHealth), lineHeight: 1 }}>{avgHealth}</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: scoreColor(avgHealth) }}>{scoreEmoji(avgHealth)} {scoreLabel(avgHealth)}</div>
-              </div>
-            </div>
           </div>
+          )}
 
           {/* Dept chart */}
           <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, marginBottom: 16 }}>

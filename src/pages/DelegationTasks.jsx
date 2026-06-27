@@ -382,8 +382,8 @@ export default function DelegationTasks() {
   return (
     <div>
       {/* Header — counts on the left, action buttons on the right */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-        <div>
+      <div className="page-header">
+        <div className="page-header-title">
           <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d', marginBottom: 4 }}>📋 Delegation Tasks</h2>
           <div style={{ fontSize: 12, color: '#6b7a90' }}>
             <strong style={{ color: '#0d7377' }}>{delegationTasks.length}</strong> total task{delegationTasks.length === 1 ? '' : 's'}
@@ -393,7 +393,7 @@ export default function DelegationTasks() {
             <strong style={{ color: '#1a7a4a' }}>{doneCount}</strong> done
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div className="page-header-actions">
           <button onClick={handleExport} disabled={!rows.length} style={{ ...IS_BTN, background: rows.length ? '#1a7a4a' : '#9ca3af', cursor: rows.length ? 'pointer' : 'not-allowed' }}>
             ⬇ Excel
           </button>
@@ -404,23 +404,25 @@ export default function DelegationTasks() {
       </div>
 
       {/* Filter row */}
-      <div style={{ display: 'flex', gap: 7, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK / DOER / DEPT…" style={{ ...IS_SEARCH, flex: 1, minWidth: 220 }} />
-        {['all', 'pending', 'done'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              padding: '6px 14px', borderRadius: 20, fontSize: 11, fontWeight: 800, cursor: 'pointer',
-              border: `1.5px solid ${filter === f ? '#0d7377' : '#d8e2ef'}`,
-              background: filter === f ? '#0d7377' : 'white',
-              color: filter === f ? 'white' : '#6b7a90',
-              textTransform: 'uppercase', letterSpacing: 0.4,
-            }}
-          >
-            {f === 'all' ? `All (${delegationTasks.length})` : f === 'pending' ? `⏳ Pending (${pendingCount})` : `✅ Done (${doneCount})`}
-          </button>
-        ))}
+      <div className="filter-bar">
+        <input className="filter-bar-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK / DOER / DEPT…" style={IS_SEARCH} />
+        <div className="filter-bar-chip-row">
+          {['all', 'pending', 'done'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                padding: '6px 14px', borderRadius: 20, fontSize: 11, fontWeight: 800, cursor: 'pointer',
+                border: `1.5px solid ${filter === f ? '#0d7377' : '#d8e2ef'}`,
+                background: filter === f ? '#0d7377' : 'white',
+                color: filter === f ? 'white' : '#6b7a90',
+                textTransform: 'uppercase', letterSpacing: 0.4,
+              }}
+            >
+              {f === 'all' ? `All (${delegationTasks.length})` : f === 'pending' ? `⏳ Pending (${pendingCount})` : `✅ Done (${doneCount})`}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}

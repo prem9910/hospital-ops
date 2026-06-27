@@ -266,9 +266,9 @@ export default function Handover() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>🔄 Handover Register</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>🔄 Handover Register</h2>
+        <div className="page-header-actions" style={{ alignItems: 'center' }}>
           {pendingAcceptCount > 0 && <span style={{ background: '#fff3cd', color: '#7a4800', padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800, border: '1px solid #f5c842' }}>⏳ {pendingAcceptCount} Pending Accept</span>}
           {activeCount > 0 && <span style={{ background: '#d4edda', color: '#155724', padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800 }}>🟢 {activeCount} Active</span>}
           {upcomingCount > 0 && <span style={{ background: '#cfe2ff', color: '#0a3870', padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800 }}>🔵 {upcomingCount} Upcoming</span>}

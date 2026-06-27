@@ -122,7 +122,7 @@ export default function AppLayout() {
       {mobileOpen && <div onClick={() => setMobileOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 90 }} />}
 
       <div className="hops-main" style={{ flex: 1, marginLeft: 230, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ height: 56, background: 'white', borderBottom: '1px solid #d8e2ef', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+        <div className="hops-topbar" style={{ height: 56, background: 'white', borderBottom: '1px solid #d8e2ef', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => setMobileOpen((s) => !s)} className="hops-hamburger" style={{ flexDirection: 'column', gap: 4, cursor: 'pointer', padding: 4, border: 'none', background: 'none' }}>
               <span style={{ width: 19, height: 2, background: '#0b1e3d', borderRadius: 2, display: 'block' }} />
@@ -133,7 +133,7 @@ export default function AppLayout() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isSaving && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 7, padding: '4px 10px' }}>
+              <div className="hops-topbar-saving" style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 7, padding: '4px 10px' }}>
                 <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#0d7377', animation: 'pulse 1s ease infinite' }} />
                 <span style={{ fontSize: 11, color: '#0d7377', fontWeight: 800 }}>Saving...</span>
               </div>
@@ -155,7 +155,7 @@ export default function AppLayout() {
                 {showNotifDrop && (
                   <>
                     <div onClick={() => setShowNotifDrop(false)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
-                    <div style={{ position: 'absolute', top: 44, right: 0, width: 320, background: 'white', borderRadius: 12, border: '1px solid #e0e8f0', boxShadow: '0 8px 32px rgba(11,30,61,0.14)', zIndex: 999, overflow: 'hidden' }}>
+                    <div className="hops-notice-dropdown" style={{ position: 'absolute', top: 44, right: 0, background: 'white', borderRadius: 12, border: '1px solid #e0e8f0', boxShadow: '0 8px 32px rgba(11,30,61,0.14)', zIndex: 999, overflow: 'hidden' }}>
                       <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, fontWeight: 700, color: '#0b1e3d' }}>📬 Notices</span>
                         <span style={{ fontSize: 11, color: '#6b7a90', fontWeight: 600 }}>{myUnread.length} unread</span>
@@ -199,7 +199,7 @@ export default function AppLayout() {
                 )}
               </div>
 
-            <div style={{ fontSize: 12, color: '#6b7a90', fontWeight: 600, background: '#f3f7fc', padding: '5px 10px', borderRadius: 7, border: '1px solid #d8e2ef' }}>
+            <div className="hops-topbar-date" style={{ fontSize: 12, color: '#6b7a90', fontWeight: 600, background: '#f3f7fc', padding: '5px 10px', borderRadius: 7, border: '1px solid #d8e2ef' }}>
               {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
             </div>
           </div>
@@ -509,6 +509,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
             <NavItem id="assign-task" label="Assign Task" icon="📋" />
             <NavItem id="my-handover" label="Incoming Handovers" icon="📥" />
             <NavItem id="my-delegation" label="My Delegations" icon="📤" badge="myDelegation" />
+            <NavItem id="mis" label="My MIS Report" icon="📑" />
             <Group label="REPORT" />
             <NavItem id="report-issue" label="Report Problem" icon="⚠️" />
             <NavItem id="all-issues" label="All Issues" icon="📋" badge="issues" />
@@ -540,9 +541,9 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
 
       {/* Toast stack — above theme toggle */}
       {toasts.length > 0 && (
-        <div style={{ position: 'fixed', bottom: 72, right: 24, zIndex: 99999, display: 'flex', flexDirection: 'column', gap: 0, alignItems: 'flex-end', maxHeight: 'calc(100vh - 130px)', background: 'transparent' }}>
+        <div className="hops-toast-stack" style={{ position: 'fixed', bottom: 72, right: 24, zIndex: 99999, display: 'flex', flexDirection: 'column', gap: 0, alignItems: 'flex-end', maxHeight: 'calc(100vh - 130px)', background: 'transparent' }}>
           {/* Scrollable list */}
-          <div ref={listRef} style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', scrollBehavior: 'smooth', background: 'transparent' }}>
+          <div ref={listRef} className="hops-toast-list" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', scrollBehavior: 'smooth', background: 'transparent' }}>
             {toasts.map((t, i) => {
               // Newest items at end of array → lowest stagger → appear first
               const newBatchStart = Math.max(0, toasts.length - prevToastLen.current);
@@ -560,8 +561,8 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
           </div>
           {/* Fixed Clear All — disappears as soon as last notification exits */}
           {toasts.length > 1 && (
-            <button onClick={clearAllAnimated} style={{
-              width: 340, padding: '9px 0', borderRadius: 10, flexShrink: 0,
+            <button onClick={clearAllAnimated} className="hops-toast-clear" style={{
+              padding: '9px 0', borderRadius: 10, flexShrink: 0,
               marginTop: 8,
               background: isDark ? 'rgba(239,68,68,0.15)' : '#fef2f2',
               border: `1px solid ${isDark ? 'rgba(239,68,68,0.3)' : '#fecaca'}`,
@@ -611,8 +612,8 @@ function ToastShell({ isDark, urgent, children, onClose, index = 0, exiting = fa
       : 'linear-gradient(90deg,#0d7377,#14a5ab)';
 
   return (
-    <div style={{
-      width: 340, borderRadius: 14,
+    <div className="hops-toast-shell" style={{
+      borderRadius: 14,
       background: isDark ? '#0f2240' : '#ffffff',
       border: `1px solid ${border}`,
       boxShadow: 'none',

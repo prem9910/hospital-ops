@@ -60,9 +60,9 @@ export default function ActivityLog() {
     <div>
       <ConfirmModal open={showConfirm} onConfirm={handleClear} onCancel={() => setShowConfirm(false)} count={actLog.length} />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>Activity Log 📜</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>Activity Log 📜</h2>
+        <div className="page-header-actions" style={{ alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#6b7a90', fontWeight: 600 }}>{filtered.length} entries</span>
           <button onClick={() => exportToExcel(filtered.map(l => ({ By: l.by, Role: l.role, Action: l.action, Details: l.details, Time: l.atStr })), 'activity-log')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>

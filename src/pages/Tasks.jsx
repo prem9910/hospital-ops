@@ -626,9 +626,9 @@ export default function Tasks() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>Manage Tasks</h2>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>Manage Tasks</h2>
+        <div className="page-header-actions">
           <button onClick={() => setShowExport(true)} style={{ ...BtnS, background: '#1a7a4a' }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ ...BtnS, background: '#334155' }}>🖨 Print</button>
           {canAdd && <button onClick={() => { setEditTask(null); setShowForm(true); }} style={{ ...BtnS, background: '#0d7377' }}>＋ New Task</button>}
@@ -648,29 +648,39 @@ export default function Tasks() {
       )}
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 160, position: 'relative' }}>
+      <div className="filter-bar">
+        <div className="filter-bar-search" style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, pointerEvents: 'none' }}>🔍</span>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH..." style={{ ...IS, paddingLeft: 30, width: '100%' }} />
+          <input className="filter-bar-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH..." style={{ ...IS, paddingLeft: 30 }} />
         </div>
-        <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={{ ...IS, width: 'auto' }}>
+        <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
           <option value="">ALL DEPTS</option>
           {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
         </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ ...IS, width: 'auto' }}>
+        <select className="filter-bar-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={IS}>
           <option value="">ALL STATUS</option>
           <option value="pending">PENDING</option>
           <option value="done">DONE</option>
         </select>
-        <select value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={{ ...IS, width: 'auto' }}>
+        <select className="filter-bar-select" value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
           <option value="">ALL FREQ</option>
           {FREQ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <select value={filterDelay} onChange={(e) => setFilterDelay(e.target.value)} style={{ ...IS, width: 'auto' }}>
+        <select className="filter-bar-select" value={filterDelay} onChange={(e) => setFilterDelay(e.target.value)} style={IS}>
           <option value="">ALL</option>
           <option value="ontime">ON TIME</option>
           <option value="delayed">DELAYED</option>
         </select>
+        {(search || filterDept || filterStatus || filterFreq || filterDelay) && (
+          <button
+            className="filter-bar-clear"
+            onClick={() => { setSearch(''); setFilterDept(''); setFilterStatus(''); setFilterFreq(''); setFilterDelay(''); }}
+            style={{ padding: '8px 13px', borderRadius: 7, background: '#fde8e8', color: '#c0392b', border: '1.5px solid #f5b7b1', cursor: 'pointer', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', fontSize: 12.5 }}
+            title="Clear all filters"
+          >
+            ✕ Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Table */}

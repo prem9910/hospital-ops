@@ -21,22 +21,22 @@ export default function AllIssues() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>All Issues</h2>
-        <div style={{ display: 'flex', gap: 6 }}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>All Issues</h2>
+        <div className="page-header-actions">
           <button onClick={() => exportToExcel(filtered.map(i => ({ Title: i.title, Department: i.dept, Priority: i.priority, Reporter: i.reporter, Assigned: i.assigned, Status: i.status, Date: i.date })), 'all-issues')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH..." style={{ ...IS, flex: 1, minWidth: 160 }} />
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={IS}>
+      <div className="filter-bar">
+        <input className="filter-bar-input filter-bar-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH..." style={IS} />
+        <select className="filter-bar-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={IS}>
           <option value="">ALL STATUS</option>
           <option value="open">OPEN</option>
           <option value="in-progress">IN PROGRESS</option>
           <option value="resolved">RESOLVED</option>
         </select>
-        <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={IS}>
+        <select className="filter-bar-select" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={IS}>
           <option value="">ALL PRIORITY</option>
           <option value="high">HIGH</option>
           <option value="medium">MEDIUM</option>

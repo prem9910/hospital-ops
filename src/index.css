@@ -313,6 +313,104 @@ body {
   .card { padding: 12px; }
 }
 
+/* ── Mobile Utilities (added: hide topbar date, fix notice bell clip, etc.) ── */
+/* Topbar date pill — desktop only; hide on tablet & mobile to free space */
+.hops-topbar-date { display: inline-flex; }
+.hops-topbar-saving { display: inline-flex; }
+
+/* Notice bell dropdown — desktop default. Mobile overrides below. */
+.hops-notice-dropdown { width: 320px; }
+
+/* Page header pattern — row on desktop, stacks on tablet/mobile */
+.page-header { display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+.page-header > .page-header-title { min-width: 0; }
+.page-header > .page-header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Filter bar pattern — single compact row on desktop, stacks on mobile.
+   Each control gets a flex share so they stay aligned and proportional
+   instead of one search bar hogging all the space. `!important` is needed
+   because each <input>/<select> carries the IS inline style which would
+   otherwise beat the class rules. */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: nowrap; align-items: center; }
+.filter-bar > .filter-bar-search { flex: 2 1 200px; min-width: 0; }
+.filter-bar > .filter-bar-select { flex: 1 1 130px !important; min-width: 0 !important; width: auto !important; padding: 8px 11px !important; font-size: 12.5px !important; }
+.filter-bar > .filter-bar-chip-row { flex: 0 0 auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-bar > .filter-bar-clear { flex: 0 0 auto; }
+
+/* Filter inputs get the same compact treatment so the row looks balanced. */
+.filter-bar input.filter-bar-input,
+.filter-bar > .filter-bar-search input { padding: 8px 11px 8px 30px !important; font-size: 12.5px !important; }
+
+/* Compact stat card padding on mobile */
+.stat-card { padding: 16px; }
+
+/* Card surface — used inline by some pages */
+.hops-card { background: white; border-radius: 12px; border: 1px solid #d8e2ef; }
+
+/* Toast stack — desktop shows 340px; mobile: nearly full-width, edge-padded */
+.hops-toast-shell { width: 340px; }
+.hops-toast-clear { width: 340px; }
+
+/* Table cells — desktop default padding, mobile compressed */
+.table-cell-pad { padding: 11px 13px; }
+
+@media (max-width: 1024px) {
+  .page-header { gap: 8px; }
+  .page-header > .page-header-actions > button { font-size: 12px; padding: 8px 14px; }
+}
+
+@media (max-width: 768px) {
+  /* Hide the topbar date pill — saves ~110px and prevents wrapping */
+  .hops-topbar-date { display: none !important; }
+  .hops-topbar-saving { display: none !important; }
+
+  /* Page header: stack title above actions, actions go full width */
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-header > .page-header-title { text-align: left; }
+  .page-header > .page-header-actions { width: 100%; }
+  .page-header > .page-header-actions > button { flex: 1; min-width: 0; padding: 9px 8px; }
+
+  /* Filter bar: stack so each control goes full width */
+  .filter-bar { flex-direction: column; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+  .filter-bar > .filter-bar-search { width: 100% !important; min-width: 0 !important; }
+  .filter-bar > .filter-bar-select { width: 100% !important; flex: 0 0 auto !important; }
+  .filter-bar > .filter-bar-chip-row { width: 100%; display: flex; gap: 6px; flex-wrap: wrap; }
+  .filter-bar > .filter-bar-chip-row > button { flex: 1; min-width: 0; }
+  .filter-bar > .filter-bar-clear { width: 100% !important; }
+
+  /* Stat card compact padding */
+  .stat-card { padding: 12px !important; }
+
+  /* Notice bell dropdown — anchor to right edge with safety margin.
+     Width clamped to viewport so it never clips past the screen edge. */
+  .hops-notice-dropdown {
+    width: min(320px, calc(100vw - 32px)) !important;
+    right: 8px !important;
+    max-height: 70vh;
+  }
+
+  /* Toasts — full-width minus edge padding */
+  .hops-toast-shell { width: calc(100vw - 32px) !important; max-width: 340px; }
+  .hops-toast-clear { width: calc(100vw - 32px) !important; max-width: 340px; }
+  .hops-toast-stack { right: 16px !important; left: 16px; align-items: stretch !important; }
+  .hops-toast-list { align-items: stretch !important; }
+  .hops-toast-list > * { width: 100% !important; max-width: 100% !important; }
+
+  /* Table cells — slimmer on mobile */
+  .table-cell-pad { padding: 8px 9px !important; }
+
+  /* Stat card number slightly smaller on mobile */
+  .stat-card-num { font-size: 28px !important; }
+}
+
+@media (max-width: 480px) {
+  .hops-topbar { padding: 0 12px !important; }
+  .hops-main-pad { padding: 10px; }
+  .page-header > .page-header-actions > button { font-size: 11.5px; padding: 8px 6px; }
+  .hops-notice-dropdown { right: 6px !important; }
+}
+
 /* ── Dark Mode — only sidebar darkens, main content stays light ─────────────── */
 
 /* Print */

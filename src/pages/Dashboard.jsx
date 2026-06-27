@@ -60,12 +60,13 @@ function StatCard({ num, label, color, onClick }) {
   return (
     <div
       onClick={onClick}
-      style={{ background: 'white', borderRadius: 12, padding: '16px', border: '1px solid #d8e2ef', position: 'relative', overflow: 'hidden', cursor: onClick ? 'pointer' : 'default', transition: 'transform 0.2s,box-shadow 0.2s' }}
+      className="stat-card"
+      style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', position: 'relative', overflow: 'hidden', cursor: onClick ? 'pointer' : 'default', transition: 'transform 0.2s,box-shadow 0.2s' }}
       onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
     >
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: colors[color] || colors.teal }} />
-      <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 34, color: '#1a2535', lineHeight: 1 }}>{num}</div>
+      <div className="stat-card-num" style={{ fontFamily: "'Playfair Display',serif", fontSize: 34, color: '#1a2535', lineHeight: 1 }}>{num}</div>
       <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
     </div>
   );

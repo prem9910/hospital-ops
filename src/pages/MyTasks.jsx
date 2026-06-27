@@ -422,9 +422,9 @@ export default function MyTasks() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>My Tasks</h2>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>My Tasks</h2>
+        <div className="page-header-actions">
           <button onClick={() => { setTab('task'); setPageTask(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'task' ? '#0d7377' : '#f3f7fc', color: tab === 'task' ? 'white' : '#1a2535' }}>📋 Task ({taskPending.length})</button>
           <button onClick={() => { setTab('handover'); setPageHandoverFrom(1); setPageHandoverTo(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'handover' ? '#d4920a' : '#f3f7fc', color: tab === 'handover' ? 'white' : '#1a2535' }}>🔄 Handover ({handoverCount})</button>
           <button onClick={() => { setTab('delegation'); setPageDelegation(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'delegation' ? '#7c3aed' : '#f3f7fc', color: tab === 'delegation' ? 'white' : '#1a2535' }}>📤 Delegation ({delegationPending.length})</button>

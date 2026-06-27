@@ -15,10 +15,10 @@ export default function Escalation() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>🔺 Escalation Tracker</h2>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>🔺 Escalation Tracker</h2>
+        <div className="page-header-actions">
+          <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
             <option value="">ALL DEPTS</option>
             {allDepts.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>

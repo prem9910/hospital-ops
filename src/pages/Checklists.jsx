@@ -32,20 +32,20 @@ export default function Checklists() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <div>
+      <div className="page-header">
+        <div className="page-header-title">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>Department Checklists</h2>
             <span style={{ background: '#ef4444', color: 'white', borderRadius: 20, fontSize: 11, fontWeight: 800, padding: '2px 10px', minWidth: 24, textAlign: 'center' }}>{totalDue}</span>
           </div>
           <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 3 }}>{totalDone}/{totalDue} tasks completed — {pct}%</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
+        <div className="page-header-actions">
+          <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
             <option value="">ALL DEPTS</option>
             {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
-          <select value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
+          <select className="filter-bar-select" value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
             <option value="">ALL FREQ</option>
             {Object.entries(FREQ_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>

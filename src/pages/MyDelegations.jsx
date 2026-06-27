@@ -36,9 +36,9 @@ export default function MyDelegations() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>📤 My Delegations</h2>
-        <div style={{ display: 'flex', gap: 6 }}>
+      <div className="page-header">
+        <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>📤 My Delegations</h2>
+        <div className="page-header-actions">
           <button onClick={() => exportToExcel(myDels.map(d => ({ Task: d.taskName, Department: d.dept, 'Delegated By': d.ownerName, Status: d.status, 'Due Date': d.dueDate })), 'my-delegations')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
         </div>
