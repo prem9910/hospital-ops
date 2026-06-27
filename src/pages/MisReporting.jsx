@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { wasCompletedLate, fDate, toDay, exportToExcel, isAssignedTo } from '../utils';
+import { wasCompletedLate, fDate, toDay, exportToExcel, isAssignedTo, currentMonthRange, inDateRange } from '../utils';
 import { DeptTag } from '../components/common/Badge';
-import { DateRangeExportModal } from '../components/common/DateRangeExportModal';
+import { DateRangePicker } from '../components/common/DateRangePicker';
 
 // ─── Chart: SVG Donut ─────────────────────────────────────────────────────────
 function DonutChart({ data, size = 140, centerLabel, centerSub }) {
@@ -93,32 +93,108 @@ function calcEmpStats(name, tasks, handovers) {
       .flatMap(h => h.taskIds || [])
   );
 
-  // Originally assigned tasks
-  const originalTasks = tasks.filter(t => isAssignedTo(t, name));
+  // Build parent lookup once (used by the cycle-dedup pass below)
+  const taskById = {};
+  tasks.forEach(t => { taskById[t.id] = t; });
 
-  // Exclude handed-over tasks that were completed by someone else (they go to the recipient's head)
-  const handedOverDoneByOther = originalTasks.filter(t =>
-    handedOverIds.has(t.id) && t.status === 'done' && t.doneBy && t.doneBy !== name
+  // ─── Cycle dedup ──────────────────────────────────────────────────────────
+  // The auto-cycle engine (utils/autoCycleTasks) leaves a chain of historical
+  // "done" tasks in the global tasks array — parent + every past child. Without
+  // dedup, MIS counted the same logical task N times, inflating both the
+  // numerator (completed) and denominator (assigned) and producing nonsense
+  // like "Completed=2, Assigned=1". This pass keeps:
+  //   • One done record per (name, assignedTo) chain — the most recent one
+  //     (highest schedDate). This represents the latest completed cycle.
+  //   • One pending record per parent — the current cycle child.
+  //   • Grandchild rows whose parent is also a child — these are bug artifacts
+  //     of older code and should not appear in MIS at all.
+  const doneSignatures = new Set();
+  const dedupedTasks = [];
+  // First pass: keep all rows but flag the duplicates we'll drop
+  const drop = new Set();
+  // Drop grandchild rows (parent has parentTaskId too)
+  tasks.forEach(t => {
+    if (t.parentTaskId) {
+      const parent = taskById[t.parentTaskId];
+      if (parent && parent.parentTaskId) drop.add(t.id);
+    }
+  });
+  // Drop duplicate done rows — same name + assignedTo + schedDate is the same cycle
+  tasks.forEach(t => {
+    if (drop.has(t.id)) return;
+    if (t.status === 'done') {
+      const sig = `${(t.name || '').toUpperCase()}|${(t.assignedTo || []).slice().sort().join(',')}|${t.schedDate || ''}`;
+      if (doneSignatures.has(sig)) { drop.add(t.id); return; }
+      doneSignatures.add(sig);
+    }
+  });
+  tasks.forEach(t => { if (!drop.has(t.id)) dedupedTasks.push(t); });
+
+  // Originally assigned tasks (using deduped set so we count each logical task once)
+  const originalTasks = dedupedTasks.filter(t => isAssignedTo(t, name));
+
+  // Tasks this person completed by name — needed for the "Completed" numerator.
+  // A task counts as "completed by me" if ANY of:
+  //   1) `doneBy` matches my full name (case-insensitive)
+  //   2) `doneBy` matches the first word of my name (handles "Vibhav" recorded
+  //      as `doneBy` when the employee record is "VIBHAV KUMAR SHIRVASTAVA")
+  //   3) `doneBy` is empty/blank AND I'm in `assignedTo` AND the task is `done`
+  //      AND it wasn't handed over by me to someone else. Older tasks and some
+  //      seeded rows have `doneBy=''` even though the assignee finished them;
+  //      without (3), Completed falls below Assigned and the score collapses.
+  const firstNameUpper = name.split(/\s+/)[0].toUpperCase();
+  const completedByMe = dedupedTasks.filter(t => {
+    if (t.status !== 'done') return false;
+    const doneByUpper = (t.doneBy || '').toUpperCase();
+    if (doneByUpper === myNameUpper) return true;
+    if (doneByUpper && doneByUpper === firstNameUpper) return true;
+    if (!doneByUpper && isAssignedTo(t, name)) return true;
+    return false;
+  });
+
+  // Exclude handed-over tasks that were completed by someone else (they go to the
+  // recipient's head). This is computed from the full deduped set, not from
+  // completedByMe — a task handed over by this person and finished by someone
+  // else wouldn't pass the completedByMe filter (doneBy !== me) and so we must
+  // check the original task list directly.
+  const handedOverDoneByOther = dedupedTasks.filter(t =>
+    handedOverIds.has(t.id) && t.status === 'done' && t.doneBy && t.doneBy.toUpperCase() !== myNameUpper
   );
 
   // Received handover tasks (not originally assigned to this person)
-  const receivedTasks = tasks.filter(t => receivedIds.has(t.id) && !isAssignedTo(t, name));
+  const receivedTasks = dedupedTasks.filter(t => receivedIds.has(t.id) && !isAssignedTo(t, name));
 
-  const assigned = originalTasks.length - handedOverDoneByOther.length + receivedTasks.length;
-
-  // Completed BY this person (doneBy field, or fallback for old tasks without doneBy)
-  const completedByMe = tasks.filter(t =>
-    t.status === 'done' && (
-      t.doneBy === name ||
-      (!t.doneBy && isAssignedTo(t, name) && !handedOverIds.has(t.id))
-    )
+  // Build the "Assigned" denominator from a Set of task IDs so the same task
+  // can be counted by any one of three channels without inflation:
+  //   1) originally assigned to me (originalTasks)
+  //   2) handed over TO me (receivedTasks)
+  //   3) I actually finished it via doneBy even if assignedTo was reassigned
+  //      away mid-flight — the work landed on me, so I should be credited for
+  //      it in both numerator and denominator.
+  // Without (3), the numerator (completed) could exceed the denominator
+  // (assigned) and produce the bug where Completed > Assigned in the table.
+  const assignedIds = new Set();
+  originalTasks.forEach(t => assignedIds.add(t.id));
+  receivedTasks.forEach(t => assignedIds.add(t.id));
+  completedByMe.forEach(t => assignedIds.add(t.id));
+  // Subtract tasks I handed over and someone else completed — they're no
+  // longer on my head. Only count those that were in my assigned set.
+  const handedOverDoneByOtherIds = new Set(
+    handedOverDoneByOther.filter(t => assignedIds.has(t.id)).map(t => t.id)
   );
+  const assigned = assignedIds.size - handedOverDoneByOtherIds.size;
 
   const completed = completedByMe.length;
   const delayed = completedByMe.filter(t => wasCompletedLate(t)).length;
   const onTime = completed - delayed;
-  const baseScore = assigned > 0 ? (completed / assigned) * 100 : 100;
-  const score = Math.max(0, Math.round(baseScore - delayed * 10));
+  // Simple completion-based score:
+  //   Score = Completion% − (Delayed × 10)
+  // where Completion% = (Completed / Assigned) × 100.
+  // Completion% is clamped to [0,100] so a Completed > Assigned edge case from
+  // historical data can't push the visible score above 100%. Final score is
+  // clamped to [0,100] after subtracting the per-delay penalty.
+  const completionPct = assigned > 0 ? Math.min(100, Math.max(0, (completed / assigned) * 100)) : 100;
+  const score = Math.max(0, Math.min(100, Math.round(completionPct - delayed * 10)));
   return { assigned, completed, onTime, delayed, score };
 }
 
@@ -136,16 +212,71 @@ const IS = { padding: '7px 12px', borderRadius: 7, border: '1.5px solid #d8e2ef'
 const TH = { background: '#f3f7fc', padding: '9px 13px', textAlign: 'left', fontSize: 10.5, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.8, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef', whiteSpace: 'nowrap' };
 const TD = { padding: '10px 13px', fontSize: 13 };
 
+// Initial date range per tab — each tab gets its own filter so switching
+// tabs preserves the user's last selection. Stored as { preset, from, to, field }
+// to match the DateRangePicker API. The `field` selector lets the user pick
+// which date column on each row should be filtered (created vs due vs done).
+const _initialRange = () => {
+  const r = currentMonthRange();
+  return { preset: 'currentMonth', from: r.from, to: r.to };
+};
+
+const FIELD_OPTIONS = {
+  // For employee/dept tabs: tasks are filtered by created date.
+  employee: [
+    { value: 'created',  label: 'Task created date' },
+    { value: 'lastDone', label: 'Task completion date' },
+  ],
+  // Delegation: created vs due vs actual completion
+  delegation: [
+    { value: 'created',  label: 'Issued date' },
+    { value: 'schedDate', label: 'Due date' },
+    { value: 'lastDone', label: 'Completion date' },
+  ],
+  // Handover: start date is the natural primary filter
+  handover: [
+    { value: 'dateStart', label: 'Handover start date' },
+    { value: 'dateEnd',   label: 'Handover end date' },
+  ],
+  // Dept: same as employee
+  department: [
+    { value: 'created',  label: 'Task created date' },
+    { value: 'lastDone', label: 'Task completion date' },
+  ],
+};
+
 export default function MisReporting() {
   const { tasks, issues, depts, employees, handovers } = useApp();
   const [tab, setTab] = useState('employee');
   const [filterDept, setFilterDept] = useState('');
-  const [showExport, setShowExport] = useState(false);
 
-  // ─── Employee stats ──────────────────────────────────────────────────────────
+  // One date range per tab so switching tabs preserves the filter the
+  // user set on each one. Each entry is { preset, from, to, field? }.
+  const [rangeByTab, setRangeByTab] = useState({
+    employee:   { ..._initialRange(), field: 'created' },
+    delegation: { ..._initialRange(), field: 'created' },
+    handover:   { ..._initialRange(), field: 'dateStart' },
+    department: { ..._initialRange(), field: 'created' },
+  });
+  const range = rangeByTab[tab];
+  const setRange = (next) => setRangeByTab((s) => ({ ...s, [tab]: next }));
+
+  // Pull the active tab's tasks/handover through the date filter once so
+  // every stat + chart + table below is consistent.
+  const filteredTasks = useMemo(() => {
+    if (!range.from || !range.to) return tasks;
+    return tasks.filter((t) => inDateRange(t[range.field || 'created'], range.from, range.to));
+  }, [tasks, range.from, range.to, range.field]);
+
+  const filteredHandovers = useMemo(() => {
+    if (!range.from || !range.to) return handovers;
+    return (handovers || []).filter((h) => inDateRange(h[range.field || 'dateStart'], range.from, range.to));
+  }, [handovers, range.from, range.to, range.field]);
+
+  // ─── Employee stats (driven by filteredTasks) ───────────────────────────────
   const empStats = employees
     .filter(e => !filterDept || e.dept === filterDept)
-    .map(e => ({ emp: e, ...calcEmpStats(e.name, tasks, handovers) }))
+    .map(e => ({ emp: e, ...calcEmpStats(e.name, filteredTasks, filteredHandovers) }))
     .sort((a, b) => b.score - a.score);
 
   const totAssigned = empStats.reduce((s, e) => s + e.assigned, 0);
@@ -155,15 +286,15 @@ export default function MisReporting() {
   const avgScore = empStats.length ? Math.round(empStats.reduce((s, e) => s + e.score, 0) / empStats.length) : 100;
   const maxAssigned = Math.max(...empStats.map(e => e.assigned), 1);
 
-  // ─── Delegation stats ────────────────────────────────────────────────────────
-  const delegTasks = tasks.filter(t => t.freq === 'delegation');
+  // ─── Delegation stats (driven by filteredTasks for consistency) ─────────────
+  const delegTasks = filteredTasks.filter(t => t.freq === 'delegation');
   const delegDone = delegTasks.filter(t => t.status === 'done');
   const delegPending = delegTasks.filter(t => t.status === 'pending');
   const totalExts = delegTasks.reduce((s, t) => s + (t.extensions || []).length, 0);
 
-  // ─── Dept stats ──────────────────────────────────────────────────────────────
+  // ─── Dept stats (driven by filteredTasks + issues) ──────────────────────────
   const deptStats = depts.map(d => {
-    const dTasks = tasks.filter(t => t.dept === d.name);
+    const dTasks = filteredTasks.filter(t => t.dept === d.name);
     const done = dTasks.filter(t => t.status === 'done');
     const delayed = done.filter(t => wasCompletedLate(t));
     const openIss = issues.filter(i => i.dept === d.name && i.status !== 'resolved').length;
@@ -176,30 +307,46 @@ export default function MisReporting() {
   });
   const avgHealth = deptStats.length ? Math.round(deptStats.reduce((s, d) => s + d.healthScore, 0) / deptStats.length) : 100;
 
-  function handleExport(from, to) {
-    const suffix = `${from}_to_${to}`;
+  // Reset to default range (current month, default field) for the active tab.
+  function resetActiveRange() {
+    const r = _initialRange();
+    const def = FIELD_OPTIONS[tab][0].value;
+    setRange({ ...r, field: def });
+  }
+
+  // Compact "filter pill" summary shown in section headers so the user
+  // always knows what range they're looking at without scanning back to
+  // the picker.
+  const RangePill = () => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', background: '#e8f4fd', border: '1px solid #bae6fd', borderRadius: 20, fontSize: 10.5, color: '#0369a1', fontWeight: 800 }}>
+      📅 {range.from} → {range.to}
+      {range.preset && range.preset !== 'custom' && <span style={{ color: '#1a7a4a' }}>({range.preset === 'currentMonth' ? 'this month' : 'last 30 days'})</span>}
+    </span>
+  );
+
+  function handleExport() {
+    const suffix = `${range.from}_to_${range.to}`;
+    const field = range.field;
     if (tab === 'employee') {
-      // Filter tasks in range for accurate stats
-      const rangedTasks = tasks.filter(t => (t.created || t.lastDone || '') >= from && (t.created || t.lastDone || '') <= to);
-      const rangedStats = employees
-        .filter(e => !filterDept || e.dept === filterDept)
-        .map(e => ({ emp: e, ...calcEmpStats(e.name, rangedTasks, handovers) }));
-      exportToExcel(rangedStats.map(({ emp, assigned, completed, onTime, delayed, score }) => ({
+      exportToExcel(empStats.map(({ emp, assigned, completed, onTime, delayed, score }) => ({
         'Employee': emp.name, 'Dept': emp.dept, 'Role': emp.role || '—',
         'Assigned': assigned, 'Completed': completed, 'On Time': onTime, 'Delayed': delayed,
         'Deduction': `-${delayed * 10}%`, 'Score': score, 'Grade': scoreLabel(score),
+        'Date Field': field, 'Range': `${range.from} to ${range.to}`,
       })), `MIS_Employee_${suffix}`);
     } else if (tab === 'delegation') {
-      const rows = delegTasks.filter(t => (t.created || '') >= from && (t.created || '') <= to);
-      exportToExcel(rows.map(t => ({
-        'Task': t.name, 'Dept': t.dept, 'Assignee': (t.assignedTo || []).join(', '),
-        'Assigned By': t.createdBy || '—', 'Assigned Date': t.created || '—', 'Due Date': t.schedDate || '—',
-        'Extensions': (t.extensions || []).length, 'Completed On': t.lastDone || '—',
-        'Status': t.status === 'done' ? 'Completed' : 'Pending',
-      })), `MIS_Delegation_${suffix}`);
+      exportToExcel(delegTasks.map(t => {
+        const late = t.status === 'done' && wasCompletedLate(t);
+        return {
+          'Task': t.name, 'Dept': t.dept, 'Assignee': (t.assignedTo || []).join(', '),
+          'Assigned By': t.createdBy || '—', 'Assigned Date': t.created || '—', 'Due Date': t.schedDate || '—',
+          'Extensions': (t.extensions || []).length, 'Completed On': t.lastDone || '—',
+          'Status': t.status === 'done' ? (late ? 'Done (Delayed)' : 'Done (On Time)') : 'Pending',
+          'On Time / Delayed': t.status === 'done' ? (late ? '⏰ Delayed' : '✅ On Time') : '—',
+        };
+      }), `MIS_Delegation_${suffix}`);
     } else if (tab === 'handover') {
-      const rows = handovers.filter(h => h.dateStart >= from && h.dateStart <= to);
-      exportToExcel(rows.map(h => {
+      exportToExcel(filteredHandovers.map(h => {
         const taskNames = (h.taskIds || []).map(id => tasks.find(t => t.id === id)?.name).filter(Boolean).join(', ');
         const doneCount = (h.taskIds || []).filter(id => tasks.find(t => t.id === id && t.status === 'done')).length;
         return {
@@ -214,7 +361,7 @@ export default function MisReporting() {
         'Dept': s.dept, 'Staff': s.staff, 'Total Tasks': s.total, 'Done': s.done,
         'Pending': s.pending, 'Delayed': s.delayed, 'Completion%': s.taskComp,
         'Delay%': s.delayPct, 'Open Issues': s.openIss, 'Health Score': s.healthScore,
-        'Report Range': `${from} to ${to}`,
+        'Report Range': `${range.from} to ${range.to}`,
       })), `MIS_Dept_${suffix}`);
     }
   }
@@ -223,20 +370,40 @@ export default function MisReporting() {
     <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>📑 MIS Reporting</h2>
+        <div>
+          <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>📑 MIS Reporting</h2>
+          <div style={{ fontSize: 11.5, color: '#6b7a90', marginTop: 2 }}>
+            Filter by date range across every tab · <RangePill />
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a2535', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨️ Print</button>
-          <button onClick={() => setShowExport(true)} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>📊 Excel</button>
+          <button onClick={handleExport} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>📊 Excel</button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         {[['employee', '👤 Employee Performance'], ['delegation', '📤 Delegation Report'], ['handover', '🔄 Handover Report'], ['department', '🏢 Department Overview']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12.5, background: tab === key ? '#0d7377' : '#f3f7fc', color: tab === key ? 'white' : '#1a2535' }}>
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Date range filter — applies to the active tab. */}
+      <div style={{ marginBottom: 20 }}>
+        <DateRangePicker
+          value={range}
+          onChange={setRange}
+          showField
+          fieldOptions={FIELD_OPTIONS[tab]}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <button onClick={resetActiveRange} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #d8e2ef', background: 'white', color: '#0d7377', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>
+            ↺ Reset filter
+          </button>
+        </div>
       </div>
 
       {/* ══════════ EMPLOYEE TAB ══════════ */}
@@ -398,7 +565,10 @@ export default function MisReporting() {
           </div>
 
           {/* Consolidated Delegation Table */}
-          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: '#0b1e3d', marginBottom: 10 }}>📋 Consolidated Delegation Report</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: '#0b1e3d' }}>📋 Consolidated Delegation Report</div>
+            <RangePill />
+          </div>
           <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden', marginBottom: 20 }}>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -432,7 +602,9 @@ export default function MisReporting() {
                         <td style={{ ...TD, color: '#1a7a4a', fontWeight: 700 }}>{t.lastDone ? fDate(t.lastDone) : '—'}</td>
                         <td style={TD}>
                           {t.status === 'done'
-                            ? <span style={{ background: '#d4edda', color: '#155724', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>✅ Done</span>
+                            ? (wasCompletedLate(t)
+                              ? <span style={{ background: '#ede9fe', color: '#4c1d95', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>⏰ Done (Delayed)</span>
+                              : <span style={{ background: '#d4edda', color: '#155724', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>✅ Done (On Time)</span>)
                             : <span style={{ background: '#fff3cd', color: '#7a4800', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>⏳ Pending</span>}
                         </td>
                       </tr>
@@ -484,7 +656,7 @@ export default function MisReporting() {
       {/* ══════════ HANDOVER TAB ══════════ */}
       {tab === 'handover' && (() => {
         const today = toDay();
-        const newHandovers = handovers.filter(h => h.dateStart);
+        const newHandovers = filteredHandovers.filter(h => h.dateStart);
         const activeH = newHandovers.filter(h => today >= h.dateStart && today <= h.dateEnd);
         const upcomingH = newHandovers.filter(h => today < h.dateStart);
         const completedH = newHandovers.filter(h => today > h.dateEnd);
@@ -556,7 +728,10 @@ export default function MisReporting() {
             })()}
 
             {/* Detailed handover table */}
-            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: '#0b1e3d', marginBottom: 10 }}>📋 All Handover Records</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: '#0b1e3d' }}>📋 All Handover Records</div>
+              <RangePill />
+            </div>
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -659,12 +834,6 @@ export default function MisReporting() {
           </div>
         </div>
       )}
-      <DateRangeExportModal
-        open={showExport}
-        onClose={() => setShowExport(false)}
-        title={`MIS Export — ${tab.charAt(0).toUpperCase() + tab.slice(1)}`}
-        onExport={handleExport}
-      />
     </div>
   );
 }

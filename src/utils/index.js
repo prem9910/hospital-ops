@@ -32,6 +32,52 @@ export const parseTimeToMinutes = (ts) => {
   return h * 60 + min;
 };
 
+// ─── Date-range helpers (YYYY-MM-DD strings — match schedDate/lastDone/created) ──
+// These exist so dashboard drill-downs can use the same string-compare idiom
+// as Tasks.jsx:665, Issues.jsx:215, MisReporting.jsx:259/269/277. All helpers
+// return day strings (no Date objects), so lexicographic >= / <= works.
+
+// 'YYYY-MM-DD' + n days → 'YYYY-MM-DD'. Negative n = past.
+export const addDays = (dateStr, n) => {
+  const base = dateStr || toDay();
+  const [y, m, d] = base.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return dt.getFullYear() + '-' +
+    String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getDate()).padStart(2, '0');
+};
+
+// First day of the month containing dateStr (defaults to today).
+export const monthStart = (dateStr) => {
+  const base = dateStr || toDay();
+  const [y, m] = base.split('-').map(Number);
+  return `${y}-${String(m).padStart(2, '0')}-01`;
+};
+
+// Last day of the month containing dateStr. Uses Date(y, m, 0) trick — day 0
+// of month m+1 is the last day of month m.
+export const monthEnd = (dateStr) => {
+  const base = dateStr || toDay();
+  const [y, m] = base.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+};
+
+// First/last day of the current calendar month.
+export const currentMonthRange = () => {
+  const t = toDay();
+  return { from: monthStart(t), to: monthEnd(t) };
+};
+
+// Inclusive 30-day window ending today.
+export const last30DaysRange = () => ({ from: addDays(toDay(), -29), to: toDay() });
+
+// True iff dateStr (YYYY-MM-DD) is within [from, to] inclusive. Falsy dateStr
+// returns false so rows with no date are excluded from range queries.
+export const inDateRange = (dateStr, from, to) =>
+  !!dateStr && !!from && !!to && dateStr >= from && dateStr <= to;
+
 // Case-insensitive assignedTo check. Admin can enter names with any case
 // (the form auto-uppercases the task name, but the picker uses the raw
 // employee name) and login normalizes the staff name — so we always compare
@@ -79,9 +125,22 @@ export const isTaskDueToday = (task) => {
 };
 
 export const wasCompletedLate = (task) => {
-  if (task.isDelayed) return true;
-  if (!task.lastDone || !task.schedDate) return false;
-  return task.lastDone > task.schedDate;
+  // Date is the primary signal. `lastDone` may have been stored as a full
+  // ISO timestamp (older code paths and the seeder wrote `nowIso()` there)
+  // while `schedDate` is always a day string — slice both to 10 chars
+  // before comparing so we compare day vs day.
+  const lastDay = task.lastDone ? String(task.lastDone).slice(0, 10) : '';
+  const schedDay = task.schedDate ? String(task.schedDate).slice(0, 10) : '';
+  if (lastDay && schedDay) {
+    if (lastDay > schedDay) return true;   // completed after the deadline date
+    if (lastDay < schedDay) return false;  // completed before the deadline — early/on-time
+    // Same day → fall through to the flag (which now combines date + time
+    // when set by the DoneModal).
+  }
+  // No date info, OR same-day completion — trust the `isDelayed` flag if
+  // present. If the flag is missing too, default to false (assume on-time
+  // for legacy rows that predate the date-aware writer).
+  return !!task.isDelayed;
 };
 
 export const getNextDueMs = (task) => {
@@ -161,10 +220,85 @@ export const autoCycleTasks = (tasks) => {
 };
 
 export const exportToExcel = (data, filename = 'export') => {
-  const ws = XLSX.utils.json_to_sheet(data);
+  if (!data || !data.length) return;
+  // Convert every cell to a string (or '' for empty) so XLSX doesn't lose
+  // them as undefined / null / functions. Some xlsx writers drop those
+  // values which makes the resulting sheet look empty when read back.
+  const safe = data.map((row) => {
+    const out = {};
+    Object.keys(row).forEach((k) => {
+      const v = row[k];
+      if (v === undefined || v === null) out[k] = '';
+      else if (typeof v === 'function' || typeof v === 'symbol') out[k] = '';
+      else out[k] = v;
+    });
+    return out;
+  });
+  // Use sheet_add_json with explicit options to ensure header + rows are
+  // written. Some xlsx writers skip the header if a column has the same
+  // name as a SheetJS internal key, so we always pass `header: []`
+  // (auto-derived from first object) and origin 'A1'.
+  const ws = {};
+  XLSX.utils.sheet_add_json(ws, safe, { origin: 'A1', skipHeader: false });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  // Use a manual Blob+anchor download instead of XLSX.writeFile — some
+  // browsers silently drop the click that writeFile triggers (the anchor
+  // it creates has no `display` style and gets hidden behind other DOM),
+  // and there's no error to surface. Going through XLSX.write to get an
+  // ArrayBuffer and then triggering the download ourselves guarantees the
+  // file is delivered.
+  try {
+    const arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    // Use the proper xlsx MIME type so Excel recognizes the file format.
+    const blob = new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.xlsx`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    // Last-resort fallback to library's built-in
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  }
+};
+
+// CSV export — simpler format that always opens cleanly in Excel and
+// Google Sheets. Useful as a fallback when xlsx produces a file Excel
+// won't render correctly (some xlsx writer versions emit files that
+// Excel opens as a blank workbook).
+export const exportToCSV = (data, filename = 'export') => {
+  if (!data || !data.length) return;
+  const headers = Object.keys(data[0]);
+  const escape = (v) => {
+    if (v === undefined || v === null) return '';
+    const s = String(v);
+    // Quote if contains comma, quote, newline, or starts/ends with whitespace
+    if (/[",\n\r]/.test(s) || /^\s|\s$/.test(s)) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+  const lines = [headers.map(escape).join(',')];
+  data.forEach((row) => {
+    lines.push(headers.map((h) => escape(row[h])).join(','));
+  });
+  const csv = lines.join('\r\n');
+  // BOM so Excel reads UTF-8 correctly when file has non-ASCII chars
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename}.csv`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
 
 export const ls = {

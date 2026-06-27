@@ -14,6 +14,7 @@ import ReportIssue from './pages/ReportIssue';
 import Staff from './pages/Staff';
 import Departments from './pages/Departments';
 import Delegations from './pages/Delegations';
+import DelegationTasks from './pages/DelegationTasks';
 import MyDelegations from './pages/MyDelegations';
 import Handover from './pages/Handover';
 import MyHandover from './pages/MyHandover';
@@ -86,6 +87,7 @@ export default function App() {
               <Route path="/handover" element={<Handover />} />
               <Route path="/departments" element={<Departments />} />
               <Route path="/delegation" element={<Delegations />} />
+              <Route path="/delegation-tasks" element={<DelegationTasks />} />
               <Route path="/tracking" element={<LiveTracking />} />
               <Route path="/activity" element={<ActivityLog />} />
               <Route path="/mis" element={<MisReporting />} />

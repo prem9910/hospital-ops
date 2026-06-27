@@ -1,7 +1,12 @@
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useState, useMemo } from 'react';
 import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate } from '../utils';
 import { DeptTag, PriorityBadge } from '../components/common/Badge';
+import { Modal } from '../components/common/Modal';
+import { TasksDrilldownModal } from '../components/common/TasksDrilldownModal';
+import { IssuesDrilldownModal } from '../components/common/IssuesDrilldownModal';
+import { DelegationsDrilldownModal } from '../components/common/DelegationsDrilldownModal';
 
 // ─── Charts ──────────────────────────────────────────────────────────────────
 function DonutChart({ data, size = 130, centerLabel, centerSub }) {
@@ -92,6 +97,10 @@ function scoreColor(s) { return s >= 80 ? '#1a7a4a' : s >= 60 ? '#0d7377' : s >=
 export default function Dashboard() {
   const { currentRole, currentUser } = useAuth();
   const { tasks, issues, employees, depts, delegations } = useApp();
+  // openCard drives the drill-down modal. null = closed.
+  // Shape: { type: 'tasks'|'issues'|'delegations'|'staff', preFilter, title }
+  // Hook MUST be called before any conditional return — see React rules-of-hooks.
+  const [openCard, setOpenCard] = useState(null);
   // Only mainadmin sees the full system dashboard; admin employees see their own
   if (currentRole !== 'mainadmin') return <StaffDashboard />;
 
@@ -107,10 +116,53 @@ export default function Dashboard() {
   const pct = total ? Math.round(done / total * 100) : 0;
   const issComp = (openI + resI) > 0 ? Math.round(resI / (openI + resI) * 100) : 100;
 
-  // Delegation stats
-  const delegTasks = tasks.filter((t) => t.freq === 'delegation');
+  // Delegation stats. Source = union of (a) tasks with freq='delegation' and
+  // (b) standalone delegation records. Both represent delegation-type work
+  // assigned to an employee with a due date / status, so the dashboard card
+  // counts the combined set. Normalising to a common shape:
+  //   { id, task, doerName, dept, status, dueDate, createdAt, extensions, _src }
+  // where _src is 'task' or 'record' for downstream consumers.
+  //
+  // When Tasks.jsx auto-syncs a freq='delegation' task into hops-delegations
+  // it reuses the task id, so the same logical item appears in BOTH source
+  // arrays. To avoid double-counting we collapse on the original id (without
+  // the source-prefix) and prefer the record-source shape (it carries the
+  // latest workflow fields like accepted / extension-requested statuses).
+  const delegItems = useMemo(() => {
+    const fromTasks = (tasks || [])
+      .filter((t) => t.freq === 'delegation')
+      .map((t) => ({
+        id: t.id,
+        task: t.name || '',
+        doerName: (t.assignedTo || []).filter(Boolean).join(', ') || t.createdBy || '—',
+        dept: t.dept || '',
+        status: t.status || 'pending',
+        dueDate: t.schedDate || '',
+        createdAt: t.created || '',
+        extensions: t.extensions || [],
+        _src: 'task',
+      }));
+    const fromRecords = (delegations || []).map((d) => ({
+      id: d.id,
+      task: d.task || '',
+      doerName: d.doerName || '—',
+      dept: d.dept || '',
+      status: d.status || 'pending',
+      dueDate: d.dueDate || '',
+      createdAt: d.createdAt || '',
+      extensions: d.extensionRequests || [],
+      _src: 'record',
+    }));
+    // Dedup by id. Records overwrite tasks for the same id (records carry
+    // richer status info). Items unique to either source stay as-is.
+    const map = new Map();
+    fromTasks.forEach((it) => { if (!map.has(it.id)) map.set(it.id, it); });
+    fromRecords.forEach((it) => map.set(it.id, it));
+    return Array.from(map.values());
+  }, [tasks, delegations]);
+  const delegTasks = delegItems;
   const delegDone = delegTasks.filter((t) => t.status === 'done').length;
-  const delegPend = delegTasks.filter((t) => t.status === 'pending').length;
+  const delegPend = delegTasks.filter((t) => t.status !== 'done').length;
 
   // Employee performance scores
   const empScores = employees.map((e) => {
@@ -149,24 +201,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats grid */}
+      {/* Stats grid — each card opens a drill-down popup with its category pre-filtered */}
       <div className="resp-grid-4">
-        <StatCard num={done} label="Completed" color="green" />
-        <StatCard num={onTime} label="On Time" color="teal" />
-        <StatCard num={delay} label="Delayed" color="purple" />
-        <StatCard num={pend} label="Pending" color="red" />
-        <StatCard num={openI} label="Open Issues" color="gold" />
-        <StatCard num={esc} label="Escalated" color="red" />
-        <StatCard num={employees.length} label="Total Staff" color="blue" />
-        <StatCard num={`${issComp}%`} label="Issues Resolved" color="green" />
+        <StatCard num={done} label="Completed" color="green" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'completed', title: '✅ Completed Tasks' })} />
+        <StatCard num={onTime} label="On Time" color="teal" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'onTime', title: '🟢 On-Time Tasks' })} />
+        <StatCard num={delay} label="Delayed" color="purple" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'delayed', title: '⏰ Delayed Tasks' })} />
+        <StatCard num={pend} label="Pending" color="red" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'pending', title: '⏳ Pending Tasks' })} />
+        <StatCard num={openI} label="Open Issues" color="gold" onClick={() => setOpenCard({ type: 'issues', preFilter: 'open', title: '⚠️ Open Issues' })} />
+        <StatCard num={esc} label="Escalated" color="red" onClick={() => setOpenCard({ type: 'issues', preFilter: 'escalated', title: '🚨 Escalated Issues' })} />
+        <StatCard num={employees.length} label="Total Staff" color="blue" onClick={() => setOpenCard({ type: 'staff', title: '👥 All Staff' })} />
+        <StatCard num={`${issComp}%`} label="Issues Resolved" color="green" onClick={() => setOpenCard({ type: 'issues', preFilter: 'resolved', title: '✅ Resolved Issues' })} />
       </div>
 
       {/* Alerts */}
-      {delay > 0 && (
-        <div style={{ background: '#faf5ff', border: '1px solid #c4b5fd', borderLeft: '3px solid #6d28d9', padding: '10px 14px', borderRadius: 9, marginBottom: 11, fontSize: 12.5 }}>
-          ⏰ <strong>{delay} task(s) DELAYED</strong>
-        </div>
-      )}
       {hiPending.map((t) => (
         <div key={t.id} style={{ background: '#fde8e8', borderLeft: '3px solid #c0392b', padding: '10px 14px', borderRadius: 9, marginBottom: 8, fontSize: 12.5, color: '#7d1a1a' }}>
           🚨 <strong>{t.name}</strong> — {t.dept} — 👤 {t.assignedTo?.join('/')} — 📅 {t.schedDate ? fDate(t.schedDate) : '—'}
@@ -176,7 +223,12 @@ export default function Dashboard() {
       {/* ── Charts row ── */}
       <div className="resp-grid-3">
         {/* Task breakdown donut */}
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
+        <div
+          onClick={() => setOpenCard({ type: 'tasks', preFilter: 'all', title: '📊 Task Breakdown' })}
+          style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+        >
           <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>📊 Task Breakdown</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <DonutChart size={110} centerLabel={`${pct}%`} centerSub="Done" data={[
@@ -198,10 +250,16 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: '#0d7377', fontWeight: 700, textAlign: 'right' }}>Click to drill down →</div>
         </div>
 
         {/* Issue breakdown donut */}
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
+        <div
+          onClick={() => setOpenCard({ type: 'issues', preFilter: 'all', title: '⚠️ Issue Status' })}
+          style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+        >
           <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>⚠️ Issue Status</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <DonutChart size={110} centerLabel={`${issComp}%`} centerSub="Resolved" data={[
@@ -223,10 +281,16 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: '#0d7377', fontWeight: 700, textAlign: 'right' }}>Click to drill down →</div>
         </div>
 
         {/* Delegation donut */}
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
+        <div
+          onClick={() => setOpenCard({ type: 'delegations', preFilter: 'all', title: '📤 Delegation Tasks' })}
+          style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+        >
           <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>📤 Delegation Tasks</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <DonutChart size={110} centerLabel={`${delegTasks.length}`} centerSub="Total" data={[
@@ -249,6 +313,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: '#0d7377', fontWeight: 700, textAlign: 'right' }}>Click to drill down →</div>
         </div>
       </div>
 
@@ -283,6 +348,70 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* ── Drill-down modals (one at a time, dispatched by openCard.type) ── */}
+      {openCard?.type === 'tasks' && (
+        <TasksDrilldownModal
+          open
+          onClose={() => setOpenCard(null)}
+          tasks={tasks}
+          depts={depts}
+          preFilter={openCard.preFilter}
+          title={openCard.title}
+        />
+      )}
+      {openCard?.type === 'issues' && (
+        <IssuesDrilldownModal
+          open
+          onClose={() => setOpenCard(null)}
+          issues={issues}
+          depts={depts}
+          preFilter={openCard.preFilter}
+          title={openCard.title}
+        />
+      )}
+      {openCard?.type === 'delegations' && (
+        <DelegationsDrilldownModal
+          open
+          onClose={() => setOpenCard(null)}
+          delegations={delegItems}
+          depts={depts}
+          preFilter={openCard.preFilter}
+          title={openCard.title}
+        />
+      )}
+      {openCard?.type === 'staff' && (
+        <Modal open onClose={() => setOpenCard(null)} title={openCard.title} maxWidth="max-w-md">
+          <div style={{ fontSize: 11.5, color: '#6b7a90', marginBottom: 10 }}>
+            Total active staff: <strong style={{ color: '#0d7377' }}>{employees.length}</strong>
+          </div>
+          <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ position: 'sticky', top: 0, background: '#f3f7fc' }}>
+                <tr>
+                  {['Name', 'Department', 'Role', 'Perms'].map((h) => (
+                    <th key={h} style={{ background: '#f3f7fc', padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.7, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {employees.length ? employees.map((e) => (
+                  <tr key={e.id} style={{ borderBottom: '1px solid #f3f7fc' }}>
+                    <td style={{ padding: '8px 12px', fontSize: 12, fontWeight: 700 }}>{e.name}</td>
+                    <td style={{ padding: '8px 12px' }}><DeptTag name={e.dept} /></td>
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: e.isIncharge ? '#0d7377' : '#6b7a90', fontWeight: e.isIncharge ? 800 : 600 }}>
+                      {e.isIncharge ? '👑 ' : ''}{e.role || '—'}
+                    </td>
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: '#6b7a90' }}>{(e.perms || []).length}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: '#6b7a90', fontSize: 12 }}>No staff yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -398,7 +527,7 @@ function StaffDashboard() {
           <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, color: '#0b1e3d', marginBottom: 12 }}>📤 My Active Delegations</div>
           {myDels.map((d) => (
             <div key={d.id} style={{ background: '#f8fbff', border: '1px solid #d8e2ef', borderLeft: '4px solid #0d7377', borderRadius: 9, padding: '12px 14px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{d.task}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: d.task ? '#0b1e3d' : '#c0392b' }}>{d.task || '— Untitled task —'}</div>
               <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 4 }}>
                 🏢 {d.dept || '—'} &nbsp;|&nbsp; 📅 Due: {fDate(d.dueDate)} &nbsp;|&nbsp; By: {d.createdBy}
               </div>

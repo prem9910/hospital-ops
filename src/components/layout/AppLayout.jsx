@@ -374,6 +374,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
     escalation: issues.filter((i) => i.priority === 'high' && i.status === 'open').length,
     handover: handovers.filter((h) => { const t = toDay(); return h.dateStart ? (t >= h.dateStart && t <= h.dateEnd) : h.status === 'pending'; }).length,
     delegation: delegations.filter((d) => d.status === 'pending' || d.status === 'accepted').length,
+    delegationTasks: tasks.filter((t) => t.freq === 'delegation' && t.status === 'pending').length,
     myDelegation: delegations.filter((d) => d.doerName === currentUser.name && (d.status === 'pending' || d.status === 'accepted')).length,
     checklist: tasks.filter((t) => isTaskDueToday(t) && t.status === 'pending').length,
     employees: employees.length,
@@ -484,6 +485,8 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
             {(isMain || hasPerm('handover_view')) && <NavItem id="handover" label="Handover Register" icon="📋" badge="handover" />}
             {(isMain || hasPerm('departments_view')) && <NavItem id="departments" label="Departments" icon="🏢" badge="depts" />}
             {(isMain || hasPerm('tracking_view')) && <NavItem id="tracking" label="Live Tracking" icon="📈" />}
+            <Group label="DELEGATION" />
+            {(isMain || hasPerm('delegation_view')) && <NavItem id="delegation-tasks" label="Delegation Tasks" icon="📋" badge="delegationTasks" />}
             {isMain && <>
               <Group label="MAIN ADMIN" />
               <NavItem id="notices" label="Notices" icon="📨" />

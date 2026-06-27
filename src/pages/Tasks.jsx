@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isAssignedTo, notifyAdmins, exportToExcel } from '../utils';
@@ -131,10 +131,19 @@ function DoneModal({ task, open, onClose, onSubmit, currentUser }) {
   const now = new Date();
   const nowStr = now.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
 
+  // Delayed if completing AFTER the scheduled deadline — by date (schedDate
+  // already passed) OR by time (same day, after the scheduled time). Mirrors
+  // the MyTasks.jsx DoneModal so the `isDelayed` flag stored in the DB is
+  // consistent regardless of which page the user marked the task done from.
+  // The previous time-only check flagged a task as on-time even when the
+  // admin completed a 3-day-old task in the morning, because today's
+  // wall-clock time was earlier than the scheduled hour.
   const isDelayed = task ? (() => {
+    const isDateOverdue = task.schedDate ? toDay() > task.schedDate : false;
     const sm = parseTimeToMinutes(task.time);
-    if (!sm) return false;
-    return now.getHours() * 60 + now.getMinutes() > sm;
+    if (!sm) return isDateOverdue;
+    const isTimeOverdue = now.getHours() * 60 + now.getMinutes() > sm;
+    return isDateOverdue || isTimeOverdue;
   })() : false;
 
   function handleSubmit() {
@@ -183,8 +192,13 @@ function TaskFormModal({ open, onClose, onSave, editTask, depts, employees }) {
     } : blank);
   }
 
-  // Reset when modal opens/closes or edit task changes
-  if (open && editTask && form.name !== editTask.name) reset(editTask);
+  // Reset form when modal opens/closes or edit task changes.
+  // Must be in useEffect — a render-phase setState here would wipe the
+  // user's typing every time form.name briefly differs from editTask.name.
+  useEffect(() => {
+    if (open && editTask) reset(editTask);
+    if (!open) reset(null);
+  }, [open, editTask]);
 
   function toggleAssignee(emp) {
     const idx = form.assignedTo.indexOf(emp.name);
@@ -278,7 +292,7 @@ function TaskFormModal({ open, onClose, onSave, editTask, depts, employees }) {
       </Field>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 16, borderTop: '1px solid #d8e2ef' }}>
-        <button onClick={handleSave} style={{ ...BtnS, background: '#0d7377' }}>💾 Save Task</button>
+        <button onClick={handleSave} style={{ ...BtnS, background: '#0d7377' }}>{editTask ? '💾 Save Edit' : '💾 Save Task'}</button>
         <button onClick={() => { onClose(); reset(null); }} style={{ ...BtnS, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377' }}>Cancel</button>
       </div>
     </Modal>
@@ -341,10 +355,85 @@ function ExtensionApprovalModal({ task, open, onClose, onDecide, currentUser }) 
   );
 }
 
+// ─── Auto-sync: delegation task ↔ delegation record ──────────────────────────
+// A task with `freq === 'delegation'` represents delegation work. To keep the
+// Delegation Tracker page (`Delegations.jsx`) and the dashboard drill-down
+// popup in lockstep with this view, every create/edit/complete/delete of a
+// delegation task also mirrors a corresponding row into `hops-delegations`.
+//
+// Both writes use the SAME id (task.id === delegation.id) so a later delete
+// or status update can find and patch the counterpart without a separate
+// mapping table. Sync is one-way (Tasks → Delegations); edits made on the
+// Delegation Tracker page do NOT flow back to the task.
+
+// Map a task object to the shape Delegations.jsx writes for delegation records.
+function taskToDelegation(task) {
+  if (!task) return null;
+  const status = task.status === 'done' ? 'done' : 'pending';
+  return {
+    id: task.id,
+    task: task.name || '',
+    taskName: task.name || '',
+    doerId: '',
+    // Primary doer — tasks can have multiple assignees but a delegation record
+    // tracks one. We use the first assignee; if there are several, the join
+    // still surfaces them in the Delegation Tracker UI as "Task" with the
+    // assignee list visible in Manage Tasks.
+    doerName: (task.assignedTo || [])[0] || '',
+    dept: task.dept || '',
+    priority: task.priority || 'medium',
+    dueDate: task.schedDate || '',
+    expDate: task.schedDate || '',
+    remarks: task.notes || '',
+    notes: task.notes || '',
+    status,
+    createdBy: task.createdBy || '',
+    createdAt: task.created || toDay(),
+    actualDate: task.lastDone || '',
+    actualTime: task.doneTime || '',
+    doneRemark: task.doneRemark || '',
+    delayReason: task.delayReason || '',
+    isDelayed: !!task.isDelayed,
+    // Shape kept minimal — full extension shape is built by Delegations.jsx
+    // when an employee requests an extension from the workflow side.
+    extensionRequests: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// Sync a single task. Returns the new `delegations` array. Caller is
+// responsible for `save()`-ing the array; this function does it for the
+// happy path so it's a one-liner at the call site. When the task is being
+// removed (or its freq was changed away from 'delegation'), the matching
+// record is moved to trash instead of being saved.
+async function syncDelegationFromTask(task, delegations, { save, moveToTrash }, opts = {}) {
+  const { isDeleted = false, freqChanged = false } = opts;
+
+  // Task is not a delegation task anymore — drop the mirror if it exists.
+  if (!task || task.freq !== 'delegation' || freqChanged) {
+    if (isDeleted || freqChanged) {
+      const existing = delegations.find((d) => d.id === (task && task.id));
+      if (existing) {
+        try { await moveToTrash('delegation', existing.id); } catch (e) { /* non-fatal */ }
+        return delegations.filter((d) => d.id !== existing.id);
+      }
+    }
+    return delegations;
+  }
+
+  const mirror = taskToDelegation(task);
+  const idx = delegations.findIndex((d) => d.id === task.id);
+  const next = idx >= 0
+    ? delegations.map((d, i) => i === idx ? mirror : d)
+    : [...delegations, mirror];
+  try { await save('hops-delegations', next); } catch (e) { console.error('syncDelegationFromTask save failed:', e); }
+  return next;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Tasks() {
   const { currentRole, currentUser, hasPerm } = useAuth();
-  const { tasks, depts, employees, notices, save, logAct, moveToTrash } = useApp();
+  const { tasks, delegations, depts, employees, notices, save, logAct, moveToTrash } = useApp();
   const [search, setSearch] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -418,8 +507,11 @@ export default function Tasks() {
 
   const paged = paginate(filtered, page);
 
-  // Edit/Delete allowed: mainadmin always; others only on their own tasks tab
-  const canEditRow = (t) => isMain || (canEdit && tab === 'mine');
+  // Edit allowed: mainadmin always; others ONLY on tasks they themselves created.
+// Even with tasks_edit permission, an employee cannot edit tasks assigned to
+// them by someone else. The "my tasks" tab may show tasks assigned to me by
+// others (e.g. by the main admin), but the ✏️ button must stay hidden on those.
+  const canEditRow = (t) => isMain || (canEdit && t.createdBy === currentUser.name);
   const canDelRow = (t) => isMain || (canDel && tab === 'mine');
 
   async function handleSave(form) {
@@ -442,6 +534,12 @@ export default function Tasks() {
     const newTasks = existing ? tasks.map((t) => t.id === obj.id ? obj : t) : [...tasks, obj];
     await save('hops-tasks', newTasks);
     await logAct(existing ? 'TASK UPDATED' : 'TASK CREATED', obj.name);
+
+    // Sync to delegations table when this is a delegation task (or when the
+    // task was previously a delegation task and the freq just changed away
+    // from it — in that case the orphan delegation record should be removed).
+    const freqChanged = !!existing && existing.freq === 'delegation' && obj.freq !== 'delegation';
+    await syncDelegationFromTask(obj, delegations, { save, moveToTrash }, { freqChanged });
 
     // Send assignment email to newly assigned employees
     const prevAssigned = new Set(existing?.assignedTo || []);
@@ -468,6 +566,11 @@ export default function Tasks() {
     const newTasks = tasks.map((x) => x.id === t.id ? updated : x);
     await save('hops-tasks', newTasks);
     await logAct('TASK COMPLETED', t.name + (isDelayed ? ' [DELAYED]' : ''));
+    // Mirror completion into hops-delegations so the Delegation Tracker page
+    // and the dashboard drill-down popup reflect the same status / remark.
+    if (t.freq === 'delegation') {
+      await syncDelegationFromTask(updated, delegations, { save, moveToTrash });
+    }
     // Notify main admin bell
     await notifyAdmins({
       notices, save,
@@ -482,6 +585,15 @@ export default function Tasks() {
   async function handleDelete(task) {
     if (!confirm(`Move '${task.name}' to Trash?`)) return;
     await moveToTrash('task', task.id);
+    // Mirror the deletion: if this was a delegation task, drop the matching
+    // delegation record too so the Delegation Tracker page doesn't keep
+    // showing it as a ghost entry.
+    if (task.freq === 'delegation') {
+      const target = delegations.find((d) => d.id === task.id);
+      if (target) {
+        try { await moveToTrash('delegation', task.id); } catch (e) { /* non-fatal */ }
+      }
+    }
   }
 
   async function handleExtDecide(task, extId, decision, decidedBy) {
@@ -499,6 +611,16 @@ export default function Tasks() {
     const newTasks = tasks.map((t) => t.id === task.id ? updated : t);
     await save('hops-tasks', newTasks);
     await logAct(`DELEGATION EXTENSION ${decision.toUpperCase()}`, task.name);
+    // If the extension was approved on a delegation task, push it to the
+    // delegation record so the workflow page reflects the new due date.
+    if (task.freq === 'delegation' && approvedExt) {
+      const next = delegations.map((d) =>
+        d.id === task.id
+          ? { ...d, dueDate: approvedExt.newDate, expDate: approvedExt.newDate, status: 'extended', updatedAt: new Date().toISOString() }
+          : d
+      );
+      try { await save('hops-delegations', next); } catch (e) { /* non-fatal */ }
+    }
     setShowExtApproval(updated);
   }
 

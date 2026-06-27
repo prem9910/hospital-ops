@@ -47,7 +47,7 @@ export default function MyDelegations() {
         {myDels.length ? myDels.map((d) => (
           <div key={d.id} style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: '14px 16px', borderLeft: `4px solid ${STATUS_COLORS[d.status] || '#6b7a90'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-              <strong style={{ fontSize: 14 }}>{d.task}</strong>
+              <strong style={{ fontSize: 14, color: d.task ? '#0b1e3d' : '#c0392b' }}>{d.task || '— Untitled task —'}</strong>
               <span style={{ background: STATUS_COLORS[d.status] || '#6b7a90', color: 'white', padding: '3px 10px', borderRadius: 20, fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{d.status}</span>
             </div>
             <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 5 }}>📅 Due: {fDate(d.dueDate)} &nbsp;|&nbsp; By: {d.createdBy} &nbsp;|&nbsp; 🏢 {d.dept || '—'}</div>

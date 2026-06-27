@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { uid, toDay, fDate, fDateTime, notifyAdmins, exportToExcel } from '../utils';
@@ -27,8 +27,28 @@ export default function Delegations() {
 
   const filtered = delegations.filter((d) => !filter || d.status === filter);
 
+  // Delegations whose task name is missing or literally "Unknown task".
+  // Surfaced so the user can spot legacy data — click to remove.
+  const badRows = useMemo(
+    () => delegations.filter((d) => !d.task || !String(d.task).trim() || /unknown/i.test(d.task)),
+    [delegations],
+  );
+
+  async function cleanBadRows() {
+    if (!badRows.length) return;
+    const ok = window.confirm(
+      `Found ${badRows.length} delegation(s) with missing/Unknown task name. Delete them permanently? This cannot be undone.`,
+    );
+    if (!ok) return;
+    const keep = delegations.filter((d) => d.task && String(d.task).trim() && !/unknown/i.test(d.task));
+    await save('hops-delegations', keep);
+    await logAct('CLEANUP', `Removed ${badRows.length} empty/unknown delegation(s)`);
+  }
+
   async function handleSave() {
-    if (!form.task.trim() || !form.doerName || !form.dueDate) { alert('Task, Doer, Due Date required!'); return; }
+    if (!form.task.trim()) { alert('Task name is required — please describe what needs to be done.'); return; }
+    if (!form.doerName) { alert('Please pick who will do this task (Doer).'); return; }
+    if (!form.dueDate) { alert('Due Date is required.'); return; }
     const obj = { id: uid(), task: form.task.toUpperCase(), doerName: form.doerName.toUpperCase(), dept: form.dept, dueDate: form.dueDate, remarks: form.remarks, status: 'pending', createdBy: currentUser.name, createdAt: toDay(), extensionRequests: [] };
     await save('hops-delegations', [...delegations, obj]);
     await logAct('DELEGATION CREATED', obj.task);
@@ -40,14 +60,30 @@ export default function Delegations() {
     const updated = { ...d, status: newStatus };
     await save('hops-delegations', delegations.map((x) => x.id === d.id ? updated : x));
     await logAct('DELEGATION STATUS: ' + newStatus.toUpperCase(), d.task);
-    // Notify main admin bell when delegation is completed or status changes
+    // Notify main admin bell when delegation is completed or status changes.
+    // Body is laid out as a clean labelled report (mirrors the task-completion
+    // notice style in Tasks.jsx) — left-aligned field labels, padded so they
+    // line up in monospace bell preview. No time stamp is included here on
+    // purpose: delegations are date-bounded, not time-bounded.
+    const label = (txt, w = 14) => String(txt).padEnd(w, ' ');
+    const bodyLines = [
+      label('Task:') + d.task,
+      label('Department:') + (d.dept || '—'),
+      label('Status:') + newStatus.toUpperCase(),
+      label('Done By:') + d.doerName,
+      label('Due Date:') + (d.dueDate ? fDate(d.dueDate) : '—'),
+      label('Delegated By:') + (d.createdBy || '—'),
+    ];
+    if (d.remarks) bodyLines.push(label('Remarks:') + d.remarks);
     try {
       await notifyAdmins({
         notices, save,
-        subject: newStatus === 'done' ? `✅ ${d.doerName} completed delegation: ${d.task}` : `🔄 ${d.doerName} → ${newStatus.toUpperCase()}: ${d.task}`,
-        message: `Delegation: ${d.task}\nDoer: ${d.doerName}\nNew Status: ${newStatus.toUpperCase()}\n${d.remarks ? 'Remarks: ' + d.remarks : ''}`,
+        subject: newStatus === 'done'
+          ? `✅ Delegation Completed — ${d.task}`
+          : `🔄 Delegation ${newStatus.toUpperCase()} — ${d.task}`,
+        message: bodyLines.join('\n'),
         type: newStatus === 'done' ? 'delegation_completed' : 'delegation_status',
-        meta: { delegationId: d.id, doer: d.doerName, status: newStatus, taskName: d.task },
+        meta: { delegationId: d.id, doer: d.doerName, status: newStatus, taskName: d.task, dept: d.dept, dueDate: d.dueDate, remarks: d.remarks, delegatedBy: d.createdBy },
       });
     } catch (e) { console.error('Admin notify failed:', e); }
   }
@@ -74,11 +110,30 @@ export default function Delegations() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>Delegation Tracker</h2>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {badRows.length > 0 && (
+            <button
+              onClick={cleanBadRows}
+              title={`${badRows.length} delegation(s) have empty or "Unknown" task names`}
+              style={{ padding: '7px 14px', borderRadius: 8, background: '#c0392b', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}
+            >
+              🧹 Clean {badRows.length} bad row{badRows.length === 1 ? '' : 's'}
+            </button>
+          )}
           <button onClick={() => exportToExcel(filtered.map(d => ({ 'Task Name': d.taskName, Department: d.dept, 'Delegated By': d.ownerName, 'Delegated To': d.doerName, Status: d.status, 'Due Date': d.dueDate, Reason: d.reason })), 'delegations-export')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
           {canAdd && <button onClick={() => setShowForm(true)} style={{ padding: '7px 14px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>+ Delegate Task</button>}
         </div>
       </div>
+
+      {badRows.length > 0 && (
+        <div style={{ background: '#fff5f5', border: '1px solid #f5c6cb', borderLeft: '4px solid #c0392b', borderRadius: 9, padding: '10px 14px', marginBottom: 14, fontSize: 12.5, color: '#7d1a1a', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 18 }}>⚠️</span>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <strong>{badRows.length} delegation{badRows.length === 1 ? '' : 's'}</strong> have a missing or "Unknown" task name (legacy data).
+            Click <strong>🧹 Clean {badRows.length} bad row{badRows.length === 1 ? '' : 's'}</strong> above to delete them permanently.
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 7, marginBottom: 14, flexWrap: 'wrap' }}>
         {['', 'pending', 'accepted', 'done', 'extension-requested', 'extended', 'rejected'].map((s) => (
@@ -92,7 +147,7 @@ export default function Delegations() {
         {filtered.length ? filtered.map((d) => (
           <div key={d.id} style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: '14px 16px', borderLeft: `4px solid ${STATUS_COLORS[d.status] || '#6b7a90'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-              <strong style={{ fontSize: 14 }}>{d.task}</strong>
+              <strong style={{ fontSize: 14, color: d.task ? '#0b1e3d' : '#c0392b' }}>{d.task || '— Untitled task —'}</strong>
               <span style={{ background: STATUS_COLORS[d.status] || '#6b7a90', color: 'white', padding: '3px 10px', borderRadius: 20, fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{d.status}</span>
             </div>
             <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 5 }}>
