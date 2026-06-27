@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hospital Ops — Project Showcase</title>
+<style>
+  /* ───────── Print & Page Setup ───────── */
+  @page {
+    size: A4 portrait;
+    margin: 18mm 14mm 18mm 14mm;
+  }
+
+  :root {
+    --primary: #0d7377;
+    --primary-dark: #095f63;
+    --navy: #0b1e3d;
+    --gold: #f5c842;
+    --green: #1a7a4a;
+    --red: #c0392b;
+    --purple: #6d28d9;
+    --ink: #1a2535;
+    --muted: #6b7a90;
+    --line: #d8e2ef;
+    --bg-soft: #f3f7fc;
+    --bg-card: #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    color: var(--ink);
+    background: #e8eef5;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+
+  /* ───────── Page wrapper ───────── */
+  .sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 16px auto;
+    background: white;
+    box-shadow: 0 8px 28px rgba(11, 30, 61, 0.18);
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+  }
+
+  .sheet:last-child { page-break-after: auto; }
+
+  /* Header band on every page */
+  .page-header {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--primary) 100%);
+    color: white;
+    padding: 10mm 14mm 8mm 14mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid var(--gold);
+  }
+  .page-header .brand { font-size: 16pt; font-weight: 800; letter-spacing: 0.4px; }
+  .page-header .brand .heart { color: var(--gold); }
+  .page-header .page-meta { font-size: 9pt; opacity: 0.85; text-align: right; }
+  .page-header .page-meta strong { display: block; font-size: 10pt; }
+
+  /* Page footer */
+  .page-footer {
+    position: absolute;
+    bottom: 8mm;
+    left: 14mm;
+    right: 14mm;
+    border-top: 1px solid var(--line);
+    padding-top: 4mm;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8pt;
+    color: var(--muted);
+  }
+
+  .page-body {
+    padding: 10mm 14mm 18mm 14mm;
+  }
+
+  /* ───────── Cover Page ───────── */
+  .cover {
+    background: linear-gradient(160deg, var(--navy) 0%, var(--primary) 60%, #14a3a8 100%);
+    color: white;
+    height: 297mm;
+    margin: 0;
+    width: 210mm;
+    padding: 0;
+    page-break-after: always;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .cover::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 80% 20%, rgba(245, 200, 66, 0.18), transparent 35%),
+      radial-gradient(circle at 10% 90%, rgba(255, 255, 255, 0.08), transparent 30%);
+    pointer-events: none;
+  }
+  .cover-top {
+    padding: 24mm 18mm 0 18mm;
+    position: relative;
+    z-index: 1;
+  }
+  .cover-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(245, 200, 66, 0.4);
+    border-radius: 30px;
+    font-size: 11pt;
+    letter-spacing: 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+  }
+  .cover-title {
+    margin-top: 28mm;
+    font-size: 56pt;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+    line-height: 1;
+  }
+  .cover-title .accent { color: var(--gold); }
+  .cover-tagline {
+    margin-top: 12mm;
+    font-size: 15pt;
+    font-weight: 400;
+    max-width: 150mm;
+    line-height: 1.45;
+    opacity: 0.92;
+  }
+  .cover-info {
+    margin-top: auto;
+    padding: 0 18mm 18mm 18mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    position: relative;
+    z-index: 1;
+  }
+  .info-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 6mm 7mm;
+    backdrop-filter: blur(10px);
+  }
+  .info-card h4 {
+    margin: 0 0 4mm 0;
+    font-size: 9pt;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 800;
+  }
+  .info-card .value {
+    font-size: 13pt;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+  .cover-bottom {
+    padding: 8mm 18mm 10mm 18mm;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    justify-content: space-between;
+    font-size: 9pt;
+    opacity: 0.7;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ───────── Section typography ───────── */
+  h1.section-title {
+    font-size: 28pt;
+    color: var(--navy);
+    margin: 0 0 4mm 0;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  h1.section-title .accent { color: var(--primary); }
+  .section-subtitle {
+    font-size: 11pt;
+    color: var(--muted);
+    margin: 0 0 8mm 0;
+    line-height: 1.5;
+  }
+  h2.feature-title {
+    font-size: 22pt;
+    color: var(--navy);
+    margin: 0 0 2mm 0;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    border-bottom: 3px solid var(--gold);
+    padding-bottom: 3mm;
+    display: inline-block;
+  }
+  h2.feature-title .emoji { margin-right: 4mm; }
+  h3.sub-title {
+    font-size: 13pt;
+    color: var(--primary);
+    margin: 6mm 0 3mm 0;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  p.lead {
+    font-size: 11pt;
+    line-height: 1.65;
+    margin: 0 0 5mm 0;
+  }
+  p { margin: 0 0 3mm 0; }
+
+  /* ───────── Cards & features ───────── */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+    margin: 4mm 0 6mm 0;
+  }
+  .feature-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .feature-grid.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5mm;
+    border-left: 4px solid var(--primary);
+  }
+  .feature-card.green { border-left-color: var(--green); }
+  .feature-card.red { border-left-color: var(--red); }
+  .feature-card.gold { border-left-color: var(--gold); }
+  .feature-card.purple { border-left-color: var(--purple); }
+  .feature-card h4 {
+    margin: 0 0 2mm 0;
+    font-size: 11pt;
+    color: var(--navy);
+    font-weight: 800;
+  }
+  .feature-card p {
+    font-size: 9.5pt;
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  /* ───────── Screenshot placeholder ───────── */
+  .screenshot {
+    width: 100%;
+    height: 95mm;
+    background:
+      linear-gradient(45deg, #f0f4f9 25%, transparent 25%),
+      linear-gradient(-45deg, #f0f4f9 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #f0f4f9 75%),
+      linear-gradient(-45deg, transparent 75%, #f0f4f9 75%);
+    background-size: 14px 14px;
+    background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+    border: 2px dashed var(--primary);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    font-size: 10pt;
+    font-weight: 700;
+    text-align: center;
+    margin: 4mm 0 6mm 0;
+    position: relative;
+  }
+  .screenshot .ss-icon { font-size: 36pt; opacity: 0.55; margin-bottom: 3mm; }
+  .screenshot .ss-label { font-size: 13pt; font-weight: 800; }
+  .screenshot .ss-hint {
+    margin-top: 2mm;
+    font-size: 9pt;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .screenshot-caption {
+    text-align: center;
+    font-size: 9pt;
+    color: var(--muted);
+    font-style: italic;
+    margin-top: -3mm;
+    margin-bottom: 5mm;
+  }
+
+  /* ───────── Stat callouts ───────── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+  .stat {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 5mm;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .stat .num {
+    font-size: 22pt;
+    font-weight: 900;
+    color: var(--gold);
+    line-height: 1;
+  }
+  .stat .lbl {
+    font-size: 9pt;
+    margin-top: 2mm;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* ───────── Lists & tables ───────── */
+  ul.feature-list {
+    margin: 3mm 0 4mm 0;
+    padding-left: 5mm;
+  }
+  ul.feature-list li {
+    font-size: 10.5pt;
+    margin-bottom: 2mm;
+    line-height: 1.5;
+  }
+  ul.feature-list li strong { color: var(--navy); }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4mm 0 6mm 0;
+    font-size: 9.5pt;
+  }
+  table.data-table th {
+    background: var(--navy);
+    color: white;
+    padding: 3mm 4mm;
+    text-align: left;
+    font-weight: 700;
+    font-size: 9pt;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  table.data-table td {
+    padding: 3mm 4mm;
+    border-bottom: 1px solid var(--line);
+  }
+  table.data-table tr:nth-child(even) { background: var(--bg-soft); }
+  table.data-table .pill {
+    display: inline-block;
+    padding: 1mm 3mm;
+    border-radius: 20px;
+    font-size: 8pt;
+    font-weight: 700;
+    background: var(--bg-soft);
+    color: var(--primary);
+  }
+  table.data-table .pill.red { background: #fde8e8; color: var(--red); }
+  table.data-table .pill.green { background: #d4edda; color: var(--green); }
+  table.data-table .pill.gold { background: #fff3cd; color: #7a4800; }
+
+  /* ───────── Role cards ───────── */
+  .role-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6mm;
+    margin-bottom: 5mm;
+    border-top: 5px solid var(--primary);
+    box-shadow: 0 2px 6px rgba(11, 30, 61, 0.05);
+  }
+  .role-card.admin { border-top-color: var(--gold); }
+  .role-card.staff { border-top-color: var(--green); }
+  .role-card .role-name {
+    font-size: 16pt;
+    font-weight: 800;
+    color: var(--navy);
+    margin-bottom: 2mm;
+  }
+  .role-card .role-badge {
+    display: inline-block;
+    padding: 1mm 4mm;
+    background: var(--gold);
+    color: var(--navy);
+    border-radius: 20px;
+    font-size: 8pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 3mm;
+  }
+  .role-card .role-desc {
+    font-size: 10pt;
+    color: var(--muted);
+    margin-bottom: 4mm;
+    line-height: 1.5;
+  }
+
+  /* ───────── Tech chips ───────── */
+  .tech-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.5mm;
+    margin: 3mm 0;
+  }
+  .chip {
+    background: white;
+    border: 1.5px solid var(--primary);
+    color: var(--primary);
+    padding: 1.5mm 4mm;
+    border-radius: 20px;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+  .chip.gold { border-color: var(--gold); color: #7a4800; }
+  .chip.navy { border-color: var(--navy); color: var(--navy); }
+
+  /* ───────── Workflow flow ───────── */
+  .flow {
+    display: flex;
+    gap: 2mm;
+    align-items: stretch;
+    margin: 4mm 0 6mm 0;
+  }
+  .flow-step {
+    flex: 1;
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 6px;
+    padding: 4mm;
+    text-align: center;
+    position: relative;
+  }
+  .flow-step .step-num {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background: var(--gold);
+    color: var(--navy);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-weight: 900;
+    font-size: 9pt;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .flow-step .step-icon { font-size: 22pt; margin-bottom: 1mm; }
+  .flow-step .step-title {
+    font-size: 10pt;
+    font-weight: 800;
+    color: var(--navy);
+    margin-bottom: 1mm;
+  }
+  .flow-step .step-desc {
+    font-size: 8.5pt;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 18pt;
+    color: var(--primary);
+    font-weight: 900;
+  }
+
+  /* ───────── Quote / callout ───────── */
+  .callout {
+    background: linear-gradient(135deg, var(--bg-soft) 0%, white 100%);
+    border-left: 5px solid var(--gold);
+    padding: 5mm 6mm;
+    border-radius: 4px;
+    margin: 4mm 0;
+    font-size: 10.5pt;
+    font-style: italic;
+    color: var(--ink);
+  }
+  .callout strong { color: var(--navy); font-style: normal; }
+
+  /* ───────── TOC ───────── */
+  .toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 4mm 0;
+  }
+  .toc-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 2.5mm 0;
+    border-bottom: 1px dotted var(--line);
+    font-size: 11pt;
+  }
+  .toc-list li .toc-title {
+    font-weight: 700;
+    color: var(--navy);
+  }
+  .toc-list li .toc-page {
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .toc-section {
+    margin-top: 6mm;
+    font-size: 9pt;
+    font-weight: 800;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  /* ───────── Two-column body ───────── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 6mm;
+  }
+
+  /* ───────── Print button ───────── */
+  .print-bar {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 999;
+    display: flex;
+    gap: 8px;
+  }
+  .print-bar button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 11pt;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(13, 115, 119, 0.4);
+  }
+  .print-bar button:hover { background: var(--primary-dark); }
+  .print-bar button.gold {
+    background: var(--gold);
+    color: var(--navy);
+    box-shadow: 0 4px 12px rgba(245, 200, 66, 0.5);
+  }
+
+  /* Hidden screenshot instructions */
+  .hidden-section { display: none; }
+
+  /* ───────── Print-specific ───────── */
+  @media print {
+    body { background: white; }
+    .sheet {
+      margin: 0;
+      box-shadow: none;
+      page-break-after: always;
+    }
+    .print-bar { display: none !important; }
+    .hidden-section { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ───────── PRINT BAR (hidden on print) ───────── -->
+<div class="print-bar">
+  <button class="gold" onclick="window.print()">🖨 Print / Save as PDF</button>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 1 — COVER                                     -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-top">
+    <div class="cover-logo">🏥 Hospital Operations Platform</div>
+    <h1 class="cover-title">
+      Hospital<br/><span class="accent">Ops</span>
+    </h1>
+    <p class="cover-tagline">
+      A real-time, role-aware operations command center for hospitals — manage tasks,
+      issues, handovers, delegations, and departments from a single dashboard.
+    </p>
+  </div>
+
+  <div class="cover-info">
+    <div class="info-card">
+      <h4>Edition</h4>
+      <div class="value">Showcase v1.0<br/>June 2026</div>
+    </div>
+    <div class="info-card">
+      <h4>Stack</h4>
+      <div class="value">React 19 + Vite 8<br/>Supabase + PostgreSQL</div>
+    </div>
+    <div class="info-card">
+      <h4>Frontend</h4>
+      <div class="value">Tailwind CSS v4<br/>React Router v7</div>
+    </div>
+    <div class="info-card">
+      <h4>Realtime</h4>
+      <div class="value">Postgres Changes<br/>Subscription Sync</div>
+    </div>
+  </div>
+
+  <div class="cover-bottom">
+    <span>📍 Internal Project Showcase</span>
+    <span>© 2026 Hospital Ops</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 2 — TABLE OF CONTENTS                         -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>Showcase Document</strong>Table of Contents</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">Table of <span class="accent">Contents</span></h1>
+    <p class="section-subtitle">A guided tour through every feature, role, and technical layer of the Hospital Operations platform.</p>
+
+    <div class="toc-section">Overview</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">1. Project Overview &amp; Tech Stack</span><span class="toc-page">03</span></li>
+      <li><span class="toc-title">2. User Roles &amp; Permissions</span><span class="toc-page">04</span></li>
+      <li><span class="toc-title">3. Authentication &amp; Login</span><span class="toc-page">05</span></li>
+    </ul>
+
+    <div class="toc-section">Core Features — Admin Side</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">4. Dashboard &amp; Analytics</span><span class="toc-page">06</span></li>
+      <li><span class="toc-title">5. Manage Tasks (Recurring + Extensions)</span><span class="toc-page">07</span></li>
+      <li><span class="toc-title">6. Departments Management</span><span class="toc-page">08</span></li>
+      <li><span class="toc-title">7. Staff &amp; Employees Directory</span><span class="toc-page">09</span></li>
+      <li><span class="toc-title">8. Admin Roles &amp; Permissions</span><span class="toc-page">10</span></li>
+    </ul>
+
+    <div class="toc-section">Core Features — Operations</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">9. Issues / Problem Tracker</span><span class="toc-page">11</span></li>
+      <li><span class="toc-title">10. Handover (Outgoing + Incoming)</span><span class="toc-page">12</span></li>
+      <li><span class="toc-title">11. Delegation Tracker + Extensions</span><span class="toc-page">13</span></li>
+      <li><span class="toc-title">12. Checklists &amp; Escalation</span><span class="toc-page">14</span></li>
+      <li><span class="toc-title">13. Live Tracking &amp; MIS Reports</span><span class="toc-page">15</span></li>
+    </ul>
+
+    <div class="toc-section">Employee Side</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">14. My Tasks (Pending + Overdue)</span><span class="toc-page">16</span></li>
+      <li><span class="toc-title">15. Assign Task (Self-Assign)</span><span class="toc-page">17</span></li>
+      <li><span class="toc-title">16. My Handover Inbox</span><span class="toc-page">18</span></li>
+      <li><span class="toc-title">17. My Delegations</span><span class="toc-page">19</span></li>
+    </ul>
+
+    <div class="toc-section">Notifications &amp; Utility</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">18. Bell Notifications &amp; Notices</span><span class="toc-page">20</span></li>
+      <li><span class="toc-title">19. Activity Log + Trash + Links</span><span class="toc-page">21</span></li>
+    </ul>
+
+    <div class="toc-section">Technical Reference</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">20. Getting Started (Install + Run)</span><span class="toc-page">22</span></li>
+      <li><span class="toc-title">21. Folder Structure &amp; Architecture</span><span class="toc-page">23</span></li>
+      <li><span class="toc-title">22. Database Schema (Supabase)</span><span class="toc-page">24</span></li>
+      <li><span class="toc-title">23. Real-time Sync &amp; Offline Cache</span><span class="toc-page">25</span></li>
+      <li><span class="toc-title">24. Security, Permissions &amp; Roadmap</span><span class="toc-page">26</span></li>
+    </ul>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 2</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 3 — PROJECT OVERVIEW & TECH STACK             -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>01 · Overview</strong>Project &amp; Tech Stack</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">Project <span class="accent">Overview</span></h1>
+    <p class="section-subtitle">A cloud-synced operations command center designed for hospitals that need to coordinate daily tasks, manage staff across departments, and never lose a single handover.</p>
+
+    <h3 class="sub-title">🎯 The Problem It Solves</h3>
+    <p class="lead">Hospital operations involve dozens of recurring tasks, inter-department dependencies, and shift-based handovers that historically live in WhatsApp groups, registers, and memory. Hospital Ops replaces all of these with a single, real-time, role-aware platform that anyone on staff can use from any device.</p>
+
+    <div class="stat-row">
+      <div class="stat"><div class="num">22</div><div class="lbl">Permissions</div></div>
+      <div class="stat"><div class="num">24</div><div class="lbl">Pages / Screens</div></div>
+      <div class="stat"><div class="num">7</div><div class="lbl">Task Frequencies</div></div>
+      <div class="stat"><div class="num">3</div><div class="lbl">User Roles</div></div>
+    </div>
+
+    <h3 class="sub-title">💎 Key Capabilities</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>⚡ Real-time Sync</h4><p>Postgres realtime subscriptions — a change made on one device appears on every other device within seconds.</p></div>
+      <div class="feature-card green"><h4>📴 Offline-First</h4><p>LocalStorage cache keeps the app fully functional without network, syncs back to Supabase when reconnected.</p></div>
+      <div class="feature-card gold"><h4>🔁 Recurring Tasks</h4><p>7 frequency types (Daily, 15-day, Monthly, Quarterly, Half-yearly, Yearly, Delegation) with parent/child template pattern.</p></div>
+      <div class="feature-card purple"><h4>🔔 Bell Notifications</h4><p>Main admin sees all system activity (task done, handover, delegation, dept change) in a unified notification bell.</p></div>
+      <div class="feature-card red"><h4>🔐 Role-Based Access</h4><p>3 roles (Main Admin / Admin / Staff) with 22 fine-grained permissions toggled per admin user.</p></div>
+      <div class="feature-card"><h4>📤 Excel Exports</h4><p>Every list page has date-range Excel export using the SheetJS XLSX library — ready for compliance audits.</p></div>
+    </div>
+
+    <h3 class="sub-title">🧰 Tech Stack</h3>
+    <div class="tech-chips">
+      <span class="chip">React 19</span>
+      <span class="chip">Vite 8</span>
+      <span class="chip navy">React Router v7</span>
+      <span class="chip gold">Supabase JS 2.108</span>
+      <span class="chip">Tailwind CSS v4</span>
+      <span class="chip">TanStack Query</span>
+      <span class="chip navy">React Hook Form + Zod</span>
+      <span class="chip gold">Framer Motion</span>
+      <span class="chip">SheetJS / XLSX</span>
+      <span class="chip">date-fns</span>
+      <span class="chip navy">PostgreSQL Realtime</span>
+      <span class="chip gold">LocalStorage Cache</span>
+    </div>
+
+    <table class="data-table">
+      <tr><th>Layer</th><th>Technology</th><th>Why It Was Chosen</th></tr>
+      <tr><td>Frontend Framework</td><td>React 19 + Vite 8</td><td>Fast HMR, modern hooks, smallest production bundle</td></tr>
+      <tr><td>Backend / DB</td><td>Supabase (PostgreSQL)</td><td>Managed Postgres with built-in realtime, auth, and RLS</td></tr>
+      <tr><td>Realtime</td><td>postgres_changes channel</td><td>Sub-second cross-device sync without WebSocket boilerplate</td></tr>
+      <tr><td>Routing</td><td>React Router DOM v7</td><td>Standard SPA routing, code-split friendly</td></tr>
+      <tr><td>Styling</td><td>Tailwind v4 + Inline Styles</td><td>Hybrid approach — utility classes for layout, inline for component-specific theming</td></tr>
+      <tr><td>Excel Export</td><td>SheetJS (xlsx)</td><td>Industry standard — Excel, CSV, and PDF-friendly output</td></tr>
+      <tr><td>Theme</td><td>CSS Variables + data-theme</td><td>Dark mode toggled via single root attribute</td></tr>
+    </table>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 3</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 4 — USER ROLES & PERMISSIONS                  -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>02 · Roles</strong>User Roles &amp; Permissions</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">User <span class="accent">Roles</span></h1>
+    <p class="section-subtitle">Three distinct roles. Each one has its own login flow, navigation, and capability set. Permissions for Admin are toggleable per user.</p>
+
+    <div class="role-card admin">
+      <div class="role-name">👑 Main Admin <span class="role-badge">SUPERUSER</span></div>
+      <div class="role-desc">The platform's superuser. Has unrestricted access to every module. Sees a unified bell with all system activity. Cannot be deleted or demoted by anyone except themselves.</div>
+      <ul class="feature-list">
+        <li><strong>Full CRUD</strong> on every entity (tasks, employees, departments, handovers, delegations, issues)</li>
+        <li><strong>Bell Notifications</strong> — sees ALL notifications (task completed, handover accepted/rejected, dept change requests, delegation status changes, issues reported)</li>
+        <li><strong>Approves Extensions</strong> on delegations and overdue tasks</li>
+        <li><strong>View Full Activity Log</strong> across all departments</li>
+        <li><strong>Manage Other Admins</strong> — create, suspend, and assign permissions</li>
+      </ul>
+    </div>
+
+    <div class="role-card">
+      <div class="role-name">🛡️ Admin <span class="role-badge">CONFIGURABLE</span></div>
+      <div class="role-desc">Delegated administrators. Can do everything within their granted permissions. Permissions are toggled individually by the Main Admin from the Admins page.</div>
+      <ul class="feature-list">
+        <li><strong>22 Individual Permissions</strong> covering Tasks, Issues, Employees, Departments, Handover, Delegation, Checklists, MIS, Trash</li>
+        <li><strong>Scope-based visibility</strong> — admin sees only data they manage, unless granted <code>all_task_details</code></li>
+        <li><strong>Bell notifications</strong> scoped to events relevant to their department</li>
+        <li>No access to other admins' permission settings or role management</li>
+      </ul>
+    </div>
+
+    <div class="role-card staff">
+      <div class="role-name">👤 Staff <span class="role-badge">EMPLOYEE</span></div>
+      <div class="role-desc">Frontline users — nurses, technicians, housekeeping, etc. Log in with their name + department password. See only their own tasks, handovers, and delegations.</div>
+      <ul class="feature-list">
+        <li><strong>My Tasks</strong> — pending and overdue tasks assigned to them</li>
+        <li><strong>Self-Assign Task</strong> — staff can pick a task from a checklist and schedule it themselves</li>
+        <li><strong>My Handover Inbox</strong> — accept or reject incoming handovers with remarks</li>
+        <li><strong>My Delegations</strong> — accept, mark done, or request extension</li>
+        <li><strong>Report Issue</strong> — file a problem with priority and department</li>
+        <li><strong>All Issues</strong> (read-only) — see what's been reported by others</li>
+      </ul>
+    </div>
+
+    <h3 class="sub-title">🔑 Permission Catalog (22 Permissions)</h3>
+    <div class="feature-grid three">
+      <div class="feature-card"><h4>Tasks (5)</h4><p>view · add · edit · delete · assign</p></div>
+      <div class="feature-card green"><h4>Issues (3)</h4><p>view · add · resolve</p></div>
+      <div class="feature-card gold"><h4>Employees (2)</h4><p>view · edit</p></div>
+      <div class="feature-card purple"><h4>Departments (2)</h4><p>view · edit</p></div>
+      <div class="feature-card red"><h4>Handover (2)</h4><p>view · edit</p></div>
+      <div class="feature-card"><h4>Delegation (2)</h4><p>view · add/manage</p></div>
+      <div class="feature-card green"><h4>Reporting (3)</h4><p>MIS · Tracking · Checklist</p></div>
+      <div class="feature-card gold"><h4>System (2)</h4><p>Trash · Escalation</p></div>
+      <div class="feature-card purple"><h4>Scope (1)</h4><p>all_task_details (override)</p></div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 4</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 5 — AUTHENTICATION & LOGIN                    -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>03 · Login</strong>Authentication Flow</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🔐 <span class="accent">Authentication</span></h1>
+    <p class="section-subtitle">Three different login experiences — Main Admin gets a password-only credential login, while Admins and Staff get a unified form with 3D tilt and dark-mode support.</p>
+
+    <h2 class="feature-title"><span class="emoji">⚡</span>Login Experience</h2>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Login Page</div>
+      <div class="ss-hint">3D tilt card · password reveal · Caps Lock warning</div>
+    </div>
+    <div class="screenshot-caption">Login screen with dark/light theme toggle, animated 3D card tilt, and staff name autocomplete.</div>
+
+    <div class="two-col">
+      <div>
+        <h3 class="sub-title">Main Admin Login</h3>
+        <ul class="feature-list">
+          <li><strong>Hardcoded credentials</strong> — username &amp; password stored in <code>src/constants/index.js</code></li>
+          <li><strong>Single superuser</strong> — only one Main Admin account exists at platform level</li>
+          <li><strong>Sees all notifications</strong> via the bell icon</li>
+          <li>Can access every page, including admin management</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="sub-title">Admin / Staff Login</h3>
+        <ul class="feature-list">
+          <li><strong>Name + Department Password</strong> — staff pick their name, enter their department password</li>
+          <li><strong>Localstorage "Remember Me"</strong> — last-used name is auto-filled on next visit</li>
+          <li><strong>Smart Routing</strong> — already-logged-in users are redirected to <code>/dashboard</code></li>
+          <li><strong>Activity-based session</strong> — 5-minute inactivity auto-logout</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>UX Touches:</strong> The login card uses a CSS-driven 3D tilt that tracks mouse movement. A "Caps Lock detected" warning appears when the user presses Shift. Password visibility can be toggled with an eye icon. The login screen supports both dark and light themes via the global <code>data-theme</code> attribute.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 5</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 6 — DASHBOARD & ANALYTICS                     -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>04 · Dashboard</strong>Analytics Overview</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📊 <span class="accent">Dashboard</span></h1>
+    <p class="section-subtitle">A real-time command center. The dashboard shows live counts of tasks, issues, handovers, and delegations — all powered by Supabase realtime subscriptions.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Dashboard</div>
+      <div class="ss-hint">Stats cards · Charts · Recent activity feed</div>
+    </div>
+    <div class="screenshot-caption">Dashboard with KPI cards at top, charts in the middle, and activity feed at the bottom.</div>
+
+    <h3 class="sub-title">What Lives on the Dashboard</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>📌 Live Counters</h4><p>Today's pending tasks, overdue tasks, open issues, active handovers — all in real time.</p></div>
+      <div class="feature-card green"><h4>📈 Trend Charts</h4><p>Task completion rate, issue resolution time, department workload — visualized as inline bar/line charts.</p></div>
+      <div class="feature-card gold"><h4>🔥 Activity Feed</h4><p>Last 10 system events: task done, handover accepted, dept change requested — live updates.</p></div>
+      <div class="feature-card purple"><h4>👤 Personalised View</h4><p>Staff see only their own stats. Admin sees department-level. Main Admin sees everything.</p></div>
+    </div>
+
+    <h3 class="sub-title">User Flow — What They See</h3>
+    <div class="flow">
+      <div class="flow-step"><span class="step-num">1</span><div class="step-icon">🔑</div><div class="step-title">Login</div><div class="step-desc">User authenticates and lands here</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">2</span><div class="step-icon">👀</div><div class="step-title">Scan KPIs</div><div class="step-desc">Spot red flags at a glance</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">3</span><div class="step-icon">🖱️</div><div class="step-title">Drill Down</div><div class="step-desc">Click any KPI to see the full list</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">4</span><div class="step-icon">✅</div><div class="step-title">Take Action</div><div class="step-desc">Resolve, reassign, or escalate</div></div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 6</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 7 — MANAGE TASKS                              -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>05 · Tasks</strong>Manage Tasks &amp; Recurring Engine</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📋 <span class="accent">Manage Tasks</span></h1>
+    <p class="section-subtitle">The most complex module. Admin creates a task template, picks a frequency, and the engine auto-generates child tasks. Staff complete them; new ones appear automatically.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Manage Tasks</div>
+      <div class="ss-hint">Task list with frequency pills · Filters · Actions</div>
+    </div>
+    <div class="screenshot-caption">Manage Tasks grid showing all tasks with frequency badge, assigned employee, due date, and quick actions.</div>
+
+    <h3 class="sub-title">🔁 Recurring Task Engine</h3>
+    <p>Tasks are created as <strong>parent templates</strong> with a <code>parentTaskId</code> linking to generated <strong>child instances</strong>. When a child is marked done, the engine automatically generates the next child based on the parent's frequency:</p>
+
+    <table class="data-table">
+      <tr><th>Frequency</th><th>Label</th><th>Auto-Cycle Behavior</th></tr>
+      <tr><td><span class="pill">daily</span></td><td>DAILY</td><td>Next instance = schedDate + 1 day</td></tr>
+      <tr><td><span class="pill">15-day</span></td><td>HAR 15 DIN</td><td>Next instance = schedDate + 15 days</td></tr>
+      <tr><td><span class="pill green">monthly</span></td><td>MONTHLY</td><td>Next instance = schedDate + 1 month</td></tr>
+      <tr><td><span class="pill gold">quarterly</span></td><td>QUARTERLY</td><td>Next instance = schedDate + 3 months</td></tr>
+      <tr><td><span class="pill">half-yearly</span></td><td>HALF-YEARLY</td><td>Next instance = schedDate + 6 months</td></tr>
+      <tr><td><span class="pill red">yearly</span></td><td>YEARLY</td><td>Next instance = schedDate + 1 year</td></tr>
+      <tr><td><span class="pill purple">delegation</span></td><td>📤 DELEGATION</td><td>No auto-cycle — single-shot task</td></tr>
+    </table>
+
+    <h3 class="sub-title">🔄 Extension Workflow</h3>
+    <ul class="feature-list">
+      <li><strong>Staff Request</strong> — if a task can't be completed on time, staff request an extension with a reason and a new proposed date</li>
+      <li><strong>Admin Approval</strong> — extension shows up in admin's "Extension Pending" panel</li>
+      <li><strong>Auto-Reschedule</strong> — when approved, the task's <code>schedDate</code> is updated to the new date; future recurring cycles use the new date</li>
+      <li><strong>Activity Logged</strong> — every extension event is appended to the task's <code>activityLog</code> array</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Smart Overdue Backstop:</strong> A task whose <code>schedDate</code> is in the past is automatically shown in "My Tasks" pending list with a red <code>⚠️ OVERDUE</code> badge — even if its frequency hasn't yet triggered a new child instance. This ensures nothing falls through the cracks.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 7</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 8 — DEPARTMENTS                               -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>06 · Departments</strong>Organizational Units</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🏢 <span class="accent">Departments</span></h1>
+    <p class="section-subtitle">The hospital's organizational backbone. Every employee belongs to exactly one department, and each department can have its own admin.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Departments Page</div>
+      <div class="ss-hint">Department cards with member count and admin name</div>
+    </div>
+    <div class="screenshot-caption">Departments shown as cards — each card displays headcount, current admin, and quick links.</div>
+
+    <h3 class="sub-title">Department Features</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>➕ Create / Edit</h4><p>Add departments with name, password (for staff login), and head-of-department assignment.</p></div>
+      <div class="feature-card green"><h4>🔑 Department Password</h4><p>Each department has its own login password — staff enter it during login to verify they belong.</p></div>
+      <div class="feature-card gold"><h4>📊 Headcount Display</h4><p>Live count of active employees in each department.</p></div>
+      <div class="feature-card red"><h4>🚫 Soft Delete Protection</h4><p>A department cannot be deleted while it still has active employees — admin must reassign first.</p></div>
+    </div>
+
+    <div class="callout">
+      <strong>Department Change Requests:</strong> Staff can request a department transfer from their profile. The request shows up in the Main Admin's bell. When accepted, the employee is moved and a confirmation notice is sent to both the admin and the employee.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 8</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 9 — STAFF & EMPLOYEES                         -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>07 · Staff</strong>Employees Directory</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">👥 <span class="accent">Staff</span> &amp; Employees</h1>
+    <p class="section-subtitle">The master directory of every staff member. Search, filter by department, edit details, deactivate, or send a department change request.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Staff Directory</div>
+      <div class="ss-hint">Sortable table · Department filter · Action menu</div>
+    </div>
+    <div class="screenshot-caption">Staff directory — sortable columns, department filter, search, and per-row action menu.</div>
+
+    <h3 class="sub-title">Per-Employee Record</h3>
+    <table class="data-table">
+      <tr><th>Field</th><th>Purpose</th></tr>
+      <tr><td><strong>Name</strong></td><td>Used as the staff login identifier and display name</td></tr>
+      <tr><td><strong>Department</strong></td><td>Scopes which tasks / handovers / delegations they see</td></tr>
+      <tr><td><strong>Role</strong></td><td>Free-text designation (e.g. "Senior Nurse", "Housekeeping Lead")</td></tr>
+      <tr><td><strong>Email</strong></td><td>Optional — used for handover and delegation email notifications</td></tr>
+      <tr><td><strong>Status</strong></td><td>Active / Inactive — inactive employees cannot log in</td></tr>
+      <tr><td><strong>Permissions</strong></td><td>For Admin accounts only — toggle 22 individual permissions</td></tr>
+    </table>
+
+    <h3 class="sub-title">Smart Behaviors</h3>
+    <ul class="feature-list">
+      <li><strong>Case-Insensitive Matching</strong> — assigning a task to "priya" finds "Priya", "PRIYA", or "Priya Sharma"</li>
+      <li><strong>Email Popup</strong> — when a handover is sent to an employee without email, the system prompts for one and saves it</li>
+      <li><strong>Soft Delete</strong> — deleted employees go to Trash for 30-day recovery</li>
+    </ul>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 9</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 10 — ADMIN ROLES                             -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>08 · Admins</strong>Role &amp; Permission Management</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🛡️ <span class="accent">Admin</span> Roles</h1>
+    <p class="section-subtitle">Main Admin can create, suspend, and configure delegated Admin accounts. Each Admin gets a unique login and a custom permission set.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Admins Management</div>
+      <div class="ss-hint">Admin list · Permission toggle panel · Suspend/activate</div>
+    </div>
+    <div class="screenshot-caption">Admins page with permission matrix — toggle individual capabilities per admin.</div>
+
+    <h3 class="sub-title">Permission Toggles (Live View)</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>👁️ View Permissions</h4><p>9 view perms — Tasks, Issues, Employees, Handover, Departments, Tracking, Checklists, MIS, Trash</p></div>
+      <div class="feature-card green"><h4>✏️ Edit / Add</h4><p>7 add/edit perms — Tasks CRUD, Issue resolve, Employee edit, Department edit, Handover edit, Delegation manage</p></div>
+      <div class="feature-card gold"><h4>🗑️ Delete</h4><p>1 delete perm — Tasks delete (controls the trash icon on tasks)</p></div>
+      <div class="feature-card purple"><h4>🎯 Scope Override</h4><p><code>all_task_details</code> — if granted, admin sees ALL tasks across departments, not just their own</p></div>
+    </div>
+
+    <div class="callout">
+      <strong>Default Admin Bootstrap:</strong> When the platform is freshly installed, only the Main Admin can create the first delegated Admin. Once at least one Admin exists, that Admin can also create more Admins if they hold the <code>employees_edit</code> permission.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 10</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 11 — ISSUES TRACKER                          -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>09 · Issues</strong>Problem Tracker</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">⚠️ <span class="accent">Issues</span> Tracker</h1>
+    <p class="section-subtitle">A dedicated bug-tracker style module for hospital problems — equipment failure, supply shortage, facility issue, anything that needs follow-up.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Issues Page</div>
+      <div class="ss-hint">Filter by dept/priority/status · Resolve modal · Date-range export</div>
+    </div>
+    <div class="screenshot-caption">Issues list — filterable by department, status (open / in-progress / resolved), and priority.</div>
+
+    <h3 class="sub-title">Issue Lifecycle</h3>
+    <div class="flow">
+      <div class="flow-step"><span class="step-num">1</span><div class="step-icon">📝</div><div class="step-title">Report</div><div class="step-desc">Staff or admin files an issue with title, dept, priority, description</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">2</span><div class="step-icon">🔔</div><div class="step-title">Notify Admin</div><div class="step-desc">Bell notification sent to main admin immediately</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">3</span><div class="step-icon">▶️</div><div class="step-title">In Progress</div><div class="step-desc">Admin marks in-progress; assignee gets pinged</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">4</span><div class="step-icon">✅</div><div class="step-title">Resolved</div><div class="step-desc">Resolution remark + resolved-by saved</div></div>
+    </div>
+
+    <h3 class="sub-title">Three Entry Points</h3>
+    <ul class="feature-list">
+      <li><strong>ReportIssue.jsx</strong> — dedicated staff page, priority pre-selected from staff's department</li>
+      <li><strong>Issues.jsx</strong> — admin's master view, can edit/reassign/delete</li>
+      <li><strong>AllIssues.jsx</strong> — staff read-only view of all issues (transparency)</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Priority Coloring:</strong> HIGH issues use 🔴 red, MEDIUM uses 🟡 yellow, LOW uses 🟢 green. The Main Admin's bell shows HIGH issues with a red 🔴 icon prefix for instant visibility.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 11</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 12 — HANDOVER                                -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>10 · Handover</strong>Shift Transition &amp; Task Transfer</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📤 <span class="accent">Handover</span></h1>
+    <p class="section-subtitle">When a staff member is going off duty (or off for a few days), they hand over their active tasks to a colleague. The recipient must explicitly accept or reject — nothing is assumed.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Handover Form</div>
+      <div class="ss-hint">Pick colleague · Select tasks · Date range · Notes</div>
+    </div>
+    <div class="screenshot-caption">Handover creation — pick recipient, select tasks, set date range, add notes.</div>
+
+    <h3 class="sub-title">Two-Sided Flow</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>📤 Handover.jsx (Outgoing)</h4><p>Admin/staff creates a handover — picks recipient by name, selects tasks, sets start/end date, adds notes.</p></div>
+      <div class="feature-card green"><h4>📥 MyHandover.jsx (Incoming)</h4><p>Recipient sees incoming handovers, accepts or rejects with a mandatory remark (for rejection).</p></div>
+      <div class="feature-card gold"><h4>📊 Status Tracking</h4><p>Status: pending → accepted/rejected. Date-range check: upcoming / active / completed / old.</p></div>
+      <div class="feature-card purple"><h4>📧 Email Notifications</h4><p>Tasks email to recipient on acceptance. Response email to sender on any decision.</p></div>
+    </div>
+
+    <h3 class="sub-title">Date-Range Status Engine</h3>
+    <table class="data-table">
+      <tr><th>Status</th><th>When</th><th>Visual</th></tr>
+      <tr><td><span class="pill gold">UPCOMING</span></td><td>Today &lt; dateStart</td><td>🔵 Blue pill</td></tr>
+      <tr><td><span class="pill green">ACTIVE</span></td><td>dateStart ≤ Today ≤ dateEnd</td><td>🟢 Green pill</td></tr>
+      <tr><td><span class="pill">COMPLETED</span></td><td>Today &gt; dateEnd</td><td>✅ Grey pill</td></tr>
+      <tr><td><span class="pill red">OLD</span></td><td>No dateStart set</td><td>📋 Default</td></tr>
+    </table>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 12</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 13 — DELEGATION TRACKER                      -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>11 · Delegation</strong>Tracker &amp; Extension Workflow</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📤 <span class="accent">Delegation</span> Tracker</h1>
+    <p class="section-subtitle">For one-off tasks that don't fit the recurring template model. Admin delegates a specific task to a specific employee with a hard due date. Recipient can accept, mark done, or request an extension.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Delegation Tracker</div>
+      <div class="ss-hint">Status pills · Action buttons · Extension modal</div>
+    </div>
+    <div class="screenshot-caption">Delegation list — color-coded status pills, quick-action buttons, extension request UI.</div>
+
+    <h3 class="sub-title">Status Workflow</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>🟡 PENDING</h4><p>Awaiting recipient acceptance</p></div>
+      <div class="feature-card green"><h4>🟢 ACCEPTED</h4><p>Recipient has accepted, work in progress</p></div>
+      <div class="feature-card gold"><h4>✅ DONE</h4><p>Marked complete by recipient</p></div>
+      <div class="feature-card purple"><h4>🔄 EXTENSION-REQUESTED</h4><p>Recipient requested more time — awaiting admin</p></div>
+      <div class="feature-card" style="border-left-color: #c05a00;"><h4>🟠 EXTENDED</h4><p>Admin approved extension, new due date active</p></div>
+      <div class="feature-card red"><h4>🔴 REJECTED</h4><p>Admin rejected extension request</p></div>
+    </div>
+
+    <h3 class="sub-title">Extension Request Format</h3>
+    <p>Each extension request is stored as a JSON object inside the delegation's <code>extensionRequests</code> array:</p>
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:9pt; margin:3mm 0 5mm 0;">
+{ requestedAt: "2026-06-27T10:30:00Z",<br/>
+&nbsp;&nbsp;reason: "STAFF SHORTAGE",<br/>
+&nbsp;&nbsp;newDate: "2026-07-05" }
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 13</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 14 — CHECKLISTS & ESCALATION                 -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>12 · Checklists</strong>Ticketing &amp; Escalation</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">✅ <span class="accent">Checklists</span> &amp; Escalation</h1>
+    <p class="section-subtitle">Two related modules. Checklists are templates staff can adopt as their own task. Escalation is a chain-of-command workflow for urgent items.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Checklists</div>
+      <div class="ss-hint">Template cards · Adopt as my task · Quick-complete</div>
+    </div>
+    <div class="screenshot-caption">Checklists page showing pre-built task templates ready to be adopted.</div>
+
+    <h3 class="sub-title">Checklists</h3>
+    <ul class="feature-list">
+      <li><strong>Admin creates templates</strong> — like "Morning Ward Inspection" or "Daily Equipment Check"</li>
+      <li><strong>Staff self-assigns</strong> — clicks "Adopt" and the template becomes their personal task with a chosen schedule date</li>
+      <li><strong>Frequency inheritance</strong> — adopted tasks inherit the template's frequency (daily, weekly, etc.)</li>
+    </ul>
+
+    <h3 class="sub-title">Escalation Tracker</h3>
+    <p>When an issue or task can't be resolved at the staff level, it gets escalated up the chain. The escalation page shows:</p>
+    <div class="feature-grid">
+      <div class="feature-card red"><h4>🔴 P1 — Critical</h4><p>Patient safety, equipment failure. Immediate response required.</p></div>
+      <div class="feature-card gold"><h4>🟡 P2 — High</h4><p>Significant operational impact. Response within 4 hours.</p></div>
+      <div class="feature-card green"><h4>🟢 P3 — Standard</h4><p>Non-urgent improvements. Response within 24 hours.</p></div>
+      <div class="feature-card purple"><h4>⏱️ SLA Timer</h4><p>Each escalation has a countdown showing time-to-breach.</p></div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 14</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 15 — LIVE TRACKING & MIS REPORTS             -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>13 · Reports</strong>Live Tracking &amp; MIS</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📈 <span class="accent">Live Tracking</span> &amp; MIS</h1>
+    <p class="section-subtitle">Real-time visibility into who is doing what, plus management reports that can be exported to Excel for monthly reviews.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Live Tracking</div>
+      <div class="ss-hint">Per-employee status · Real-time clock · Color-coded load</div>
+    </div>
+    <div class="screenshot-caption">Live Tracking — shows each staff member's current task load and status in real time.</div>
+
+    <h3 class="sub-title">Live Tracking</h3>
+    <ul class="feature-list">
+      <li>Per-employee task counter (pending / in-progress / done)</li>
+      <li>Department grouping with mini sparklines</li>
+      <li>Color-coded overload warning (red if &gt;10 pending tasks)</li>
+      <li>Auto-refresh via realtime subscription</li>
+    </ul>
+
+    <h3 class="sub-title">MIS Reporting</h3>
+    <p>The MIS page aggregates data across all modules and provides:</p>
+    <table class="data-table">
+      <tr><th>Report</th><th>Source</th><th>Export</th></tr>
+      <tr><td>Task Completion Rate</td><td>tasks table</td><td>Excel</td></tr>
+      <tr><td>Issue Resolution Time</td><td>issues table</td><td>Excel</td></tr>
+      <tr><td>Department Workload</td><td>employees + tasks join</td><td>Excel</td></tr>
+      <tr><td>Handover History</td><td>handovers table</td><td>Excel</td></tr>
+      <tr><td>Delegation Outcomes</td><td>delegations table</td><td>Excel</td></tr>
+      <tr><td>Activity Audit Trail</td><td>activity-log table</td><td>Excel + PDF</td></tr>
+    </table>
+
+    <div class="callout">
+      <strong>Date-Range Filter:</strong> Every export supports a from/to date picker so monthly and quarterly reports can be generated without manual filtering.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 15</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 16 — MY TASKS (STAFF)                        -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>14 · My Tasks</strong>Employee Daily View</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📌 <span class="accent">My Tasks</span></h1>
+    <p class="section-subtitle">The staff member's home page. Shows everything assigned to them — pending, in-progress, and overdue — with quick-complete and mark-done actions.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — My Tasks</div>
+      <div class="ss-hint">Pending counter · Overdue badges · Tabbed views</div>
+    </div>
+    <div class="screenshot-caption">My Tasks — overdue tasks highlighted in red, today's tasks in green, completed grayed out.</div>
+
+    <h3 class="sub-title">The "What Shows as Pending" Logic</h3>
+    <p>A task appears in <strong>Pending</strong> when <em>all</em> of these are true:</p>
+    <ul class="feature-list">
+      <li><strong>Assigned to me</strong> — case-insensitive match against <code>assignedTo</code> array</li>
+      <li><strong>Status is <code>pending</code></strong> — not started, not done</li>
+      <li><strong>Not a grandchild</strong> — i.e. not an auto-generated sub-task</li>
+      <li><strong>Today ≥ schedDate</strong> — the scheduled date has arrived (or is in the past)</li>
+    </ul>
+
+    <h3 class="sub-title">Visual Indicators</h3>
+    <table class="data-table">
+      <tr><th>Situation</th><th>Display</th></tr>
+      <tr><td>Scheduled today</td><td><span class="pill green">📅 TODAY</span></td></tr>
+      <tr><td>Past schedDate, not done</td><td><span class="pill red">⚠️ OVERDUE — Due: &lt;date&gt;</span></td></tr>
+      <tr><td>Future schedDate</td><td>Hidden from pending (shown in Upcoming)</td></tr>
+      <tr><td>Done</td><td>Moves to Completed tab, greyed out</td></tr>
+    </table>
+
+    <div class="callout">
+      <strong>Counts in App Bar:</strong> The header's "My Tasks" badge shows the count of tasks in the Pending tab — including overdue. This way staff see their workload at a glance without opening the page.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 16</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 17 — ASSIGN TASK (SELF-ASSIGN)               -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>15 · Self-Assign</strong>Staff-Initiated Tasks</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🎯 <span class="accent">Assign Task</span> (Self)</h1>
+    <p class="section-subtitle">Sometimes staff know what needs to be done before admin assigns it. The self-assign page lets them pick a checklist template, schedule it, and start working immediately.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Assign Task Page</div>
+      <div class="ss-hint">Template picker · Date picker · Submit</div>
+    </div>
+    <div class="screenshot-caption">Self-assign page — pick a checklist template, choose a date, and submit to create your own task.</div>
+
+    <h3 class="sub-title">Self-Assign Workflow</h3>
+    <div class="flow">
+      <div class="flow-step"><span class="step-num">1</span><div class="step-icon">📋</div><div class="step-title">Pick Template</div><div class="step-desc">Choose from available checklists</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">2</span><div class="step-icon">📅</div><div class="step-title">Schedule</div><div class="step-desc">Pick a due date (defaults to today)</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">3</span><div class="step-icon">➕</div><div class="step-title">Create</div><div class="step-desc">Task added to My Tasks immediately</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><span class="step-num">4</span><div class="step-icon">✅</div><div class="step-title">Complete</div><div class="step-desc">Mark done when finished</div></div>
+    </div>
+
+    <div class="callout">
+      <strong>Auto-Repeat:</strong> If the picked template has a frequency (e.g. DAILY), the self-assigned task becomes the parent template and auto-generates future child tasks just like admin-created recurring tasks.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 17</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 18 — MY HANDOVER INBOX                       -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>16 · Inbox</strong>Incoming Handovers</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📥 <span class="accent">My Handover</span> Inbox</h1>
+    <p class="section-subtitle">The staff's incoming-handover inbox. Shows handovers sent to them with pending / accepted / rejected status, and lets them respond with a single click.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — My Handover Inbox</div>
+      <div class="ss-hint">Awaiting-response card · Accept/Reject buttons · Remark field</div>
+    </div>
+    <div class="screenshot-caption">Inbox view — yellow border for pending, green for accepted, red for rejected.</div>
+
+    <h3 class="sub-title">Card States</h3>
+    <div class="feature-grid">
+      <div class="feature-card gold"><h4>⏳ AWAITING YOUR RESPONSE</h4><p>Yellow left border. Shows Accept / Reject buttons and a remark field. Remark is required for rejection.</p></div>
+      <div class="feature-card green"><h4>✅ ACCEPTED</h4><p>Green border. Shows your decision remark. Tasks from the handover are now in your pending list.</p></div>
+      <div class="feature-card red"><h4>❌ REJECTED</h4><p>Red border. Shows your rejection remark. The sender has been notified.</p></div>
+      <div class="feature-card purple"><h4>🚫 CANCELLED</h4><p>Grey border. Sender cancelled before you responded.</p></div>
+    </div>
+
+    <h3 class="sub-title">Side Effects on Accept</h3>
+    <ul class="feature-list">
+      <li>Admin bell gets notified: "✅ &lt;name&gt; accepted handover from &lt;sender&gt;"</li>
+      <li>Task list inside the handover is emailed to the recipient (if email exists)</li>
+      <li>Sender gets an email response with the decision</li>
+      <li>If recipient has no email, a popup collects it and saves it to their profile</li>
+    </ul>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 18</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 19 — MY DELEGATIONS                          -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>17 · My Delegations</strong>Tasks Assigned to Me</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📋 <span class="accent">My Delegations</span></h1>
+    <p class="section-subtitle">The staff's view of one-off tasks delegated to them. Accept, mark done, or request more time — all from a single page.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — My Delegations</div>
+      <div class="ss-hint">Accept button · Mark Done · Request Extension</div>
+    </div>
+    <div class="screenshot-caption">My Delegations — color-coded status with quick-action buttons.</div>
+
+    <h3 class="sub-title">Available Actions by Status</h3>
+    <table class="data-table">
+      <tr><th>Status</th><th>Available Actions</th></tr>
+      <tr><td><span class="pill gold">PENDING</span></td><td>▶ Accept · ❌ Decline</td></tr>
+      <tr><td><span class="pill green">ACCEPTED</span></td><td>✅ Mark Done · 🔄 Request Extension</td></tr>
+      <tr><td><span class="pill purple">EXTENSION-REQUESTED</span></td><td>⏳ Awaiting admin (no actions)</td></tr>
+      <tr><td><span class="pill" style="background:#fde8e8; color:#c05a00;">EXTENDED</span></td><td>✅ Mark Done (new due date active)</td></tr>
+      <tr><td><span class="pill green">DONE</span></td><td>Read-only (shows completion date)</td></tr>
+    </table>
+
+    <div class="callout">
+      <strong>Extension Reason Visibility:</strong> Once admin approves an extension, the recipient sees the original reason they gave, the new date, and a "EXTENSION GRANTED" badge — so they always know their context.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 19</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 20 — BELL NOTIFICATIONS                      -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>18 · Notifications</strong>Bell Icon &amp; Notices System</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🔔 <span class="accent">Bell</span> Notifications</h1>
+    <p class="section-subtitle">The central notification system. Every important event in the system fires a notification that lands in the bell of the right recipient.</p>
+
+    <div class="screenshot">
+      <div class="ss-icon">🖼️</div>
+      <div class="ss-label">SCREENSHOT — Bell Dropdown</div>
+      <div class="ss-hint">Unread badge · Type icon · Subject · Time</div>
+    </div>
+    <div class="screenshot-caption">Bell dropdown — unread count badge, scrollable list, click to mark as read.</div>
+
+    <h3 class="sub-title">Notification Types (10+)</h3>
+    <table class="data-table">
+      <tr><th>Type</th><th>Icon</th><th>Recipient</th></tr>
+      <tr><td>task_completed</td><td>✅</td><td>Main Admin / Task creator</td></tr>
+      <tr><td>task_overdue</td><td>⚠️</td><td>Main Admin</td></tr>
+      <tr><td>extension_requested</td><td>🔄</td><td>Main Admin</td></tr>
+      <tr><td>extension_approved</td><td>✅</td><td>Task assignee</td></tr>
+      <tr><td>handover_received</td><td>📤</td><td>Recipient</td></tr>
+      <tr><td>handover_response</td><td>📥</td><td>Sender</td></tr>
+      <tr><td>delegation_status</td><td>🔄</td><td>Main Admin</td></tr>
+      <tr><td>delegation_completed</td><td>✅</td><td>Main Admin</td></tr>
+      <tr><td>issue_reported</td><td>🔴</td><td>Main Admin</td></tr>
+      <tr><td>issue_resolved</td><td>✅</td><td>Main Admin</td></tr>
+      <tr><td>dept_change_accepted</td><td>🔀</td><td>Employee + Admin</td></tr>
+      <tr><td>admin_alert</td><td>🚨</td><td>Main Admin</td></tr>
+    </table>
+
+    <h3 class="sub-title">Reusable Helper</h3>
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:8.5pt; margin:3mm 0;">
+// In src/utils/index.js<br/>
+export async function notifyAdmins({<br/>
+&nbsp;&nbsp;notices, save,<br/>
+&nbsp;&nbsp;subject, message, type, meta<br/>
+}) {<br/>
+&nbsp;&nbsp;const alert = buildAdminAlert({ subject, message, type, meta });<br/>
+&nbsp;&nbsp;await save('hops-notices', [...(notices || []), alert]);<br/>
+}
+    </div>
+
+    <div class="callout">
+      <strong>Main Admin Special Handling:</strong> The bell for the Main Admin uses a special filter that catches ALL notifications tagged with <code>toEmpId: 'MAINADMIN'</code>. This is the only role where one bell shows everything from the entire system.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 20</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 21 — ACTIVITY LOG + TRASH + LINKS             -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>19 · Utility</strong>Activity Log, Trash &amp; Links</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🧰 <span class="accent">Utility</span> Modules</h1>
+    <p class="section-subtitle">Three supporting modules that complete the platform — Activity Log for audit, Trash for safe recovery, and Links for quick-access bookmarks.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card"><h4>📜 Activity Log</h4><p>Every create/update/delete action appends a row to the activity log with actor, action type, target entity, and timestamp. Filterable by date range, user, and module.</p></div>
+      <div class="feature-card green"><h4>🗑️ Trash (Soft Delete)</h4><p>Deleted items aren't permanently removed. They sit in Trash for 30 days and can be restored with one click. Each entity type has its own trash view.</p></div>
+      <div class="feature-card gold"><h4>🔗 Links Box</h4><p>Quick-access bookmark manager. Admin can post useful URLs (SOPs, vendor portals, regulatory sites) that all staff can see from their dashboard.</p></div>
+      <div class="feature-card purple"><h4>⚙️ Settings</h4><p>Theme toggle (dark/light), notification preferences, password change, and platform-level configuration.</p></div>
+    </div>
+
+    <h3 class="sub-title">Activity Log — Sample Entries</h3>
+    <table class="data-table">
+      <tr><th>When</th><th>Who</th><th>Action</th><th>Target</th></tr>
+      <tr><td>2026-06-27 10:30</td><td>Main Admin</td><td>TASK CREATED</td><td>Daily Equipment Check</td></tr>
+      <tr><td>2026-06-27 10:45</td><td>PRIYA</td><td>TASK COMPLETED</td><td>Daily Equipment Check</td></tr>
+      <tr><td>2026-06-27 11:00</td><td>MOHAN</td><td>EXTENSION REQUESTED</td><td>Inventory Audit</td></tr>
+      <tr><td>2026-06-27 11:15</td><td>Main Admin</td><td>EXTENSION APPROVED</td><td>Inventory Audit (new: Jul 5)</td></tr>
+    </table>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 21</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 22 — GETTING STARTED                         -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>20 · Setup</strong>Getting Started</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🚀 <span class="accent">Getting</span> Started</h1>
+    <p class="section-subtitle">From a fresh clone to a running local instance in under 5 minutes.</p>
+
+    <h3 class="sub-title">Prerequisites</h3>
+    <ul class="feature-list">
+      <li><strong>Node.js 18+</strong> and <strong>npm 9+</strong></li>
+      <li>A <strong>Supabase</strong> project (free tier is enough)</li>
+      <li>A modern browser (Chrome 110+, Firefox 110+, Safari 16+)</li>
+    </ul>
+
+    <h3 class="sub-title">Install &amp; Run</h3>
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:9pt; margin:3mm 0 5mm 0;">
+# 1. Clone the repository<br/>
+git clone https://github.com/prem-prakash/hospital-ops.git<br/>
+cd hospital-ops<br/>
+<br/>
+# 2. Install dependencies<br/>
+npm install<br/>
+<br/>
+# 3. Set up environment variables<br/>
+cp .env.example .env.local<br/>
+# Edit .env.local with your Supabase URL and anon key<br/>
+<br/>
+# 4. Apply database schema<br/>
+# Open Supabase SQL editor, paste SQL_SCHEMA.sql, run it<br/>
+<br/>
+# 5. Start the dev server<br/>
+npm run dev<br/>
+<br/>
+# 6. Open the app<br/>
+# http://localhost:5173<br/>
+# Default Main Admin login is in src/constants/index.js
+    </div>
+
+    <h3 class="sub-title">Production Build</h3>
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:9pt; margin:3mm 0 5mm 0;">
+npm run build      # builds to /dist<br/>
+npm run preview    # serves the build locally<br/>
+# Deploy /dist to any static host (Vercel, Netlify, Cloudflare Pages)
+    </div>
+
+    <h3 class="sub-title">First Login</h3>
+    <ol style="font-size:10.5pt; padding-left:5mm;">
+      <li>Navigate to <code>http://localhost:5173</code></li>
+      <li>Log in as <strong>Main Admin</strong> using the credentials in <code>src/constants/index.js</code></li>
+      <li>Go to <strong>Departments</strong> and create your hospital's departments</li>
+      <li>Go to <strong>Staff</strong> and add employees to each department</li>
+      <li>Optionally create <strong>Admin</strong> users with scoped permissions</li>
+      <li>Start assigning tasks!</li>
+    </ol>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 22</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 23 — FOLDER STRUCTURE                        -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>21 · Architecture</strong>Folder Structure</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🗂️ <span class="accent">Folder</span> Structure</h1>
+    <p class="section-subtitle">A clean React feature-based layout. Pages, contexts, services, and utilities are all clearly separated.</p>
+
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:5mm; border-radius:4px; font-family:'Courier New',monospace; font-size:8.5pt; line-height:1.5;">
+hospital-ops/<br/>
+├── <strong>index.html</strong>                      # HTML entry<br/>
+├── <strong>package.json</strong>                   # Dependencies<br/>
+├── <strong>vite.config.js</strong>                 # Vite config<br/>
+├── <strong>tailwind.config.js</strong>             # Tailwind config<br/>
+├── <strong>SQL_SCHEMA.sql</strong>                 # Database schema<br/>
+├── <strong>public/</strong><br/>
+└── <strong>src/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>main.jsx</strong>           # React mount<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>App.jsx</strong>            # Routes<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>index.css</strong>          # Global CSS<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>constants/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── index.js                # MAIN_ADMIN, ALL_PERMS, FREQ<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>utils/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── index.js                # Helpers + notifyAdmins<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>lib/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── emailService.js          # Handover/deputation emails<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>context/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├── AuthContext.jsx          # Login state<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── AppContext.jsx           # Global state + Supabase sync<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>components/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>layout/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── AppLayout.jsx        # Header, sidebar, bell<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── <strong>common/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Badge.jsx           # DeptTag, PriorityBadge<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Modal.jsx           # Reusable modal<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Alert.jsx           # EmptyState, Alert<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Pagination.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── DateRangeExportModal.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;├── <strong>hooks/</strong><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└── useTaskNotifications.js<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;└── <strong>pages/</strong>                   # 24 page components<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Login.jsx, Dashboard.jsx, Tasks.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── MyTasks.jsx, AssignTask.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Departments.jsx, Staff.jsx, Admins.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Handover.jsx, MyHandover.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Delegations.jsx, MyDelegations.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Issues.jsx, AllIssues.jsx, ReportIssue.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Checklists.jsx, Escalation.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── MisReporting.jsx, LiveTracking.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── ActivityLog.jsx, Trash.jsx<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Notices.jsx, Settings.jsx, Links.jsx
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 23</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 24 — DATABASE SCHEMA                         -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>22 · Database</strong>Schema Reference</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🗄️ <span class="accent">Database</span> Schema</h1>
+    <p class="section-subtitle">Supabase (PostgreSQL) tables — every collection stored as a Postgres table with realtime publication enabled.</p>
+
+    <table class="data-table">
+      <tr><th>Table</th><th>Purpose</th><th>Key Columns</th></tr>
+      <tr><td><code>employees</code></td><td>Staff directory</td><td>name, dept, role, email, status</td></tr>
+      <tr><td><code>departments</code></td><td>Org units</td><td>name, password, head_emp_id</td></tr>
+      <tr><td><code>tasks</code></td><td>All tasks (parent + child)</td><td>name, schedDate, freq, assignedTo[], status, extensions[], parentTaskId</td></tr>
+      <tr><td><code>handovers</code></td><td>Shift handovers</td><td>fromName, toName, taskIds[], dateStart, dateEnd, status, decisionRemark</td></tr>
+      <tr><td><code>delegations</code></td><td>One-off delegations</td><td>task, doerName, dueDate, status, extensionRequests[]</td></tr>
+      <tr><td><code>issues</code></td><td>Problem reports</td><td>title, dept, priority, reporter, resolveRemark, resolvedAt</td></tr>
+      <tr><td><code>checklists</code></td><td>Task templates</td><td>name, freq, instructions, category</td></tr>
+      <tr><td><code>notices</code></td><td>Bell notifications</td><td>toEmpId, subject, message, type, isRead, meta</td></tr>
+      <tr><td><code>activity_log</code></td><td>Audit trail</td><td>by, action, target, details, at</td></tr>
+      <tr><td><code>links</code></td><td>Quick-access URLs</td><td>title, url, category</td></tr>
+      <tr><td><code>trash</code></td><td>Soft-deleted items</td><td>entity_type, entity_id, payload, deleted_at</td></tr>
+      <tr><td><code>admins</code></td><td>Delegated admin accounts</td><td>name, username, password_hash, perms[]</td></tr>
+    </table>
+
+    <h3 class="sub-title">Schema Migration Pattern</h3>
+    <p>New columns are added via idempotent <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code> migrations inside <code>SQL_SCHEMA.sql</code> so re-running the file is safe:</p>
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:8.5pt; margin:3mm 0;">
+ALTER TABLE tasks<br/>
+&nbsp;&nbsp;ADD COLUMN IF NOT EXISTS extensions JSONB DEFAULT '[]';<br/>
+<br/>
+ALTER TABLE tasks<br/>
+&nbsp;&nbsp;ADD COLUMN IF NOT EXISTS parent_task_id TEXT;
+    </div>
+
+    <h3 class="sub-title">Realtime Publication</h3>
+    <p>The Supabase realtime channel is enabled per-table. When <code>hops-tasks</code> changes, every connected client receives a <code>postgres_changes</code> event within ~200ms.</p>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 24</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 25 — REAL-TIME SYNC                          -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>23 · Real-time</strong>Sync &amp; Offline Cache</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">⚡ <span class="accent">Real-time</span> Sync</h1>
+    <p class="section-subtitle">The most technically interesting part of the system. Hospital Ops combines three storage layers to deliver a fast, offline-capable, multi-device experience.</p>
+
+    <h3 class="sub-title">Three-Layer Architecture</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>1️⃣ Supabase (Source of Truth)</h4><p>PostgreSQL tables with realtime publication. Every write hits Supabase first via the REST API.</p></div>
+      <div class="feature-card green"><h4>2️⃣ LocalStorage (Offline Cache)</h4><p>Every successful fetch is mirrored to <code>hops-xxx</code> keys. App reads from cache first for instant render.</p></div>
+      <div class="feature-card gold"><h4>3️⃣ In-Memory (Live State)</h4><p>React Context holds the live array. Realtime subscriptions patch the array in place.</p></div>
+    </div>
+
+    <h3 class="sub-title">Sync Race Condition Fix</h3>
+    <p>A subtle bug existed: when a user creates a task locally, the optimistic state hits the UI immediately. But the realtime channel then fires an event that overwrites the local state with stale data. The fix uses a <code>hops-last-local-write</code> timestamp:</p>
+    <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:8.5pt; margin:3mm 0;">
+// On save:<br/>
+ls.set('hops-last-local-write', { key: hopKey, at: Date.now() });<br/>
+<br/>
+// On realtime event:<br/>
+if (eventTime &lt; lastLocalWriteAt) {<br/>
+&nbsp;&nbsp;// Preserve local pending rows — don't let server race overwrite them<br/>
+}
+    </div>
+
+    <div class="callout">
+      <strong>Offline Mode:</strong> If the network drops, the app keeps working from the LocalStorage cache. When network returns, queued writes flush to Supabase and the cache re-syncs.
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 25</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 26 — SECURITY & ROADMAP                      -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="page-meta"><strong>24 · Future</strong>Security &amp; Roadmap</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">🛡️ <span class="accent">Security</span> &amp; Roadmap</h1>
+    <p class="section-subtitle">Current security posture and the planned evolution of the platform.</p>
+
+    <h3 class="sub-title">Current Security</h3>
+    <div class="feature-grid">
+      <div class="feature-card"><h4>🔑 Anon-Key Supabase Auth</h4><p>Only the Supabase anon key is shipped to the browser. All write paths go through Row-Level Security policies.</p></div>
+      <div class="feature-card green"><h4>🛡️ Role-Based UI Guards</h4><p>Every page checks <code>currentRole</code> and <code>hasPerm(...)</code> before rendering sensitive actions.</p></div>
+      <div class="feature-card gold"><h4>⏱️ Inactivity Auto-Logout</h4><p>5-minute inactivity triggers logout to prevent unattended access.</p></div>
+      <div class="feature-card red"><h4>🚫 No Service-Role in Client</h4><p>The Supabase service-role key must NEVER be placed in <code>public/</code> or bundled into the client. Diagnostic scripts must read from server-side env vars.</p></div>
+    </div>
+
+    <h3 class="sub-title">🔮 Roadmap (Next 6 Months)</h3>
+    <table class="data-table">
+      <tr><th>Quarter</th><th>Milestone</th><th>Value</th></tr>
+      <tr><td>Q3 2026</td><td>Supabase Auth migration</td><td>Replace hardcoded creds with proper email/password auth + magic links</td></tr>
+      <tr><td>Q3 2026</td><td>Row-Level Security policies</td><td>Enforce data isolation at DB level, not just UI</td></tr>
+      <tr><td>Q4 2026</td><td>Mobile PWA</td><td>Install as phone app, push notifications via Service Worker</td></tr>
+      <tr><td>Q4 2026</td><td>SMS alerts</td><td>Twilio integration for overdue critical tasks</td></tr>
+      <tr><td>Q1 2027</td><td>Multi-hospital tenancy</td><td>Single deployment, multiple hospital databases</td></tr>
+      <tr><td>Q1 2027</td><td>Custom dashboards</td><td>Drag-drop KPI builder for admin</td></tr>
+      <tr><td>Q2 2027</td><td>AI suggestions</td><td>Auto-suggest task delegation based on workload patterns</td></tr>
+      <tr><td>Q2 2027</td><td>Audit log export</td><td>HIPAA-style compliance reports with full chain-of-custody</td></tr>
+    </table>
+
+    <div class="callout">
+      <strong>Open Source:</strong> Hospital Ops is built to be self-hosted. The entire codebase, schema, and seed scripts are included. A hospital IT team can clone, deploy, and own their own instance with zero vendor lock-in.
+    </div>
+
+    <h3 class="sub-title">🙏 Closing Note</h3>
+    <p>This platform was built to replace scattered registers, WhatsApp groups, and memory-based task tracking in hospital operations. Every screen, every notification, every permission toggle exists because a real hospital admin needed it. Thank you for exploring Hospital Ops.</p>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>Page 26</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- HIDDEN — SCREENSHOT INSTRUCTIONS (for owner only)  -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="hidden-section">
+  <h2>📸 Screenshot Instruction List (Owner Only — Not Printed)</h2>
+  <p>Replace each <code>.screenshot</code> placeholder with an actual screenshot. Recommended resolution: 1400×900 minimum.</p>
+  <ol>
+    <li><strong>Login (Page 5):</strong> Open <code>/login</code>, screenshot the full page in light mode showing the 3D tilted card.</li>
+    <li><strong>Dashboard (Page 6):</strong> Login as Main Admin, screenshot the full dashboard with KPI cards and charts.</li>
+    <li><strong>Manage Tasks (Page 7):</strong> Go to <code>/tasks</code>, show the task list with frequency pills and overdue badges.</li>
+    <li><strong>Departments (Page 8):</strong> Go to <code>/departments</code>, show the card grid with department passwords hidden.</li>
+    <li><strong>Staff (Page 9):</strong> Go to <code>/employees</code>, show the directory table with department filter active.</li>
+    <li><strong>Admins (Page 10):</strong> Go to <code>/employees</code> admin tab or <code>/admins</code>, show the permission toggles.</li>
+    <li><strong>Issues (Page 11):</strong> Go to <code>/issues</code>, show filter dropdowns and a few rows with different priorities.</li>
+    <li><strong>Handover (Page 12):</strong> Go to <code>/handover</code>, show the form with one task selected and date range filled.</li>
+    <li><strong>Delegation (Page 13):</strong> Go to <code>/delegation</code>, show the list with status pills in different colors.</li>
+    <li><strong>Checklists (Page 14):</strong> Go to <code>/checklist</code>, show the template cards.</li>
+    <li><strong>Live Tracking (Page 15):</strong> Go to <code>/tracking</code>, show per-employee status rows.</li>
+    <li><strong>My Tasks (Page 16):</strong> Login as staff, go to <code>/my-tasks</code>, show the Pending tab with an OVERDUE badge.</li>
+    <li><strong>Assign Task (Page 17):</strong> From staff view, go to <code>/assign-task</code>, show template dropdown.</li>
+    <li><strong>My Handover (Page 18):</strong> From staff view, go to <code>/my-handover</code>, show a pending handover card.</li>
+    <li><strong>My Delegations (Page 19):</strong> From staff view, go to <code>/my-delegation</code>, show accepted and extension-requested rows.</li>
+    <li><strong>Bell (Page 20):</strong> Click the bell icon in the header, screenshot the dropdown showing 3-4 unread notifications.</li>
+  </ol>
+</div>
+
+</body>
+</html>
