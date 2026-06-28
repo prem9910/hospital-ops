@@ -4,16 +4,32 @@ import { DateRangePicker } from './DateRangePicker';
 import { DeptTag } from './Badge';
 import { fDate, currentMonthRange, inDateRange } from '../../utils';
 
+// Per-card column spec for delegations. The Status dropdown was removed
+// because the dashboard card's preFilter already scopes to one status
+// (pending / accepted / done / overdue) — an in-modal Status filter
+// would contradict the card's intent.
+//
+// Supported columns:
+//   'Task' | 'Doer' | 'Dept' | 'Status' | 'Due Date' | 'Created' | 'Ext.' | 'Action'
+const DEFAULT_COLUMNS = ['Task', 'Doer', 'Due Date', 'Action'];
+
 // Drill-down for delegations. Date field can be:
 //   'createdAt'  → when the delegation was issued (YYYY-MM-DD)
 //   'dueDate'    → the deadline (YYYY-MM-DD)
 //   'actualDate' → when it was marked done (YYYY-MM-DD, may be empty)
-export function DelegationsDrilldownModal({ open, onClose, delegations = [], depts = [], preFilter = 'all', title = '📤 Delegations' }) {
+export function DelegationsDrilldownModal({
+  open, onClose,
+  delegations = [], depts = [],
+  preFilter = 'all',
+  title = '📤 Delegations',
+  columns = DEFAULT_COLUMNS,
+}) {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
-  const [status, setStatus] = useState('');
   const initialRange = useMemo(() => currentMonthRange(), []);
   const [dateRange, setDateRange] = useState({ preset: 'currentMonth', from: initialRange.from, to: initialRange.to, field: 'createdAt' });
+  // Selected row → opens the inline read-only detail modal below.
+  const [selectedDel, setSelectedDel] = useState(null);
 
   const preFiltered = useMemo(() => {
     switch (preFilter) {
@@ -30,13 +46,12 @@ export function DelegationsDrilldownModal({ open, onClose, delegations = [], dep
     return preFiltered
       .filter((d) => !q || (d.task || '').toLowerCase().includes(q) || (d.remarks || '').toLowerCase().includes(q))
       .filter((d) => !dept || d.dept === dept)
-      .filter((d) => !status || d.status === status)
       .filter((d) => inDateRange(d[dateRange.field], dateRange.from, dateRange.to))
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  }, [preFiltered, search, dept, status, dateRange]);
+  }, [preFiltered, search, dept, dateRange]);
 
   function clearFilters() {
-    setSearch(''); setDept(''); setStatus('');
+    setSearch(''); setDept('');
     const r = currentMonthRange();
     setDateRange({ preset: 'currentMonth', from: r.from, to: r.to, field: 'createdAt' });
   }
@@ -55,23 +70,52 @@ export function DelegationsDrilldownModal({ open, onClose, delegations = [], dep
     );
   }
 
+  // Per-column cell renderer for delegations.
+  function renderCell(col, d) {
+    switch (col) {
+      case 'Task':
+        return (
+          <td style={{ ...TD, fontWeight: 700, maxWidth: 240, color: d.task ? '#0b1e3d' : '#c0392b' }}>
+            {d.task || '— Untitled task —'}
+            {d.remarks && <div style={{ fontSize: 10.5, color: '#6b7a90', fontWeight: 500, marginTop: 2 }}>{d.remarks.length > 50 ? d.remarks.slice(0, 50) + '…' : d.remarks}</div>}
+          </td>
+        );
+      case 'Doer':
+        return <td style={{ ...TD, fontSize: 11 }}>{d.doerName}</td>;
+      case 'Dept':
+        return <td style={TD}><DeptTag name={d.dept} /></td>;
+      case 'Status':
+        return <td style={TD}><StatusPill s={d.status} /></td>;
+      case 'Due Date':
+        return <td style={{ ...TD, fontSize: 11, whiteSpace: 'nowrap', color: '#0d7377', fontWeight: 700 }}>{fDate(d.dueDate)}</td>;
+      case 'Created':
+        return <td style={{ ...TD, fontSize: 11, color: '#6b7a90' }}>{fDate(d.createdAt)}</td>;
+      case 'Ext.':
+        return <td style={{ ...TD, fontSize: 11, color: '#6d28d9', fontWeight: 800 }}>{(d.extensionRequests || d.extensions || []).length}</td>;
+      case 'Action':
+        return (
+          <td style={TD}>
+            <button
+              onClick={() => setSelectedDel(d)}
+              style={{ padding: '4px 12px', borderRadius: 6, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800 }}
+            >
+              👁 View
+            </button>
+          </td>
+        );
+      default:
+        return <td style={TD}>—</td>;
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} title={title} maxWidth="max-w-2xl">
-      {/* Filter row */}
+      {/* Filter row — Status dropdown removed: preFilter already scopes rows. */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK / REMARKS…" style={{ ...IS, flex: 1, minWidth: 160 }} />
         <select value={dept} onChange={(e) => setDept(e.target.value)} style={IS}>
           <option value="">ALL DEPTS</option>
           {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} style={IS}>
-          <option value="">ALL STATUS</option>
-          <option value="pending">PENDING</option>
-          <option value="accepted">ACCEPTED</option>
-          <option value="done">DONE</option>
-          <option value="extension-requested">EXT. REQ.</option>
-          <option value="extended">EXTENDED</option>
-          <option value="rejected">REJECTED</option>
         </select>
         <button onClick={clearFilters} style={{ ...IS, cursor: 'pointer', color: '#0d7377', borderColor: '#0d7377', background: 'white' }}>↺ Clear</button>
       </div>
@@ -98,12 +142,12 @@ export function DelegationsDrilldownModal({ open, onClose, delegations = [], dep
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table — columns come from the per-card `columns` prop. */}
       <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
             <tr>
-              {['Task', 'Doer', 'Dept', 'Status', 'Due Date', 'Created', 'Ext.'].map((h) => (
+              {columns.map((h) => (
                 <th key={h} style={TH}>{h}</th>
               ))}
             </tr>
@@ -111,27 +155,76 @@ export function DelegationsDrilldownModal({ open, onClose, delegations = [], dep
           <tbody>
             {rows.length ? rows.map((d) => (
               <tr key={d.id} style={{ background: 'white', borderBottom: '1px solid #f3f7fc' }}>
-                <td style={{ ...TD, fontWeight: 700, maxWidth: 240, color: d.task ? '#0b1e3d' : '#c0392b' }}>
-                  {d.task || '— Untitled task —'}
-                  {d.remarks && <div style={{ fontSize: 10.5, color: '#6b7a90', fontWeight: 500, marginTop: 2 }}>{d.remarks.length > 50 ? d.remarks.slice(0, 50) + '…' : d.remarks}</div>}
-                </td>
-                <td style={{ ...TD, fontSize: 11 }}>{d.doerName}</td>
-                <td style={TD}><DeptTag name={d.dept} /></td>
-                <td style={TD}><StatusPill s={d.status} /></td>
-                <td style={{ ...TD, fontSize: 11, whiteSpace: 'nowrap', color: '#0d7377', fontWeight: 700 }}>{fDate(d.dueDate)}</td>
-                <td style={{ ...TD, fontSize: 11, color: '#6b7a90' }}>{fDate(d.createdAt)}</td>
-                <td style={{ ...TD, fontSize: 11, color: '#6d28d9', fontWeight: 800 }}>{(d.extensionRequests || d.extensions || []).length}</td>
+                {columns.map((col) => renderCell(col, d))}
               </tr>
             )) : (
-              <tr><td colSpan={7} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No delegations match the selected filters.</td></tr>
+              <tr><td colSpan={columns.length} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No delegations match the selected filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <div style={{ marginTop: 10, fontSize: 10.5, color: '#6b7a90' }}>
-        💡 For full delegation details and actions, open the <strong>Delegation Tracker</strong> page.
-      </div>
+      {/* Inline read-only delegation detail — opened by the row's View button.
+          Lives at the same level as the drilldown modal; closes on backdrop
+          click. There is no shared DelegationDetailModal yet — this is a
+          small inline panel scoped to the dashboard drilldown. */}
+      <Modal open={!!selectedDel} onClose={() => setSelectedDel(null)} title={selectedDel?.task || 'Delegation'} maxWidth="max-w-md">
+        {selectedDel && (
+          <DelegationDetailPanel d={selectedDel} />
+        )}
+      </Modal>
     </Modal>
+  );
+}
+
+// Read-only delegation panel — inline helper inside the drilldown. Shows
+// every field on a delegation record. Kept local (not extracted) because
+// only this modal uses it.
+function DelegationDetailPanel({ d }) {
+  const TD = { padding: '9px 12px', verticalAlign: 'middle', fontSize: 12 };
+  const LBL = { fontSize: 10.5, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 100 };
+  return (
+    <div>
+      <div style={{ background: '#f8fbff', borderRadius: 9, padding: '12px 14px', marginBottom: 10, border: '1px solid #d8e2ef' }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>📋 Delegation</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Task</div>
+          <div style={{ ...TD, flex: 1, fontWeight: 700 }}>{d.task || '—'}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Doer</div>
+          <div style={{ ...TD, flex: 1 }}>{d.doerName || '—'}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Department</div>
+          <div style={{ ...TD, flex: 1 }}><DeptTag name={d.dept} /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Status</div>
+          <div style={{ ...TD, flex: 1 }}>{d.status || '—'}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Due Date</div>
+          <div style={{ ...TD, flex: 1, color: '#0d7377', fontWeight: 700 }}>{fDate(d.dueDate)}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Created</div>
+          <div style={{ ...TD, flex: 1 }}>{fDate(d.createdAt)}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+          <div style={LBL}>Extensions</div>
+          <div style={{ ...TD, flex: 1 }}>{(d.extensionRequests || d.extensions || []).length}</div>
+        </div>
+      </div>
+      {d.remarks && (
+        <div style={{ background: '#f8fbff', borderRadius: 9, padding: '12px 14px', marginBottom: 10, border: '1px solid #d8e2ef' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>📝 Remarks</div>
+          <div style={{ fontSize: 13, color: '#1a2535', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{d.remarks}</div>
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: '#6b7a90' }}>
+        💡 For full delegation actions (accept / reject / request extension), open the <strong>Delegation Tracker</strong> page.
+      </div>
+    </div>
   );
 }

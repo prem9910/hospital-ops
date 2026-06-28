@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
-import { DeptTag, PriorityBadge } from './Badge';
+import { DeptTag } from './Badge';
+import { TaskDetailModal } from './TaskDetailModal';
 import { wasCompletedLate, fDate, currentMonthRange, inDateRange, toDay } from '../../utils';
 
 // "Pending and due today" — matches the dashboard pending card so the
@@ -14,19 +15,30 @@ const isCurrentDatePending = (t) => {
   return t.schedDate <= toDay();
 };
 
-// Drill-down for tasks. Opened from a dashboard card click. The card's
-// pre-filter narrows the initial dataset (e.g. "Delayed" card → only delayed
-// tasks); the user can then layer search/dept/status/priority/date filters on
-// top inside the modal. Date filtering respects the user's choice of field
-// (created / lastDone / schedDate) so they can ask different questions of the
-// same data without leaving the popup.
-export function TasksDrilldownModal({ open, onClose, tasks = [], depts = [], preFilter = 'all', title = '📋 Tasks' }) {
+// Per-card column spec for tasks. Each dashboard card passes its own list,
+// so the popup shows ONLY the data that matches that card's category —
+// Status and Priority dropdowns are intentionally absent (the card's
+// preFilter already scopes the rows, an in-modal Status dropdown would
+// contradict that scope).
+//
+// Supported columns:
+//   'Sched. Date' | 'Task' | 'Done By' | 'Assigned' | 'Action'
+const DEFAULT_COLUMNS = ['Sched. Date', 'Task', 'Done By', 'Action'];
+
+export function TasksDrilldownModal({
+  open, onClose,
+  tasks = [], depts = [],
+  preFilter = 'all',
+  title = '📋 Tasks',
+  columns = DEFAULT_COLUMNS,
+}) {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
-  const [status, setStatus] = useState('');
-  const [priority, setPriority] = useState('');
   const initialRange = useMemo(() => currentMonthRange(), []);
   const [dateRange, setDateRange] = useState({ preset: 'currentMonth', from: initialRange.from, to: initialRange.to, field: 'created' });
+  // Selected row → opens the read-only TaskDetailModal so the user can
+  // see every field on the task without leaving the dashboard popup.
+  const [selectedTask, setSelectedTask] = useState(null);
 
   // 1. Apply preFilter from the card
   const preFiltered = useMemo(() => {
@@ -36,22 +48,20 @@ export function TasksDrilldownModal({ open, onClose, tasks = [], depts = [], pre
       case 'delayed':   return tasks.filter((t) => t.status === 'done' &&  wasCompletedLate(t));
       // "Pending" drill-down matches the dashboard pending card scope:
       // current-date pending only. Upcoming tasks can still be explored by
-      // picking Status=Pending on the "all" drill-down or by widening the
-      // date range on the schedDate field.
+      // widening the date range on the schedDate field.
       case 'pending':   return tasks.filter(isCurrentDatePending);
       case 'high':      return tasks.filter((t) => t.priority === 'high');
       default:          return tasks;
     }
   }, [tasks, preFilter]);
 
-  // 2-4. Layer search + selects + date range
+  // 2-4. Layer search + dept + date range. Status/Priority dropdowns were
+  // removed because the card's preFilter already scopes the rows.
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return preFiltered
       .filter((t) => !q || (t.name || '').toLowerCase().includes(q))
       .filter((t) => !dept || t.dept === dept)
-      .filter((t) => !status || t.status === status)
-      .filter((t) => !priority || t.priority === priority)
       .filter((t) => {
         const field = dateRange.field;
         // lastDone may be full ISO; normalise to day-string for comparison
@@ -64,38 +74,59 @@ export function TasksDrilldownModal({ open, onClose, tasks = [], depts = [], pre
         const kb = b.updatedAt || b.lastDone || b.schedDate || b.created || '';
         return kb.localeCompare(ka);
       });
-  }, [preFiltered, search, dept, status, priority, dateRange]);
+  }, [preFiltered, search, dept, dateRange]);
 
   function clearFilters() {
-    setSearch(''); setDept(''); setStatus(''); setPriority('');
+    setSearch(''); setDept('');
     const r = currentMonthRange();
     setDateRange({ preset: 'currentMonth', from: r.from, to: r.to, field: 'created' });
   }
 
   const IS = { padding: '7px 10px', borderRadius: 7, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 12, color: '#1a2535', background: 'white', outline: 'none', fontWeight: 600 };
-
   const TD = { padding: '9px 12px', verticalAlign: 'middle', fontSize: 12 };
   const TH = { background: '#f3f7fc', padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.7, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef', whiteSpace: 'nowrap' };
 
+  // Per-column cell renderer. Keeping it switch-based (not a map of
+  // components) so it's easy to grep the column → field mapping.
+  function renderCell(col, t) {
+    switch (col) {
+      case 'Sched. Date':
+        return <td style={{ ...TD, color: '#0d7377', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.schedDate ? fDate(t.schedDate) : '—'}</td>;
+      case 'Task':
+        return (
+          <td style={{ ...TD, fontWeight: 700, maxWidth: 280 }}>
+            {t.name}
+            {t.dept && <div style={{ fontSize: 10, color: '#6b7a90', fontWeight: 600, marginTop: 2 }}><DeptTag name={t.dept} /></div>}
+          </td>
+        );
+      case 'Done By':
+        return <td style={{ ...TD, fontSize: 11 }}>{t.doneBy || '—'}</td>;
+      case 'Assigned':
+        return <td style={{ ...TD, fontSize: 11 }}>{(t.assignedTo || []).join(', ') || '—'}</td>;
+      case 'Action':
+        return (
+          <td style={TD}>
+            <button
+              onClick={() => setSelectedTask(t)}
+              style={{ padding: '4px 12px', borderRadius: 6, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800 }}
+            >
+              👁 View
+            </button>
+          </td>
+        );
+      default:
+        return <td style={TD}>—</td>;
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} title={title} maxWidth="max-w-2xl">
-      {/* Filter row */}
+      {/* Filter row — Status and Priority dropdowns removed: preFilter already scopes rows. */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK NAME…" style={{ ...IS, flex: 1, minWidth: 160 }} />
         <select value={dept} onChange={(e) => setDept(e.target.value)} style={IS}>
           <option value="">ALL DEPTS</option>
           {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} style={IS}>
-          <option value="">ALL STATUS</option>
-          <option value="pending">PENDING</option>
-          <option value="done">DONE</option>
-        </select>
-        <select value={priority} onChange={(e) => setPriority(e.target.value)} style={IS}>
-          <option value="">ALL PRIORITY</option>
-          <option value="high">🔴 HIGH</option>
-          <option value="medium">🟡 MEDIUM</option>
-          <option value="low">🟢 LOW</option>
         </select>
         <button onClick={clearFilters} style={{ ...IS, cursor: 'pointer', color: '#0d7377', borderColor: '#0d7377', background: 'white' }}>↺ Clear</button>
       </div>
@@ -123,47 +154,38 @@ export function TasksDrilldownModal({ open, onClose, tasks = [], depts = [], pre
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table — columns come from the per-card `columns` prop. */}
       <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
             <tr>
-              {['Status', 'Task', 'Dept', 'Assigned', 'Sched', 'Done By', 'Priority'].map((h) => (
+              {columns.map((h) => (
                 <th key={h} style={TH}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((t) => {
-              const late = wasCompletedLate(t);
-              const isDone = t.status === 'done';
-              return (
-                <tr key={t.id} style={{ background: late ? '#faf5ff' : 'white', borderBottom: '1px solid #f3f7fc' }}>
-                  <td style={TD}>
-                    {isDone && !late ? <span style={{ background: '#d4edda', color: '#155724', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>✅ ON TIME</span>
-                      : isDone && late ? <span style={{ background: '#ede9fe', color: '#4c1d95', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>⏰ DELAYED</span>
-                      : t.priority === 'high' ? <span style={{ background: '#fde8e8', color: '#7d1a1a', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>⚠️ PENDING</span>
-                      : <span style={{ background: '#fff3cd', color: '#7a4800', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>⏳ PENDING</span>}
-                  </td>
-                  <td style={{ ...TD, fontWeight: 700 }}>{t.name}</td>
-                  <td style={TD}><DeptTag name={t.dept} /></td>
-                  <td style={{ ...TD, fontSize: 11 }}>{(t.assignedTo || []).join(', ') || '—'}</td>
-                  <td style={{ ...TD, color: '#0d7377', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.schedDate ? fDate(t.schedDate) : '—'}</td>
-                  <td style={{ ...TD, fontSize: 11 }}>{t.doneBy || '—'}</td>
-                  <td style={TD}><PriorityBadge priority={t.priority} /></td>
-                </tr>
-              );
-            }) : (
-              <tr><td colSpan={7} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No tasks match the selected filters.</td></tr>
+            {rows.length ? rows.map((t) => (
+              <tr key={t.id} style={{ background: wasCompletedLate(t) ? '#faf5ff' : 'white', borderBottom: '1px solid #f3f7fc' }}>
+                {columns.map((col) => renderCell(col, t))}
+              </tr>
+            )) : (
+              <tr><td colSpan={columns.length} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No tasks match the selected filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Footer hint */}
-      <div style={{ marginTop: 10, fontSize: 10.5, color: '#6b7a90' }}>
-        💡 For full task details and actions, open the <strong>Manage Tasks</strong> page.
-      </div>
+      {/* Read-only task detail — opened by the row's View button. The
+          action callbacks are null so the modal renders without
+          Edit/Delete/Mark-Complete buttons (dashboard is read-only). */}
+      <TaskDetailModal
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+        currentUser={null}
+        currentRole={null}
+      />
     </Modal>
   );
 }

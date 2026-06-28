@@ -233,16 +233,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats grid — each card opens a drill-down popup with its category pre-filtered */}
+      {/* Stats grid — each card opens a drill-down popup with its category pre-filtered.
+          Each card passes a `columns` array matching its category so the popup shows
+          only the data that's relevant to that card (Status/Priority dropdowns are
+          intentionally absent inside the popup because they would contradict the
+          card's scope). */}
       <div className="resp-grid-4">
-        <StatCard num={done} label="Completed" color="green" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'completed', title: '✅ Completed Tasks' })} />
-        <StatCard num={onTime} label="On Time" color="teal" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'onTime', title: '🟢 On-Time Tasks' })} />
-        <StatCard num={delay} label="Delayed" color="purple" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'delayed', title: '⏰ Delayed Tasks' })} />
-        <StatCard num={pend} label="Pending" color="red" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'pending', title: '⏳ Pending Tasks' })} />
-        <StatCard num={openI} label="Open Issues" color="gold" onClick={() => setOpenCard({ type: 'issues', preFilter: 'open', title: '⚠️ Open Issues' })} />
-        <StatCard num={esc} label="Escalated" color="red" onClick={() => setOpenCard({ type: 'issues', preFilter: 'escalated', title: '🚨 Escalated Issues' })} />
+        <StatCard num={done} label="Completed" color="green" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'completed', title: '✅ Completed Tasks', columns: ['Sched. Date', 'Task', 'Done By', 'Action'] })} />
+        <StatCard num={onTime} label="On Time" color="teal" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'onTime', title: '🟢 On-Time Tasks', columns: ['Sched. Date', 'Task', 'Done By', 'Action'] })} />
+        <StatCard num={delay} label="Delayed" color="purple" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'delayed', title: '⏰ Delayed Tasks', columns: ['Sched. Date', 'Task', 'Done By', 'Action'] })} />
+        <StatCard num={pend} label="Pending" color="red" onClick={() => setOpenCard({ type: 'tasks', preFilter: 'pending', title: '⏳ Pending Tasks', columns: ['Sched. Date', 'Task', 'Assigned', 'Action'] })} />
+        <StatCard num={openI} label="Open Issues" color="gold" onClick={() => setOpenCard({ type: 'issues', preFilter: 'open', title: '⚠️ Open Issues', columns: ['Date', 'Issue', 'Reporter', 'Action'] })} />
+        <StatCard num={esc} label="Escalated" color="red" onClick={() => setOpenCard({ type: 'issues', preFilter: 'escalated', title: '🚨 Escalated Issues', columns: ['Date', 'Issue', 'Reporter', 'Action'] })} />
         <StatCard num={employees.length} label="Total Staff" color="blue" onClick={() => setOpenCard({ type: 'staff', title: '👥 All Staff' })} />
-        <StatCard num={`${issComp}%`} label="Issues Resolved" color="green" onClick={() => setOpenCard({ type: 'issues', preFilter: 'resolved', title: '✅ Resolved Issues' })} />
+        <StatCard num={`${issComp}%`} label="Issues Resolved" color="green" onClick={() => setOpenCard({ type: 'issues', preFilter: 'resolved', title: '✅ Resolved Issues', columns: ['Date', 'Issue', 'Resolved By', 'Action'] })} />
       </div>
 
       {/* Alerts */}
@@ -256,7 +260,7 @@ export default function Dashboard() {
       <div className="resp-grid-3">
         {/* Task breakdown donut */}
         <div
-          onClick={() => setOpenCard({ type: 'tasks', preFilter: 'all', title: '📊 Task Breakdown' })}
+          onClick={() => setOpenCard({ type: 'tasks', preFilter: 'all', title: '📊 Task Breakdown', columns: ['Sched. Date', 'Task', 'Done By', 'Action'] })}
           style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
           onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
@@ -287,7 +291,7 @@ export default function Dashboard() {
 
         {/* Issue breakdown donut */}
         <div
-          onClick={() => setOpenCard({ type: 'issues', preFilter: 'all', title: '⚠️ Issue Status' })}
+          onClick={() => setOpenCard({ type: 'issues', preFilter: 'all', title: '⚠️ Issue Status', columns: ['Date', 'Issue', 'Status', 'Action'] })}
           style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
           onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
@@ -318,7 +322,7 @@ export default function Dashboard() {
 
         {/* Delegation donut */}
         <div
-          onClick={() => setOpenCard({ type: 'delegations', preFilter: 'all', title: '📤 Delegation Tasks' })}
+          onClick={() => setOpenCard({ type: 'delegations', preFilter: 'all', title: '📤 Delegation Tasks', columns: ['Task', 'Due Date', 'Doer', 'Action'] })}
           style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
           onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
@@ -390,6 +394,7 @@ export default function Dashboard() {
           depts={depts}
           preFilter={openCard.preFilter}
           title={openCard.title}
+          columns={openCard.columns}
         />
       )}
       {openCard?.type === 'issues' && (
@@ -400,6 +405,7 @@ export default function Dashboard() {
           depts={depts}
           preFilter={openCard.preFilter}
           title={openCard.title}
+          columns={openCard.columns}
         />
       )}
       {openCard?.type === 'delegations' && (
@@ -410,6 +416,7 @@ export default function Dashboard() {
           depts={depts}
           preFilter={openCard.preFilter}
           title={openCard.title}
+          columns={openCard.columns}
         />
       )}
       {openCard?.type === 'staff' && (
