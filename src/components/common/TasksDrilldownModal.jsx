@@ -164,7 +164,9 @@ export function TasksDrilldownModal({
         return (
           <td style={TD}>
             <button
-              onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              // stopPropagation so the row click (mobile tap-to-expand)
+              // doesn't fire when the user explicitly clicks the View button.
+              onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === t.id ? null : t.id); }}
               style={{
                 padding: '4px 12px', borderRadius: 6,
                 background: expandedId === t.id ? '#334155' : '#0d7377',
@@ -242,7 +244,7 @@ export function TasksDrilldownModal({
           the row. The detail lives INSIDE the tbody's scrollable area so
           it can't get cropped behind the modal header. The wrap class adds
           horizontal scroll on narrow screens so columns don't squish. */}
-      <div className="modal-table-wrap" style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
+      <div className="modal-table-wrap" style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'auto', maxHeight: '52vh' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
             <tr>
@@ -261,6 +263,7 @@ export function TasksDrilldownModal({
                   columns={columns}
                   renderCell={renderCell}
                   isExpanded={isExpanded}
+                  onToggle={() => setExpandedId(isExpanded ? null : t.id)}
                   expandedNode={isExpanded ? (
                     <InlineTaskDetail
                       task={t}
@@ -286,10 +289,14 @@ export function TasksDrilldownModal({
 // React.Fragment so they render as siblings under the same key in tbody.
 // (Returning two sibling <tr>s without Fragment from a map causes the
 // second one to be hoisted out of the table in some renderers.)
-function FragmentRow({ task, columns, renderCell, isExpanded, expandedNode }) {
+function FragmentRow({ task, columns, renderCell, isExpanded, expandedNode, onToggle }) {
   return (
     <>
-      <tr style={{ background: wasCompletedLate(task) ? '#faf5ff' : 'white', borderBottom: '1px solid #f3f7fc' }}>
+      <tr
+        className="modal-table-row"
+        onClick={onToggle}
+        style={{ background: wasCompletedLate(task) ? '#faf5ff' : 'white', borderBottom: '1px solid #f3f7fc', cursor: 'pointer' }}
+      >
         {columns.map((col) => renderCell(col, task))}
       </tr>
       {isExpanded && expandedNode}

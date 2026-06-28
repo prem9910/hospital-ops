@@ -439,13 +439,33 @@ body {
   .modal-dr-collapsible.is-open { display: block; }
 
   /* Table horizontal scroll on narrow screens — column header chips stay
-     readable, rows can be swiped. */
+     readable, rows can be swiped. `overflow: auto` is also set inline so
+     this works regardless of the JSX (which previously used `overflow:
+     hidden` and clipped everything past the viewport). */
   .modal-table-wrap {
-    overflow-x: auto;
-    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
   .modal-table-wrap table { min-width: 520px; }
+
+  /* Tighter cell padding on mobile so more columns fit before scrolling. */
+  .modal-table-wrap th,
+  .modal-table-wrap td { padding: 8px 9px !important; font-size: 11.5px !important; }
+
+  /* Mobile tap-to-expand: hide the View button (rows are tappable instead)
+     and append a chevron to each row as the affordance hint. The onClick
+     is on the <tr> itself — no need to find the button in the last column. */
+  .modal-table-wrap td:last-child > button { display: none !important; }
+  .modal-table-wrap tr.modal-table-row td:last-child::after {
+    content: '›';
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0d7377;
+    vertical-align: middle;
+  }
+  .modal-table-wrap tr.modal-table-row { transition: background 0.15s; }
+  .modal-table-wrap tr.modal-table-row:active { background: #e8f4fd !important; }
 
   /* Inline task-detail 2-col grid → 1-col on mobile */
   .inline-task-detail-grid { grid-template-columns: 1fr !important; }

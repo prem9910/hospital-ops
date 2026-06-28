@@ -106,7 +106,9 @@ export function DelegationsDrilldownModal({
         return (
           <td style={TD}>
             <button
-              onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+              // stopPropagation so the row click (mobile tap-to-expand)
+              // doesn't fire when the user explicitly clicks the View button.
+              onClick={(e) => { e.stopPropagation(); setExpandedId(expandedId === d.id ? null : d.id); }}
               style={{
                 padding: '4px 12px', borderRadius: 6,
                 background: expandedId === d.id ? '#334155' : '#0d7377',
@@ -181,7 +183,7 @@ export function DelegationsDrilldownModal({
           a row's View button toggles an inline detail panel directly below
           the row. The detail lives INSIDE the tbody's scrollable area so
           it can't get cropped behind the modal header. */}
-      <div className="modal-table-wrap" style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
+      <div className="modal-table-wrap" style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'auto', maxHeight: '52vh' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
             <tr>
@@ -200,6 +202,7 @@ export function DelegationsDrilldownModal({
                   columns={columns}
                   renderCell={renderCell}
                   isExpanded={isExpanded}
+                  onToggle={() => setExpandedId(isExpanded ? null : d.id)}
                   expandedNode={isExpanded ? (
                     <tr style={{ background: '#f0f7fb' }}>
                       <td colSpan={99} style={{ padding: '14px 18px', borderBottom: '2px solid #d8e2ef' }}>
@@ -248,10 +251,14 @@ export function DelegationsDrilldownModal({
 
 // Fragment wrapper so each row + its optional inline expansion render as
 // siblings under the same key inside tbody.
-function FragmentRow({ delegation, columns, renderCell, isExpanded, expandedNode }) {
+function FragmentRow({ delegation, columns, renderCell, isExpanded, expandedNode, onToggle }) {
   return (
     <>
-      <tr style={{ background: 'white', borderBottom: '1px solid #f3f7fc' }}>
+      <tr
+        className="modal-table-row"
+        onClick={onToggle}
+        style={{ background: 'white', borderBottom: '1px solid #f3f7fc', cursor: 'pointer' }}
+      >
         {columns.map((col) => renderCell(col, delegation))}
       </tr>
       {isExpanded && expandedNode}
