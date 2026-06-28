@@ -1,7 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { Alert } from '../components/common/Alert';
+import { Modal } from '../components/common/Modal';
+import {
+  buildYearRange,
+  collectExportData,
+  buildExportPayload,
+  downloadJsonFile,
+  readJsonFile,
+  validateImportPayload,
+  detectDuplicates,
+  mergeImport,
+  toDay,
+  fDate,
+} from '../utils';
+
+// Types we import / export. Order is fixed so the UI lists rows predictably.
+const IMPORT_TYPES = ['tasks', 'issues', 'handovers', 'delegations', 'notices', 'actLog'];
+const TYPE_LABELS = {
+  tasks:       'Tasks',
+  issues:      'Issues',
+  handovers:   'Handovers',
+  delegations: 'Delegations',
+  notices:     'Notices',
+  actLog:      'Activity Log',
+};
+const TYPE_ICONS = {
+  tasks:       '✅',
+  issues:      '⚠️',
+  handovers:   '📥',
+  delegations: '📤',
+  notices:     '🔔',
+  actLog:      '📜',
+};
 
 const IS = { width: '100%', padding: '9px 13px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 
@@ -41,7 +73,7 @@ function CopyBtn({ text, label = '📋 Copy' }) {
 
 export default function Settings() {
   const { currentRole, currentUser } = useAuth();
-  const { employees, admins, save, logAct } = useApp();
+  const { employees, admins, tasks, issues, handovers, delegations, notices, actLog, save, logAct } = useApp();
 
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
   const [pwMsg,  setPwMsg]  = useState('');
@@ -137,6 +169,147 @@ export default function Settings() {
     localStorage.setItem('hops-emailcfg', JSON.stringify(emailForm));
     setEmailMsg('✅ Email config saved!');
     await logAct('EMAIL CONFIG UPDATED', '');
+  }
+
+  // ── Export / Import state ────────────────────────────────────────────────
+  // Both flows live as modals so the user can't navigate away mid-download.
+  // The import flow is a small state machine: pick file → review → decide
+  // per-type (skip / keep-both) → confirm → write to Supabase.
+  const [showExport, setShowExport] = useState(false);
+  const [exportFileName, setExportFileName] = useState('');
+  const [exportYearMode, setExportYearMode] = useState('current'); // 'current' | 'custom' | 'all'
+  const [exportCustomFrom, setExportCustomFrom] = useState('');
+  const [exportCustomTo, setExportCustomTo] = useState('');
+  const [exportError, setExportError] = useState('');
+
+  const [showImport, setShowImport] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importPreview, setImportPreview] = useState(null); // { detected, fileName }
+  const [importChoices, setImportChoices] = useState({});   // { type: 'skip' | 'keep-both' }
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Default export filename = "hospital-ops_<role>_<YYYY-MM-DD>"
+  useEffect(() => {
+    if (showExport && !exportFileName) {
+      const role = currentRole || 'user';
+      setExportFileName(`hospital-ops_${role}_${toDay()}`);
+    }
+  }, [showExport, exportFileName, currentRole]);
+
+  // Live preview of what will be exported (counts only — keeps the modal fast)
+  const exportPreview = useMemo(() => {
+    if (!showExport) return null;
+    const yr = buildYearRange(exportYearMode, exportCustomFrom, exportCustomTo);
+    const cols = collectExportData({
+      currentRole, currentUser,
+      tasks, issues, handovers, delegations, notices, actLog,
+      yearRange: yr,
+    });
+    const total = Object.values(cols).reduce((a, b) => a + (b?.length || 0), 0);
+    return { yr, cols, total };
+  }, [showExport, exportYearMode, exportCustomFrom, exportCustomTo, currentRole, currentUser, tasks, issues, handovers, delegations, notices, actLog]);
+
+  function doExport() {
+    setExportError('');
+    const name = (exportFileName || `hospital-ops_${currentRole || 'user'}_${toDay()}`).trim();
+    if (!name) { setExportError('File name is required.'); return; }
+    if (!exportPreview || exportPreview.total === 0) {
+      setExportError('No data to export with the current filter.');
+      return;
+    }
+    const yr = exportPreview.yr;
+    const payload = buildExportPayload({
+      currentRole, currentUser,
+      collections: exportPreview.cols, yearRange: yr,
+    });
+    downloadJsonFile(payload, name);
+    logAct('DATA EXPORTED', `${name} (${exportPreview.total} records)`);
+    setShowExport(false);
+  }
+
+  function closeExport() {
+    setShowExport(false);
+    setExportError('');
+    setExportFileName('');
+    setExportYearMode('current');
+    setExportCustomFrom('');
+    setExportCustomTo('');
+  }
+
+  async function onPickFile(e) {
+    const file = e.target.files?.[0];
+    // Clear the input so picking the SAME file twice still triggers onChange.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+    setImportError('');
+    const res = await readJsonFile(file);
+    if (!res.ok) { setImportError(res.error); return; }
+    const validationIssues = validateImportPayload(res.payload);
+    if (validationIssues.length) { setImportError(validationIssues.join(' ')); return; }
+
+    const detected = detectDuplicates(res.payload, {
+      tasks, issues, handovers, delegations, notices, actLog,
+    });
+    // Default per-type choices: keep-both if any dupes (so user can review),
+    // otherwise skip (no decision needed — fresh rows just get added).
+    const initialChoices = {};
+    IMPORT_TYPES.forEach((t) => {
+      initialChoices[t] = detected[t].duplicates.length > 0 ? 'keep-both' : 'skip';
+    });
+    setImportChoices(initialChoices);
+    setImportPreview({ detected, fileName: file.name });
+  }
+
+  async function doImport() {
+    if (!importPreview) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const { detected } = importPreview;
+      const merged = mergeImport({ detected, choices: importChoices });
+      // Persist every non-empty bucket to its hops-* table via save().
+      const typeToKey = {
+        tasks:       'hops-tasks',
+        issues:      'hops-issues',
+        handovers:   'hops-handovers',
+        delegations: 'hops-delegations',
+        notices:     'hops-notices',
+        actLog:      'hops-actlog',
+      };
+      const stateToArr = {
+        tasks:       tasks,
+        issues:      issues,
+        handovers:   handovers,
+        delegations: delegations,
+        notices:     notices,
+        actLog:      actLog,
+      };
+      let totalAdded = 0;
+      for (const t of IMPORT_TYPES) {
+        const add = merged[t] || [];
+        if (!add.length) continue;
+        const next = [...(stateToArr[t] || []), ...add];
+        await save(typeToKey[t], next);
+        totalAdded += add.length;
+      }
+      await logAct('DATA IMPORTED', `${importPreview.fileName} (${totalAdded} records added)`);
+      setShowImport(false);
+      setImportPreview(null);
+      setImportChoices({});
+    } catch (e) {
+      setImportError('Import failed: ' + (e?.message || 'unknown error'));
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function closeImport() {
+    setShowImport(false);
+    setImportError('');
+    setImportPreview(null);
+    setImportChoices({});
+    setImporting(false);
   }
 
 
@@ -294,6 +467,33 @@ export default function Settings() {
 
       </>)}
 
+      {/* ── Export & Import — visible to all roles ── */}
+      <Card title="📦 Export & Import Data">
+        <div style={{ fontSize: 12, color: '#6b7a90', marginBottom: 14, lineHeight: 1.5 }}>
+          Back up your records to a JSON file, or restore them on another device.
+          <br />
+          <span style={{ fontWeight: 800, color: '#0d7377' }}>
+            {currentRole === 'mainadmin'
+              ? 'As Main Admin you will export everything.'
+              : 'You will only export records assigned to / created by you.'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setShowExport(true)}
+            style={{ padding: '10px 18px', borderRadius: 9, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            ⬇️ Export to JSON
+          </button>
+          <button
+            onClick={() => { setShowImport(true); setImportError(''); setImportPreview(null); }}
+            style={{ padding: '10px 18px', borderRadius: 9, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            ⬆️ Import from JSON
+          </button>
+        </div>
+      </Card>
+
       {/* ── System Info ── */}
       <Card title="ℹ️ System Info">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -310,6 +510,248 @@ export default function Settings() {
           ))}
         </div>
       </Card>
+
+      {/* ── Export modal — file name + year filter + live count preview ── */}
+      <Modal open={showExport} onClose={closeExport} title="📤 Export Data to JSON" maxWidth="max-w-lg">
+        <Field label="File Name">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              value={exportFileName}
+              onChange={(e) => setExportFileName(e.target.value)}
+              placeholder="hospital-ops_export"
+              style={IS}
+            />
+            <span style={{ fontSize: 12, color: '#6b7a90', fontWeight: 700 }}>.json</span>
+          </div>
+        </Field>
+
+        <Field label="Date Range">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              { id: 'current', label: `📅 This Year (${new Date().getFullYear()})` },
+              { id: 'custom',  label: '🗓 Custom Range' },
+              { id: 'all',     label: '∞ All Data' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setExportYearMode(opt.id)}
+                style={{
+                  flex: '1 1 0', minWidth: 0, padding: '9px 8px', borderRadius: 8,
+                  border: `1.5px solid ${exportYearMode === opt.id ? '#0d7377' : '#d8e2ef'}`,
+                  background: exportYearMode === opt.id ? '#e8f8ef' : 'white',
+                  color: exportYearMode === opt.id ? '#0d7377' : '#475569',
+                  fontWeight: 800, fontSize: 11.5, cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        {exportYearMode === 'custom' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <Field label="From">
+              <input type="date" value={exportCustomFrom} onChange={(e) => setExportCustomFrom(e.target.value)} style={IS} />
+            </Field>
+            <Field label="To">
+              <input type="date" value={exportCustomTo} onChange={(e) => setExportCustomTo(e.target.value)} style={IS} />
+            </Field>
+          </div>
+        )}
+
+        {/* Live preview — shows count of records per type that will be exported */}
+        {exportPreview && (
+          <div style={{ background: '#f3f7fc', border: '1px solid #d8e2ef', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5 }}>Preview</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0d7377' }}>
+                {exportPreview.total} record{exportPreview.total === 1 ? '' : 's'} ready
+              </div>
+            </div>
+            {exportPreview.yr.from || exportPreview.yr.to ? (
+              <div style={{ fontSize: 11, color: '#475569', marginBottom: 8 }}>
+                Range: <strong>{exportPreview.yr.from || '—'}</strong> to <strong>{exportPreview.yr.to || '—'}</strong>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: '#475569', marginBottom: 8 }}>Range: <strong>All time</strong></div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {IMPORT_TYPES.map((t) => (
+                <div key={t} style={{ background: 'white', border: '1px solid #e4eaf2', borderRadius: 7, padding: '7px 9px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13 }}>{TYPE_ICONS[t]}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: '#6b7a90', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>{TYPE_LABELS[t]}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2535' }}>{(exportPreview.cols[t] || []).length}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {exportError && (
+          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: '#fde8e8', color: '#c0392b', fontWeight: 700, fontSize: 12 }}>
+            ❌ {exportError}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+          <button
+            onClick={doExport}
+            disabled={!exportPreview || exportPreview.total === 0}
+            style={{ flex: 1, padding: '10px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: (!exportPreview || exportPreview.total === 0) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13, opacity: (!exportPreview || exportPreview.total === 0) ? 0.6 : 1 }}
+          >
+            ⬇️ Download JSON
+          </button>
+          <button onClick={closeExport} style={{ flex: 1, padding: '10px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Import modal — file picker → preview → per-type choice → confirm ── */}
+      <Modal open={showImport} onClose={closeImport} title="📥 Import Data from JSON" maxWidth="max-w-lg">
+        {!importPreview ? (
+          <>
+            <div style={{ fontSize: 12, color: '#6b7a90', marginBottom: 14, lineHeight: 1.5 }}>
+              Upload a JSON file previously exported from Hospital Ops. We'll scan it and show you
+              any duplicates before adding anything to your account.
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={onPickFile}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{ width: '100%', padding: '26px', borderRadius: 10, border: '2px dashed #0d7377', background: '#f0fafa', color: '#0d7377', fontWeight: 800, fontSize: 14, cursor: 'pointer', marginBottom: 14 }}
+            >
+              📂 Click to Choose JSON File
+            </button>
+            {importError && (
+              <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fde8e8', color: '#c0392b', fontWeight: 700, fontSize: 12 }}>
+                ❌ {importError}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #e2e8f0', marginTop: 4 }}>
+              <button onClick={closeImport} style={{ flex: 1, padding: '10px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ background: '#f3f7fc', border: '1px solid #d8e2ef', borderRadius: 9, padding: '10px 12px', marginBottom: 14, fontSize: 12 }}>
+              <div style={{ fontSize: 10, color: '#6b7a90', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.4 }}>File</div>
+              <div style={{ fontWeight: 800, color: '#1a2535', marginTop: 2 }}>📄 {importPreview.fileName}</div>
+            </div>
+
+            {/* Per-type summary with duplicate count and choice selector */}
+            <div style={{ border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', marginBottom: 14 }}>
+              {IMPORT_TYPES.map((t, i) => {
+                const d = importPreview.detected[t];
+                const hasDupes = d.duplicates.length > 0;
+                return (
+                  <div key={t} style={{ padding: '11px 13px', borderTop: i === 0 ? 'none' : '1px solid #e4eaf2', background: hasDupes ? '#fff8eb' : 'white' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                        <span style={{ fontSize: 14 }}>{TYPE_ICONS[t]}</span>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: '#1a2535' }}>{TYPE_LABELS[t]}</div>
+                          <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 1 }}>
+                            {d.incoming.length} in file
+                            {hasDupes && <span style={{ color: '#c0392b', fontWeight: 800 }}> · {d.duplicates.length} duplicate{d.duplicates.length === 1 ? '' : 's'}</span>}
+                            {d.fresh.length > 0 && <span style={{ color: '#1a7a4a', fontWeight: 800 }}> · {d.fresh.length} new</span>}
+                          </div>
+                        </div>
+                      </div>
+                      {hasDupes ? (
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          {[
+                            { id: 'skip',      label: 'Skip dupes' },
+                            { id: 'keep-both', label: 'Import as new' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setImportChoices({ ...importChoices, [t]: opt.id })}
+                              style={{
+                                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800,
+                                border: `1.5px solid ${(importChoices[t] || 'skip') === opt.id ? '#0d7377' : '#d8e2ef'}`,
+                                background: (importChoices[t] || 'skip') === opt.id ? '#e8f8ef' : 'white',
+                                color: (importChoices[t] || 'skip') === opt.id ? '#0d7377' : '#6b7a90',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: '#1a7a4a', fontWeight: 800, padding: '4px 9px', borderRadius: 6, background: '#d4edda' }}>
+                          ✓ Will add
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Duplicate list — show all flagged rows so user knows what they look like */}
+            {(() => {
+              const totalDupes = IMPORT_TYPES.reduce((a, t) => a + importPreview.detected[t].duplicates.length, 0);
+              if (totalDupes === 0) return null;
+              return (
+                <div style={{ background: '#fff8eb', border: '1.5px solid #f5b7b1', borderRadius: 9, padding: '10px 12px', marginBottom: 14, maxHeight: 180, overflowY: 'auto' }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#c0392b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                    ⚠️ {totalDupes} duplicate{totalDupes === 1 ? '' : 's'} found
+                  </div>
+                  {IMPORT_TYPES.map((t) => {
+                    const dupes = importPreview.detected[t].duplicates;
+                    if (!dupes.length) return null;
+                    return (
+                      <div key={t} style={{ marginBottom: 6 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#92400E', marginBottom: 3 }}>{TYPE_LABELS[t]}:</div>
+                        {dupes.slice(0, 5).map((row, i) => (
+                          <div key={i} style={{ fontSize: 11, color: '#6b7a90', paddingLeft: 8, fontFamily: 'monospace' }}>
+                            · {row.name || row.title || row.taskName || row.subject || row.id}
+                          </div>
+                        ))}
+                        {dupes.length > 5 && <div style={{ fontSize: 11, color: '#6b7a90', paddingLeft: 8, fontStyle: 'italic' }}>… and {dupes.length - 5} more</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {importError && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: '#fde8e8', color: '#c0392b', fontWeight: 700, fontSize: 12 }}>
+                ❌ {importError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+              <button
+                onClick={doImport}
+                disabled={importing}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: importing ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13, opacity: importing ? 0.6 : 1 }}
+              >
+                {importing ? '⏳ Importing...' : '✅ Confirm Import'}
+              </button>
+              <button onClick={() => { setImportPreview(null); setImportChoices({}); setImportError(''); }} style={{ flex: 1, padding: '10px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                ← Choose Different File
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
