@@ -7,6 +7,7 @@ import { Modal } from '../components/common/Modal';
 import { EmptyState } from '../components/common/Alert';
 import { DateRangeExportModal } from '../components/common/DateRangeExportModal';
 import { Pagination, paginate } from '../components/common/Pagination';
+import { FilterPopup, FilterField, FP_INPUT, ChipButton } from '../components/common/FilterPopup';
 
 const IS = { width: '100%', padding: '9px 13px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 function Field({ label, children }) {
@@ -116,38 +117,38 @@ export default function Issues() {
         </div>
       </div>
 
-      <div className="filter-bar">
-        <div className="filter-bar-search" style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, pointerEvents: 'none' }}>🔍</span>
-          <input className="filter-bar-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH..." style={{ ...IS, paddingLeft: 30 }} />
-        </div>
-        <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
-          <option value="">ALL DEPTS</option>
-          {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-        <select className="filter-bar-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={IS}>
-          <option value="">ALL STATUS</option>
-          <option value="open">OPEN</option>
-          <option value="in-progress">IN PROGRESS</option>
-          <option value="resolved">RESOLVED</option>
-        </select>
-        <select className="filter-bar-select" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={IS}>
-          <option value="">ALL PRIORITY</option>
-          <option value="high">HIGH</option>
-          <option value="medium">MEDIUM</option>
-          <option value="low">LOW</option>
-        </select>
-        {(search || filterDept || filterStatus || filterPriority) && (
-          <button
-            className="filter-bar-clear"
-            onClick={() => { setSearch(''); setFilterDept(''); setFilterStatus(''); setFilterPriority(''); }}
-            style={{ padding: '8px 13px', borderRadius: 7, background: '#fde8e8', color: '#c0392b', border: '1.5px solid #f5b7b1', cursor: 'pointer', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', fontSize: 12.5 }}
-            title="Clear all filters"
-          >
-            ✕ Clear Filters
-          </button>
-        )}
-      </div>
+      {/* Filter popup — search + dept + status + priority. Status/priority
+          use chip rows so they're tap-friendly and act as radio groups. */}
+      <FilterPopup
+        activeCount={(search ? 1 : 0) + (filterDept ? 1 : 0) + (filterStatus ? 1 : 0) + (filterPriority ? 1 : 0)}
+        onClear={() => { setSearch(''); setFilterDept(''); setFilterStatus(''); setFilterPriority(''); }}
+      >
+        <FilterField label="Search">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH ISSUE TITLE..." style={FP_INPUT} autoFocus />
+        </FilterField>
+        <FilterField label="Department">
+          <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={FP_INPUT}>
+            <option value="">ALL DEPTS</option>
+            {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label="Status">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <ChipButton active={!filterStatus} onClick={() => setFilterStatus('')}>ALL</ChipButton>
+            <ChipButton active={filterStatus === 'open'} onClick={() => setFilterStatus('open')}>OPEN</ChipButton>
+            <ChipButton active={filterStatus === 'in-progress'} onClick={() => setFilterStatus('in-progress')}>IN PROGRESS</ChipButton>
+            <ChipButton active={filterStatus === 'resolved'} onClick={() => setFilterStatus('resolved')}>RESOLVED</ChipButton>
+          </div>
+        </FilterField>
+        <FilterField label="Priority">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <ChipButton active={!filterPriority} onClick={() => setFilterPriority('')}>ALL</ChipButton>
+            <ChipButton active={filterPriority === 'high'} onClick={() => setFilterPriority('high')}>HIGH</ChipButton>
+            <ChipButton active={filterPriority === 'medium'} onClick={() => setFilterPriority('medium')}>MEDIUM</ChipButton>
+            <ChipButton active={filterPriority === 'low'} onClick={() => setFilterPriority('low')}>LOW</ChipButton>
+          </div>
+        </FilterField>
+      </FilterPopup>
 
       <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>

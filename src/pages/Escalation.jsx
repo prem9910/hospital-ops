@@ -3,31 +3,40 @@ import { useApp } from '../context/AppContext';
 import { fDate, exportToExcel, isEscalatedIssue } from '../utils';
 import { DeptTag, PriorityBadge, StatusBadge } from '../components/common/Badge';
 import { EmptyState, Alert } from '../components/common/Alert';
+import { FilterPopup, FilterField, FP_INPUT } from '../components/common/FilterPopup';
 
 export default function Escalation() {
   const { issues } = useApp();
   const [filterDept, setFilterDept] = useState('');
 
-  const IS = { padding: '8px 12px', borderRadius: 7, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
-
   // Use the shared helper so this page, the dashboard card, the sidebar
   // badge and the drill-down modal all agree on what "escalated" means.
   const escalated = issues.filter((i) => isEscalatedIssue(i) && (!filterDept || i.dept === filterDept));
   const allDepts = [...new Set(issues.map((i) => i.dept).filter(Boolean))];
+  const activeCount = filterDept ? 1 : 0;
+  const clearAll = () => setFilterDept('');
 
   return (
     <div>
       <div className="page-header">
         <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>🔺 Escalation Tracker</h2>
         <div className="page-header-actions">
-          <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
+          <button onClick={() => exportToExcel(escalated.map(i => ({ Title: i.title, Department: i.dept, Priority: i.priority, Reporter: i.reporter, Assigned: i.assigned, Status: i.status, Date: i.date })), 'escalation-export')} style={{ padding: '9px 18px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>⬇ Export</button>
+          <button onClick={() => window.print()} style={{ padding: '9px 18px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>🖨 Print</button>
+        </div>
+      </div>
+
+      {/* Filter popup — only Department on this page (the only filter that
+          matters for escalation triage). Uses the shared FilterPopup so
+          this page matches the rest of the app's filter UX. */}
+      <FilterPopup activeCount={activeCount} onClear={clearAll}>
+        <FilterField label="Department">
+          <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={FP_INPUT}>
             <option value="">ALL DEPTS</option>
             {allDepts.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
-          <button onClick={() => exportToExcel(escalated.map(i => ({ Title: i.title, Department: i.dept, Priority: i.priority, Reporter: i.reporter, Assigned: i.assigned, Status: i.status, Date: i.date })), 'escalation-export')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
-          <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
-        </div>
-      </div>
+        </FilterField>
+      </FilterPopup>
 
       {escalated.length > 0 && (
         <Alert variant="red">🚨 {escalated.length} HIGH PRIORITY open issue(s) need attention!</Alert>

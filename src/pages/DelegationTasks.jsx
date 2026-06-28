@@ -6,6 +6,7 @@ import { PRIORITY_OPTIONS } from '../constants';
 import { Modal } from '../components/common/Modal';
 import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { EmptyState } from '../components/common/Alert';
+import { FilterPopup, FilterField, FP_INPUT, ChipButton } from '../components/common/FilterPopup';
 
 // Read-only task detail modal — same shape as Tasks.jsx TaskDetailModal but
 // with NO edit/delete/mark-complete buttons for employees. For main admin
@@ -375,7 +376,6 @@ export default function DelegationTasks() {
   }
 
   const IS_BTN = { padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, color: 'white' };
-  const IS_SEARCH = { padding: '7px 10px', borderRadius: 7, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 12, color: '#1a2535', background: 'white', outline: 'none', fontWeight: 600 };
   const TD = { padding: '9px 12px', verticalAlign: 'middle', fontSize: 12 };
   const TH = { background: '#f3f7fc', padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.7, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef', whiteSpace: 'nowrap' };
 
@@ -403,27 +403,24 @@ export default function DelegationTasks() {
         </div>
       </div>
 
-      {/* Filter row */}
-      <div className="filter-bar">
-        <input className="filter-bar-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK / DOER / DEPT…" style={IS_SEARCH} />
-        <div className="filter-bar-chip-row">
-          {['all', 'pending', 'done'].map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              style={{
-                padding: '6px 14px', borderRadius: 20, fontSize: 11, fontWeight: 800, cursor: 'pointer',
-                border: `1.5px solid ${filter === f ? '#0d7377' : '#d8e2ef'}`,
-                background: filter === f ? '#0d7377' : 'white',
-                color: filter === f ? 'white' : '#6b7a90',
-                textTransform: 'uppercase', letterSpacing: 0.4,
-              }}
-            >
-              {f === 'all' ? `All (${delegationTasks.length})` : f === 'pending' ? `⏳ Pending (${pendingCount})` : `✅ Done (${doneCount})`}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Filter popup — search + status (all/pending/done). Status
+          uses a chip row so it's tappable on touch and acts as a
+          radio group instead of a dropdown. */}
+      <FilterPopup
+        activeCount={(search ? 1 : 0) + (filter !== 'all' ? 1 : 0)}
+        onClear={() => { setSearch(''); setFilter('all'); }}
+      >
+        <FilterField label="Search">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH TASK / DOER / DEPT..." style={FP_INPUT} autoFocus />
+        </FilterField>
+        <FilterField label="Status">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <ChipButton active={filter === 'all'} onClick={() => setFilter('all')}>{`ALL (${delegationTasks.length})`}</ChipButton>
+            <ChipButton active={filter === 'pending'} onClick={() => setFilter('pending')}>{`⏳ PENDING (${pendingCount})`}</ChipButton>
+            <ChipButton active={filter === 'done'} onClick={() => setFilter('done')}>{`✅ DONE (${doneCount})`}</ChipButton>
+          </div>
+        </FilterField>
+      </FilterPopup>
 
       {/* Table */}
       {rows.length ? (

@@ -289,10 +289,6 @@ body {
   /* Page headers stack */
   .page-header { flex-direction: column !important; align-items: stretch !important; gap: 10px; }
 
-  /* Filter bars */
-  .filter-bar { flex-direction: column !important; }
-  .filter-bar > * { width: 100% !important; min-width: unset !important; }
-
   /* Card padding */
   .card { padding: 14px; }
 
@@ -327,21 +323,6 @@ body {
 .page-header > .page-header-title { min-width: 0; }
 .page-header > .page-header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
-/* Filter bar pattern — single compact row on desktop, stacks on mobile.
-   Each control gets a flex share so they stay aligned and proportional
-   instead of one search bar hogging all the space. `!important` is needed
-   because each <input>/<select> carries the IS inline style which would
-   otherwise beat the class rules. */
-.filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: nowrap; align-items: center; }
-.filter-bar > .filter-bar-search { flex: 2 1 200px; min-width: 0; }
-.filter-bar > .filter-bar-select { flex: 1 1 130px !important; min-width: 0 !important; width: auto !important; padding: 8px 11px !important; font-size: 12.5px !important; }
-.filter-bar > .filter-bar-chip-row { flex: 0 0 auto; display: flex; gap: 6px; flex-wrap: wrap; }
-.filter-bar > .filter-bar-clear { flex: 0 0 auto; }
-
-/* Filter inputs get the same compact treatment so the row looks balanced. */
-.filter-bar input.filter-bar-input,
-.filter-bar > .filter-bar-search input { padding: 8px 11px 8px 30px !important; font-size: 12.5px !important; }
-
 /* Compact stat card padding on mobile */
 .stat-card { padding: 16px; }
 
@@ -370,14 +351,6 @@ body {
   .page-header > .page-header-title { text-align: left; }
   .page-header > .page-header-actions { width: 100%; }
   .page-header > .page-header-actions > button { flex: 1; min-width: 0; padding: 9px 8px; }
-
-  /* Filter bar: stack so each control goes full width */
-  .filter-bar { flex-direction: column; align-items: stretch; gap: 8px; flex-wrap: wrap; }
-  .filter-bar > .filter-bar-search { width: 100% !important; min-width: 0 !important; }
-  .filter-bar > .filter-bar-select { width: 100% !important; flex: 0 0 auto !important; }
-  .filter-bar > .filter-bar-chip-row { width: 100%; display: flex; gap: 6px; flex-wrap: wrap; }
-  .filter-bar > .filter-bar-chip-row > button { flex: 1; min-width: 0; }
-  .filter-bar > .filter-bar-clear { width: 100% !important; }
 
   /* Stat card compact padding */
   .stat-card { padding: 12px !important; }

@@ -4,13 +4,12 @@ import { isTaskDueToday, wasCompletedLate, fDate, exportToExcel } from '../utils
 import { FREQ_LABELS } from '../constants';
 import { DeptTag, FreqBadge } from '../components/common/Badge';
 import { EmptyState } from '../components/common/Alert';
+import { FilterPopup, FilterField, FP_INPUT, ChipButton } from '../components/common/FilterPopup';
 
 export default function Checklists() {
   const { tasks, depts } = useApp();
   const [filterDept, setFilterDept] = useState('');
   const [filterFreq, setFilterFreq] = useState('');
-
-  const IS = { padding: '7px 12px', borderRadius: 7, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 
   const todayTasks = tasks.filter((t) => isTaskDueToday(t) || t.status === 'pending');
   const filtered = todayTasks.filter((t) => {
@@ -30,6 +29,9 @@ export default function Checklists() {
   const totalDone = filtered.filter((t) => t.status === 'done').length;
   const pct = totalDue ? Math.round(totalDone / totalDue * 100) : 100;
 
+  const activeCount = (filterDept ? 1 : 0) + (filterFreq ? 1 : 0);
+  const clearAll = () => { setFilterDept(''); setFilterFreq(''); };
+
   return (
     <div>
       <div className="page-header">
@@ -41,18 +43,30 @@ export default function Checklists() {
           <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 3 }}>{totalDone}/{totalDue} tasks completed — {pct}%</div>
         </div>
         <div className="page-header-actions">
-          <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
+          <button onClick={() => exportToExcel(filtered.map(t => ({ Task: t.name, Department: t.dept, Frequency: t.freq, Status: t.status, 'Assigned To': (t.assignedTo || []).join(', '), 'Done By': t.doneBy, Delayed: t.isDelayed ? 'YES' : 'NO' })), 'checklist-export')} style={{ padding: '9px 18px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>⬇ Export</button>
+          <button onClick={() => window.print()} style={{ padding: '9px 18px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>🖨 Print</button>
+        </div>
+      </div>
+
+      {/* Filter popup — dept + frequency for the today's checklist view.
+          Frequency uses chip row because there are only ~4 values, more
+          tappable than a select. */}
+      <FilterPopup activeCount={activeCount} onClear={clearAll}>
+        <FilterField label="Department">
+          <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={FP_INPUT}>
             <option value="">ALL DEPTS</option>
             {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
-          <select className="filter-bar-select" value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
-            <option value="">ALL FREQ</option>
-            {Object.entries(FREQ_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <button onClick={() => exportToExcel(filtered.map(t => ({ Task: t.name, Department: t.dept, Frequency: t.freq, Status: t.status, 'Assigned To': (t.assignedTo || []).join(', '), 'Done By': t.doneBy, Delayed: t.isDelayed ? 'YES' : 'NO' })), 'checklist-export')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
-          <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
-        </div>
-      </div>
+        </FilterField>
+        <FilterField label="Frequency">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <ChipButton active={!filterFreq} onClick={() => setFilterFreq('')}>ALL</ChipButton>
+            {Object.entries(FREQ_LABELS).map(([v, l]) => (
+              <ChipButton key={v} active={filterFreq === v} onClick={() => setFilterFreq(v)}>{l}</ChipButton>
+            ))}
+          </div>
+        </FilterField>
+      </FilterPopup>
 
       {/* Overall progress */}
       <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 16, marginBottom: 18 }}>

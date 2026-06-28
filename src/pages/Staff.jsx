@@ -7,6 +7,7 @@ import { ALL_PERMS } from '../constants';
 import { Modal } from '../components/common/Modal';
 import { EmptyState } from '../components/common/Alert';
 import { Pagination, paginate } from '../components/common/Pagination';
+import { FilterPopup, FilterField, FP_INPUT } from '../components/common/FilterPopup';
 
 const IS = { width: '100%', padding: '9px 13px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 function Field({ label, children }) {
@@ -154,13 +155,22 @@ export default function Staff() {
         </div>
       </div>
 
-      <div className="filter-bar">
-        <input className="filter-bar-input filter-bar-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH..." style={IS} />
-        <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
-          <option value="">ALL DEPTS</option>
-          {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-      </div>
+      {/* Filter popup — search + department, scoped to employee fields.
+          Matches the shared FilterPopup design used on Manage Tasks. */}
+      <FilterPopup
+        activeCount={(search ? 1 : 0) + (filterDept ? 1 : 0)}
+        onClear={() => { setSearch(''); setFilterDept(''); }}
+      >
+        <FilterField label="Search">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH EMPLOYEE NAME..." style={FP_INPUT} autoFocus />
+        </FilterField>
+        <FilterField label="Department">
+          <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={FP_INPUT}>
+            <option value="">ALL DEPTS</option>
+            {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+        </FilterField>
+      </FilterPopup>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
         {paged.items.length ? paged.items.map((e) => (
