@@ -628,10 +628,16 @@ export const buildAdminAlert = ({ subject, message, type = 'admin_alert', meta =
 });
 
 // Async helper: append an admin alert to existing notices and persist.
+// We dedup by alert.id within the existing notices list — if a previous call
+// already appended the same id (e.g. realtime echo or double-clicked handler),
+// we drop the duplicate so the bell never shows the same row twice.
 export async function notifyAdmins({ notices, save, subject, message, type, meta }) {
   const alert = buildAdminAlert({ subject, message, type, meta });
   try {
-    await save('hops-notices', [...(notices || []), alert]);
+    const existing = notices || [];
+    const seen = new Set(existing.map(n => n.id).filter(Boolean));
+    const list = seen.has(alert.id) ? existing : [...existing, alert];
+    await save('hops-notices', list);
   } catch (e) {
     console.error('notifyAdmins failed:', e);
   }

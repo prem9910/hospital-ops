@@ -36,6 +36,7 @@ const PAGE_TITLES = {
 export default function AppLayout() {
   const { currentRole, currentUser, logout, inactivityPct, inactivityWarning, inactivitySeconds, showSessionModal, continueSession } = useAuth();
   const { isSaving, notices, employees, save } = useAppForSaving();
+  const { tasks, logAct } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -45,9 +46,22 @@ export default function AppLayout() {
   if (!currentRole) return <Navigate to="/login" replace />;
 
   const isMain = currentRole === 'mainadmin';
-  const myUnread = isMain
-    ? (notices || []).filter(n => (n.toEmpId === 'MAINADMIN' || n.toName === 'MAIN ADMIN') && !n.isRead)
-    : (notices || []).filter(n => n.toEmpId === currentUser?.empId && !n.isRead);
+  // De-duplicate by id — Supabase realtime merges can occasionally surface
+  // the same row twice in a render, and the same notice id was being
+  // shown twice in the bell dropdown. Use a Set to keep only the first.
+  const myUnread = (() => {
+    const base = isMain
+      ? (notices || []).filter(n => (n.toEmpId === 'MAINADMIN' || n.toName === 'MAIN ADMIN') && !n.isRead)
+      : (notices || []).filter(n => n.toEmpId === currentUser?.empId && !n.isRead);
+    const seen = new Set();
+    const out = [];
+    for (const n of base) {
+      if (!n.id || seen.has(n.id)) continue;
+      seen.add(n.id);
+      out.push(n);
+    }
+    return out;
+  })();
 
   async function openNotice(n) {
     setShowNotifDrop(false);
@@ -61,6 +75,29 @@ export default function AppLayout() {
   async function acceptDeptChange(n) {
     if (!n.meta?.newDept || !n.meta?.empId) return;
     const nowStr = new Date().toISOString();
+    const todayStr = toDay();
+    // Cancel all upcoming tasks (schedDate > today, status pending) assigned
+    // to this employee — they no longer belong to the employee's new dept.
+    // Currently-due tasks must still be completed; only future ones get cancelled.
+    const upcomingTasks = (tasks || []).filter(t =>
+      t.status === 'pending' &&
+      t.schedDate &&
+      t.schedDate > todayStr &&
+      isAssignedTo(t, n.toName)
+    );
+    const cancelledTaskIds = upcomingTasks.map(t => t.id);
+    let updatedTasks = tasks || [];
+    if (cancelledTaskIds.length > 0) {
+      updatedTasks = updatedTasks.map(t =>
+        cancelledTaskIds.includes(t.id)
+          ? { ...t, status: 'cancelled', cancelledAt: nowStr, cancelReason: `Dept change: ${n.meta.oldDept || ''} → ${n.meta.newDept}` }
+          : t
+      );
+      await save('hops-tasks', updatedTasks);
+      await logAct('UPCOMING TASKS CANCELLED — DEPT CHANGE',
+        `${n.toName}: ${cancelledTaskIds.length} upcoming task(s) cancelled on dept change to "${n.meta.newDept}" (IDs: ${cancelledTaskIds.slice(0, 5).map(id => id.slice(-6)).join(', ')}${cancelledTaskIds.length > 5 ? '…' : ''})`
+      );
+    }
     // Apply dept change + clear pendingDept
     const updatedEmps = (employees || []).map(e =>
       e.id === n.meta.empId ? { ...e, dept: n.meta.newDept, pendingDept: '' } : e
@@ -68,14 +105,14 @@ export default function AppLayout() {
     await save('hops-employees', updatedEmps);
     // Mark approval notice as read AND record acceptance in meta
     const updatedNotices = (notices || []).map(x =>
-      x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr } } : x
+      x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr, cancelledTaskIds } } : x
     );
     // Confirmation notice (to employee)
     const confirmNotice = {
       id: uid(), toEmpId: n.toEmpId, toName: n.toName,
       fromName: 'MAIN ADMIN',
       subject: 'DEPARTMENT CHANGED SUCCESSFULLY',
-      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\nPlease report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
+      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\n${cancelledTaskIds.length > 0 ? `${cancelledTaskIds.length} upcoming task(s) assigned to you have been cancelled automatically — please disregard them.\n\n` : ''}Please report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
       type: 'general', isRead: false, sentAt: nowStr, meta: null,
     };
     // Admin bell alert — employee accepted the dept change
@@ -83,11 +120,47 @@ export default function AppLayout() {
       id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',
       fromName: n.toName,
       subject: `✅ ${n.toName} accepted dept change`,
-      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".`,
+      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".${cancelledTaskIds.length > 0 ? ` ${cancelledTaskIds.length} upcoming task(s) cancelled.` : ''}`,
       type: 'dept_change_accepted', isRead: false, sentAt: nowStr,
+      meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept, cancelledTaskIds },
+    };
+    await save('hops-notices', [...updatedNotices, confirmNotice, adminAlert]);
+    setActiveNotice(null);
+  }
+
+  async function rejectDeptChange(n) {
+    if (!n.meta?.empId) return;
+    const nowStr = new Date().toISOString();
+    // Clear pendingDept — employee stays in their current dept.
+    // Upcoming tasks are NOT touched; they continue normally as if no
+    // dept change was ever proposed.
+    const updatedEmps = (employees || []).map(e =>
+      e.id === n.meta.empId ? { ...e, pendingDept: '' } : e
+    );
+    await save('hops-employees', updatedEmps);
+    // Mark approval notice as read AND record rejection in meta
+    const updatedNotices = (notices || []).map(x =>
+      x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, rejected: true, rejectedAt: nowStr } } : x
+    );
+    // Confirmation notice (to employee)
+    const confirmNotice = {
+      id: uid(), toEmpId: n.toEmpId, toName: n.toName,
+      fromName: 'MAIN ADMIN',
+      subject: 'DEPARTMENT CHANGE DECLINED',
+      message: `Dear ${n.toName},\n\nYou have declined the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\nYou will continue to remain in your current department "${n.meta.oldDept || ''}".\n\nAny upcoming tasks assigned to you will continue as scheduled.\n\nRegards,\nMAIN ADMIN`,
+      type: 'general', isRead: false, sentAt: nowStr, meta: null,
+    };
+    // Admin bell alert — employee rejected the dept change
+    const adminAlert = {
+      id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',
+      fromName: n.toName,
+      subject: `❌ ${n.toName} rejected dept change`,
+      message: `${n.toName} has rejected the department change from "${n.meta.oldDept}" to "${n.meta.newDept}". They remain in "${n.meta.oldDept || '—'}".`,
+      type: 'dept_change_rejected', isRead: false, sentAt: nowStr,
       meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept },
     };
     await save('hops-notices', [...updatedNotices, confirmNotice, adminAlert]);
+    await logAct('DEPT CHANGE REJECTED', `${n.toName} declined change from "${n.meta.oldDept || '—'}" to "${n.meta.newDept}" — staying in current dept`);
     setActiveNotice(null);
   }
 
@@ -228,9 +301,17 @@ export default function AppLayout() {
                       style={{ flex: 1, padding: '9px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
                       ✅ Accept
                     </button>
+                    <button onClick={() => {
+                      if (window.confirm('Reject this department change?\n\nYou will continue to remain in your current department and all your upcoming tasks will continue normally.')) {
+                        rejectDeptChange(activeNotice);
+                      }
+                    }}
+                      style={{ flex: 1, padding: '9px', borderRadius: 8, background: 'transparent', color: '#c0392b', border: '1.5px solid #c0392b', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                      ❌ Reject
+                    </button>
                     <button onClick={() => setActiveNotice(null)}
                       style={{ flex: 1, padding: '9px', borderRadius: 8, background: 'transparent', color: '#d4920a', border: '1.5px solid #d4920a', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
-                      🔔 Remind Me Later
+                      🔔 Later
                     </button>
                   </div>
                 ) : (

@@ -382,6 +382,17 @@ export default function MyTasks() {
       (isAssignedTo(tx, currentUser.name) || handoverTaskIdsForMe.has(tx.id))
     ).length;
     if (remaining > 0) return;
+    // Guard: if an unread dept_change_approval notice for this employee
+    // already exists (e.g. multiple task-completions in the same render),
+    // skip — otherwise the bell shows duplicate approval cards.
+    const hasPendingApproval = (notices || []).some(n =>
+      n.type === 'dept_change_approval' &&
+      n.toEmpId === emp.id &&
+      !n.isRead &&
+      !n.meta?.accepted &&
+      !n.meta?.rejected
+    );
+    if (hasPendingApproval) return;
     // All tasks done — send dept_change_approval to employee + alert to main admin
     const nowIso = new Date().toISOString();
     const approvalNotice = {

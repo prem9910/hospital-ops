@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, exportToExcel } from '../utils';
+import { uid, exportToExcel, toDay } from '../utils';
 import { sendWelcomeEmail } from '../lib/emailService';
 import { ALL_PERMS } from '../constants';
 import { Modal } from '../components/common/Modal';
@@ -56,7 +56,11 @@ export default function Staff() {
     const obj = { id: editEmp?.id || uid(), name: form.name.toUpperCase().trim(), dept: form.dept, role: form.isIncharge ? 'INCHARGE' : 'STAFF', isIncharge: form.isIncharge, contact: form.contact, email: form.email, password: form.password || editEmp?.password || '', perms };
     const isNew = !editEmp;
     const deptChanged = editEmp && editEmp.dept !== obj.dept;
-    const empPendingCount = deptChanged ? tasks.filter(t => (t.assignedTo || []).includes(obj.name) && t.status === 'pending').length : 0;
+    const todayStr = toDay();
+    const isCurrentDatePending = (t) => t.status === 'pending' && (!t.schedDate || t.schedDate <= todayStr);
+    // Upcoming tasks (schedDate > today) do NOT block a dept change — only
+    // tasks that are actually due need to be wrapped up first.
+    const empPendingCount = deptChanged ? tasks.filter(t => (t.assignedTo || []).includes(obj.name) && isCurrentDatePending(t)).length : 0;
 
     // Keep old dept until employee accepts; record new target dept in pendingDept
     const objToSave = deptChanged
