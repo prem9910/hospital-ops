@@ -2,6 +2,29 @@ import { supabase } from '../lib/supabase';
 
 // ─── Pack/Unpack ─────────────────────────────────────────────────────────────
 const _nowIso = () => new Date().toISOString();
+// Normalise a value to an ISO 8601 timestamp string for PostgreSQL TIMESTAMPTZ
+// columns. PostgreSQL rejects raw epoch milliseconds (e.g. "1782640580262")
+// with "date/time field value out of range" — TIMESTAMPTZ only accepts ISO
+// 8601 format like "2026-06-28T12:34:56.789Z". Accepts:
+//   - number (epoch ms)     → new Date(num).toISOString()
+//   - number (epoch sec)    → new Date(num*1000).toISOString()
+//   - ISO string            → returned as-is
+//   - empty/undefined/null  → _nowIso() (fallback to current time)
+const toIso = (v) => {
+  if (v == null || v === '') return _nowIso();
+  if (typeof v === 'number') {
+    // Heuristic: epoch-ms is 13 digits, epoch-sec is 10 digits
+    const ms = v > 1e12 ? v : v * 1000;
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : _nowIso();
+  }
+  if (typeof v === 'string') {
+    // Already ISO or already a parseable date string — trust it
+    const d = new Date(v);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : _nowIso();
+  }
+  return _nowIso();
+};
 const TABLES = {
   'hops-depts': {
     table: 'departments',
@@ -31,7 +54,7 @@ const TABLES = {
       activity_log: o.activityLog || [], completion_history: o.completionHistory || [],
       parent_task_id: o.parentTaskId || '',
       extensions: o.extensions || [],
-      updated_at: o.updatedAt || _nowIso(),
+      updated_at: toIso(o.updatedAt),
     }),
     unpack: (r) => ({
       id: r.id, name: r.name || '', dept: r.dept || '', freq: r.freq || 'daily',
@@ -49,7 +72,7 @@ const TABLES = {
   },
   'hops-issues': {
     table: 'issues',
-    pack: (o) => ({ id: o.id, title: o.title || '', dept: o.dept || '', priority: o.priority || 'medium', reporter: o.reporter || '', assigned: o.assigned || '', description: o.desc || '', status: o.status || 'open', date: o.date || '', resolve_remark: o.resolveRemark || '', resolve_by: o.resolveBy || '', resolved_at: o.resolvedAt || null, updated_at: o.updatedAt || _nowIso() }),
+    pack: (o) => ({ id: o.id, title: o.title || '', dept: o.dept || '', priority: o.priority || 'medium', reporter: o.reporter || '', assigned: o.assigned || '', description: o.desc || '', status: o.status || 'open', date: o.date || '', resolve_remark: o.resolveRemark || '', resolve_by: o.resolveBy || '', resolved_at: o.resolvedAt ? toIso(o.resolvedAt) : null, updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, title: r.title || '', dept: r.dept || '', priority: r.priority || 'medium', reporter: r.reporter || '', assigned: r.assigned || '', desc: r.description || '', status: r.status || 'open', date: r.date || '', resolveRemark: r.resolve_remark || '', resolveBy: r.resolve_by || '', resolvedAt: r.resolved_at || '', updatedAt: r.updated_at || '' }),
   },
   'hops-handovers': {
@@ -68,8 +91,8 @@ const TABLES = {
       created_by: o.createdAt || '',
       decision_remark: o.decisionRemark || '',
       decision_by: o.decisionBy || '',
-      decision_at: o.decisionAt || null,
-      updated_at: o.updatedAt || _nowIso(),
+      decision_at: o.decisionAt ? toIso(o.decisionAt) : null,
+      updated_at: toIso(o.updatedAt),
     }),
     unpack: (r) => {
       let taskIds = [];
