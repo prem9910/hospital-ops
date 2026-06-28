@@ -241,6 +241,8 @@ export function TasksDrilldownModal({
                       task={t}
                       onOpenManage={manageUrl ? () => { onClose(); navigate(manageUrl + (manageUrl.includes('?') ? '&' : '?') + 'focus=' + encodeURIComponent(t.id)); } : null}
                       onCollapse={() => setExpandedId(null)}
+                      manageLabel={manageLabel}
+                      manageUrl={manageUrl}
                     />
                   ) : null}
                 />
@@ -274,7 +276,7 @@ function FragmentRow({ task, columns, renderCell, isExpanded, expandedNode }) {
 // clicked row. Mirrors the read-only TaskDetailModal body (no action
 // buttons — those are gated on `onDone`/`canEdit` etc. and the dashboard
 // drilldown is intentionally read-only).
-function InlineTaskDetail({ task, onOpenManage, onCollapse }) {
+function InlineTaskDetail({ task, onOpenManage, onCollapse, manageLabel, manageUrl }) {
   const isDone = task.status === 'done';
   const late = wasCompletedLate(task);
   const actHtml = (task.activityLog || []);
