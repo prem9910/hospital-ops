@@ -516,7 +516,11 @@ export default function Tasks() {
     // after accepting a dept change, future-dated tasks still appeared in
     // the Upcoming tab. The cancellation flips status to 'cancelled' but
     // we want absolute certainty they never re-appear in actionable tabs.
-    if (!isDoneTab && TERMINAL_STATUSES.includes(t.status)) return false;
+    //
+    // NOTE: `isDoneTab` (declared below) cannot be referenced here — JS
+    // const has no hoisted-initialised semantics and a TDZ ReferenceError
+    // would blank the page. Inline the comparison instead.
+    if (tab !== 'done' && TERMINAL_STATUSES.includes(t.status)) return false;
     // Primary gate per tab. Cancelled tasks classify as 'done' (above), so
     // these checks exclude them from Upcoming/Ongoing naturally; the
     // terminal-status guard above is belt-and-suspenders.
