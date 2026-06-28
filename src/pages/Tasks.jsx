@@ -925,9 +925,26 @@ export default function Tasks() {
                 fontSize: 13,
                 marginBottom: '-2px',
                 transition: 'all 0.15s',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              {t.label} ({t.count})
+              <span>{t.label}</span>
+              <span style={{
+                display: 'inline-block',
+                minWidth: 22,
+                padding: '2px 8px',
+                borderRadius: 12,
+                background: isActive ? t.color : '#d8e2ef',
+                color: isActive ? 'white' : '#6b7a90',
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1.4,
+                textAlign: 'center',
+              }}>
+                {t.count}
+              </span>
             </button>
           );
         })}
