@@ -467,15 +467,20 @@ export default function Settings() {
 
       </>)}
 
-      {/* ── Export & Import — visible to all roles ── */}
+      {/* ── Export & Import — mainadmin only ──
+          JSON backup/restore gives full read/write to every hops-* table.
+          Sub-admins and staff don't get this — they only see their own
+          scoped data via the regular Excel export buttons on individual
+          pages. The whole card is wrapped in the role gate (including its
+          description text, since the "you will only export your own" copy
+          was misleading for users who don't get the card at all). */}
+      {currentRole === 'mainadmin' && (
       <Card title="📦 Export & Import Data">
         <div style={{ fontSize: 12, color: '#6b7a90', marginBottom: 14, lineHeight: 1.5 }}>
           Back up your records to a JSON file, or restore them on another device.
           <br />
           <span style={{ fontWeight: 800, color: '#0d7377' }}>
-            {currentRole === 'mainadmin'
-              ? 'As Main Admin you will export everything.'
-              : 'You will only export records assigned to / created by you.'}
+            As Main Admin you will export everything.
           </span>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -493,6 +498,7 @@ export default function Settings() {
           </button>
         </div>
       </Card>
+      )}
 
       {/* ── System Info ── */}
       <Card title="ℹ️ System Info">
@@ -511,6 +517,11 @@ export default function Settings() {
         </div>
       </Card>
 
+      {/* ── Export + Import modals — mainadmin only ──
+          Wrapped in the role gate as defense in depth: even if a determined
+          non-mainadmin sets showExport/showImport to true via React DevTools,
+          the modal JSX never mounts so nothing renders. */}
+      {currentRole === 'mainadmin' && (<>
       {/* ── Export modal — file name + year filter + live count preview ── */}
       <Modal open={showExport} onClose={closeExport} title="📤 Export Data to JSON" maxWidth="max-w-lg">
         <Field label="File Name">
@@ -752,6 +763,7 @@ export default function Settings() {
           </>
         )}
       </Modal>
+      </>)}
     </div>
   );
 }
