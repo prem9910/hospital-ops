@@ -85,14 +85,43 @@ export default function AppLayout() {
     // For tasks assigned to MULTIPLE people we keep the task but remove this
     // employee from `assignedTo` so the task stays valid for the other
     // assignees. For tasks assigned to only this employee we drop the row.
-    const upcomingTasks = (tasks || []).filter(t =>
+    //
+    // CHILD TASKS: child rows (parentTaskId !== '') inherit the parent's
+    // assignedTo at creation time (see autoCycleTasks / handleDone). They
+    // are not matched by the upcoming filter above because their schedDate
+    // is typically later than today, BUT once the parent is cleared the
+    // child becomes an orphan still assigned to the employee — and still
+    // shows in the Upcoming tab. So we cascade: for every parent in
+    // upcomingTasks we also process its children with the SAME fate:
+    //   - parent dropped (single-assignee)         → drop ALL its children
+    //   - parent kept with stripped assignedTo     → strip this employee
+    //                                                 from every child
+    // This catches children regardless of their own schedDate so the new
+    // department starts with a clean queue.
+    const seedUpcoming = (tasks || []).filter(t =>
       t.status === 'pending' &&
       t.schedDate &&
       t.schedDate > todayStr &&
       isAssignedTo(t, n.toName)
     );
+    // Parent ids whose assignment is being cleared for this employee.
+    const clearedParentIds = new Set(seedUpcoming.filter(t => !t.parentTaskId).map(t => t.id));
+    // Cascade: any child whose parent is in clearedParentIds — match by
+    // schedDate too if the child itself is upcoming, OR include all children
+    // of a cleared parent (regardless of schedDate) because the parent is
+    // leaving this employee's queue and the child has no business staying
+    // assigned to them in any state.
+    const cascadeChildren = (tasks || []).filter(t =>
+      t.status === 'pending' &&
+      t.parentTaskId &&
+      clearedParentIds.has(t.parentTaskId) &&
+      isAssignedTo(t, n.toName)
+    );
+    const upcomingTasks = [...seedUpcoming, ...cascadeChildren];
     const removedTaskIds = [];
     const unassignedOnlyIds = [];
+    const removedChildIds = [];
+    const unassignedOnlyChildIds = [];
     let updatedTasks = tasks || [];
     if (upcomingTasks.length > 0) {
       updatedTasks = updatedTasks
@@ -101,21 +130,25 @@ export default function AppLayout() {
           const others = (t.assignedTo || []).filter((name) => (name || '').toUpperCase() !== n.toName.toUpperCase());
           if (others.length === 0) {
             // Only this employee assigned — drop the row entirely.
-            removedTaskIds.push(t.id);
+            if (t.parentTaskId) removedChildIds.push(t.id);
+            else removedTaskIds.push(t.id);
             return null;
           }
           // Other assignees remain — just strip this employee from the list.
-          unassignedOnlyIds.push(t.id);
+          if (t.parentTaskId) unassignedOnlyChildIds.push(t.id);
+          else unassignedOnlyIds.push(t.id);
           return { ...t, assignedTo: others };
         })
         .filter(Boolean);
       await save('hops-tasks', updatedTasks);
-      const summary = `${n.toName}: ${removedTaskIds.length} removed, ${unassignedOnlyIds.length} unassigned-only on dept change to "${n.meta.newDept}"`;
+      const parentSummary = `${removedTaskIds.length} parent(s) removed, ${unassignedOnlyIds.length} parent(s) unassigned-only`;
+      const childSummary = `${removedChildIds.length} child(ren) removed, ${unassignedOnlyChildIds.length} child(ren) unassigned-only`;
+      const summary = `${n.toName} on dept change to "${n.meta.newDept}": ${parentSummary}; ${childSummary}`;
       await logAct('UPCOMING TASKS CLEARED — DEPT CHANGE',
-        `${summary} (IDs: ${[...removedTaskIds, ...unassignedOnlyIds].slice(0, 5).map((id) => id.slice(-6)).join(', ')}${removedTaskIds.length + unassignedOnlyIds.length > 5 ? '…' : ''})`
+        `${summary} (IDs: ${[...removedTaskIds, ...unassignedOnlyIds, ...removedChildIds, ...unassignedOnlyChildIds].slice(0, 5).map((id) => id.slice(-6)).join(', ')}${removedTaskIds.length + unassignedOnlyIds.length + removedChildIds.length + unassignedOnlyChildIds.length > 5 ? '…' : ''})`
       );
     }
-    const clearedTaskIds = [...removedTaskIds, ...unassignedOnlyIds];
+    const clearedTaskIds = [...removedTaskIds, ...unassignedOnlyIds, ...removedChildIds, ...unassignedOnlyChildIds];
     // Apply dept change + clear pendingDept
     const updatedEmps = (employees || []).map(e =>
       e.id === n.meta.empId ? { ...e, dept: n.meta.newDept, pendingDept: '' } : e
