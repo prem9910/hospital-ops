@@ -504,6 +504,9 @@ export default function Tasks() {
   function classifyTask(t) {
     const freq = t.freq || 'daily';
     const sched = t.schedDate || '';
+    // Done tasks always go to the 'done' bucket regardless of freq/date —
+    // their tab is purely a status-driven view, not a date one.
+    if (t.status === 'done') return 'done';
     // Daily + delegation are conceptually due every day. The actual schedDate
     // tells us whether the current slot has arrived (ongoing) or sits in the
     // future (upcoming).
@@ -516,25 +519,31 @@ export default function Tasks() {
     // the slot is in the future / off-period (upcoming).
     return isTaskDueToday(t) ? 'ongoing' : 'upcoming';
   }
-  // Counts reflect PENDING tasks only — the actionable queue. Done tasks
-  // are excluded so the badge answers "how many do I still need to do?"
-  // rather than "how many total are scheduled?". Done counts are surfaced
-  // via the Status dropdown filter (pick DONE to see them) and the
-  // /misreporting and /activitylog pages for historical reporting.
+  // Counts reflect the actionable queue for each tab:
+  //   ongoing  → current-date pending tasks (no done — done lives in its
+  //              own tab so the badge answers "how many do I still need
+  //              to do today?")
+  //   upcoming → future-dated pending tasks
+  //   done     → completed tasks (the historical record)
   //
-  // Status (pending/done) is intentionally not part of the classifyTask
-  // decision — the tab split is purely date-based. The count filter is
-  // separate: same sourceList, but only status === 'pending' rows.
-  const ongoingCount = sourceList.filter((t) => t.status !== 'done' && classifyTask(t) === 'ongoing').length;
-  const upcomingCount = sourceList.filter((t) => t.status !== 'done' && classifyTask(t) === 'upcoming').length;
+  // Done counts come through the Status dropdown filter (pick DONE on the
+  // Ongoing/Upcoming tab) and the MIS Reporting / Activity Log pages for
+  // historical reporting, but the badge on the Done tab is the canonical
+  // "how many have been completed" number.
+  const ongoingCount = sourceList.filter((t) => t.status === 'pending' && classifyTask(t) === 'ongoing').length;
+  const upcomingCount = sourceList.filter((t) => t.status === 'pending' && classifyTask(t) === 'upcoming').length;
+  const doneCount = sourceList.filter((t) => t.status === 'done').length;
 
   const rawFiltered = sourceList.filter((t) => {
     // Tab classification is the primary filter — splits the list into
-    // ongoing (active now) vs upcoming (future-scheduled). Status (pending
-    // vs done) is handled by filterStatus below; the two filters compose.
+    // ongoing (current-date pending) vs upcoming (future-dated pending)
+    // vs done (completed). Once classified into a tab, the Status
+    // dropdown filter can narrow further (e.g. Ongoing + Done is empty
+    // by design — done tasks live in the Done tab).
     const cls = classifyTask(t);
     if (tab === 'ongoing' && cls !== 'ongoing') return false;
     if (tab === 'upcoming' && cls !== 'upcoming') return false;
+    if (tab === 'done' && cls !== 'done') return false;
     if (search && !t.name.toUpperCase().includes(search.toUpperCase()) && !t.dept.toUpperCase().includes(search.toUpperCase())) return false;
     if (filterDept && t.dept !== filterDept) return false;
     if (filterStatus && t.status !== filterStatus) return false;
@@ -912,14 +921,18 @@ export default function Tasks() {
           so the "Mine" tab IS their full list — no extra "All" tab needed.
           Main admin sees the full unfiltered list by default. */}
 
-      {/* Ongoing / Upcoming tabs — split pending AND done tasks by date so
-          the user can quickly tell what's actionable now vs what's scheduled
-          for a future slot. Status (pending vs done) is independent and
-          controlled by the Status dropdown — combine as needed. */}
+      {/* Ongoing / Upcoming / Done tabs:
+            ongoing   → current-date pending tasks (the actionable queue)
+            upcoming  → future-dated pending tasks (scheduled but not yet due)
+            done      → completed tasks (the historical record)
+          The split is date × status: ongoing/upcoming are date-bucketed
+          pending, done is everything status === 'done'. The Status
+          dropdown filter can still narrow within a tab. */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 12, borderBottom: '2px solid #d8e2ef' }}>
         {[
           { key: 'ongoing', label: '🔄 Ongoing', count: ongoingCount, color: '#0d7377' },
           { key: 'upcoming', label: '📅 Upcoming', count: upcomingCount, color: '#7c3aed' },
+          { key: 'done', label: '✅ Done', count: doneCount, color: '#1a7a4a' },
         ].map((t) => {
           const isActive = tab === t.key;
           return (
@@ -1124,8 +1137,8 @@ export default function Tasks() {
               }) : (
                 <tr><td colSpan={10}>
                   <EmptyState
-                    icon={tab === 'upcoming' ? '📅' : '✅'}
-                    message={tab === 'upcoming' ? 'NO UPCOMING TASKS — ALL CLEAR!' : 'NO ONGOING TASKS — ALL CLEAR!'}
+                    icon={tab === 'upcoming' ? '📅' : tab === 'done' ? '✅' : '🔄'}
+                    message={tab === 'upcoming' ? 'NO UPCOMING TASKS — ALL CLEAR!' : tab === 'done' ? 'NO COMPLETED TASKS YET' : 'NO ONGOING TASKS — ALL CLEAR!'}
                   />
                 </td></tr>
               )}

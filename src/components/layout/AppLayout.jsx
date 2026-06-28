@@ -333,8 +333,20 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
     ? tasks
     : tasks.filter((t) => isAssignedTo(t, currentUser.name) || t.createdBy === currentUser.name);
 
+  // Sidebar badges count CURRENT-DATE pending tasks only — i.e. tasks the
+  // user can actually act on right now. Future-dated pending tasks are
+  // excluded so the badge answers "how many do I still need to do today?"
+  // not "how many are scheduled in total?". Missing schedDate is treated as
+  // due today (backstop for legacy rows created before the form had a date
+  // default). Done tasks are excluded — they live in the Done tab.
+  const isCurrentDatePending = (t) => {
+    if (t.status !== 'pending') return false;
+    if (!t.schedDate) return true;                       // backstop
+    return t.schedDate <= toDay();
+  };
+
   const badges = {
-    tasks: myTasksBase.filter((t) => t.status === 'pending').length,
+    tasks: myTasksBase.filter(isCurrentDatePending).length,
     myTasks: (() => {
       const myName = currentUser.name;
       const today = toDay();
@@ -347,19 +359,18 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
       const tById = {};
       tasks.forEach(t => { tById[t.id] = t; });
       // Own pending — exclude grandchild bug artifacts, deduplicate parent/child.
-      // Backstop: any pending task whose schedDate is today or in the past also counts
-      // (covers overdue tasks with a backdated schedDate that freq logic doesn't flag).
+      // Gate on schedDate <= today so future-dated daily tasks don't leak in
+      // via isTaskDueToday() (which returns true for daily unconditionally).
       const ownCount = tasks.filter(t => {
         if (!isAssignedTo(t, myName) || t.status !== 'pending') return false;
         // Skip grandchild tasks (parent also has parentTaskId)
         if (t.parentTaskId && tById[t.parentTaskId]?.parentTaskId) return false;
         // Skip parent if a pending child exists for me
         if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, myName))) return false;
-        // Delegation always counts; otherwise freq logic OR backdated schedDate
-        if (t.freq === 'delegation') return true;
-        if (isTaskDueToday(t)) return true;
-        if (t.schedDate && t.schedDate <= today) return true;
-        return false;
+        // schedDate gate: future-dated tasks don't count here. Missing date
+        // counts as due today (backstop for legacy rows).
+        if (t.schedDate && t.schedDate > today) return false;
+        return true;
       }).length;
       // Handover received — only original task IDs (not children)
       const handoverRealCount = tasks.filter(t =>
