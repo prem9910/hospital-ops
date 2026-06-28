@@ -437,12 +437,16 @@ export default function Tasks() {
   // (pick DONE to see them) and the MIS Reporting / Activity Log pages
   // for historical reporting.
   const todayStr = toDay();
+  // Terminal statuses — the task is closed out and lives in the 'done' bucket
+  // alongside completed tasks. Critically, cancelled/rejected/trashed tasks
+  // MUST NOT be classified as 'upcoming' (which would keep them visible in
+  // the Upcoming tab even though they're closed). The dept-change flow marks
+  // upcoming tasks as 'cancelled'; without this they'd haunt the queue.
+  const TERMINAL_STATUSES = ['done', 'cancelled', 'rejected', 'trashed'];
   function classifyTask(t) {
     const freq = t.freq || 'daily';
     const sched = t.schedDate || '';
-    // Done tasks always go to the 'done' bucket regardless of freq/date —
-    // their tab is purely a status-driven view, not a date one.
-    if (t.status === 'done') return 'done';
+    if (TERMINAL_STATUSES.includes(t.status)) return 'done';
     // Daily + delegation are conceptually due every day. The actual schedDate
     // tells us whether the current slot has arrived (ongoing) or sits in the
     // future (upcoming).
@@ -468,7 +472,7 @@ export default function Tasks() {
   // "how many have been completed" number.
   const ongoingCount = sourceList.filter((t) => t.status === 'pending' && classifyTask(t) === 'ongoing').length;
   const upcomingCount = sourceList.filter((t) => t.status === 'pending' && classifyTask(t) === 'upcoming').length;
-  const doneCount = sourceList.filter((t) => t.status === 'done').length;
+  const doneCount = sourceList.filter((t) => TERMINAL_STATUSES.includes(t.status)).length;
 
   // Resolve the user's date filter into an actual [from, to] window.
   // `todayStr` is the current day; preset picks a relative window;
@@ -1309,7 +1313,10 @@ export default function Tasks() {
                       })()}
                     </td>
                     <td style={{ padding: '11px 13px', verticalAlign: 'middle' }}>
-                      {isDone && !late ? <span style={{ background: '#d4edda', color: '#155724', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>✅ ON TIME</span>
+                      {t.status === 'cancelled' ? <span title={t.cancelReason || 'Cancelled'} style={{ background: '#fde8e8', color: '#7d1a1a', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>🚫 CANCELLED</span>
+                        : t.status === 'rejected' ? <span style={{ background: '#fde8e8', color: '#7d1a1a', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>❌ REJECTED</span>
+                        : t.status === 'trashed' ? <span style={{ background: '#f3f4f6', color: '#4b5563', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>🗑️ TRASHED</span>
+                        : isDone && !late ? <span style={{ background: '#d4edda', color: '#155724', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>✅ ON TIME</span>
                         : isDone && late ? <span style={{ background: '#ede9fe', color: '#4c1d95', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>⏰ DELAYED</span>
                         : t.priority === 'high' ? <span style={{ background: '#fde8e8', color: '#7d1a1a', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>⚠️ PENDING</span>
                         : <span style={{ background: '#fff3cd', color: '#7a4800', padding: '3px 9px', borderRadius: 20, fontSize: 10.5, fontWeight: 800 }}>⏳ PENDING</span>}
@@ -1383,7 +1390,7 @@ export default function Tasks() {
             'Assigned By': t.createdBy || '—',
             'Sched. Date': t.schedDate || '—',
             'Priority': t.priority,
-            'Status': t.status === 'done' ? (wasCompletedLate(t) ? 'Delayed' : 'On Time') : 'Pending',
+            'Status': t.status === 'done' ? (wasCompletedLate(t) ? 'Delayed' : 'On Time') : t.status === 'cancelled' ? 'Cancelled' : t.status === 'rejected' ? 'Rejected' : t.status === 'trashed' ? 'Trashed' : 'Pending',
             'Done By': t.doneBy || '—',
             'Done Time': t.doneTime || '—',
             'Delay Reason': t.delayReason || '—',
