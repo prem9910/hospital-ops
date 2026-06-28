@@ -508,6 +508,18 @@ export default function Tasks() {
     // vs done (completed). Once classified into a tab, the date filter
     // narrows further (e.g. Ongoing + Current Month).
     const cls = classifyTask(t);
+    // Defence-in-depth: never surface a terminal-status task in Ongoing
+    // or Upcoming even if classifyTask ever drifts. After the dept-change
+    // Accept flow runs, this guarantees cancelled future-dated tasks
+    // (which now classify as 'done') cannot leak into Upcoming via any
+    // secondary filter below. Specifically: the user's complaint was that
+    // after accepting a dept change, future-dated tasks still appeared in
+    // the Upcoming tab. The cancellation flips status to 'cancelled' but
+    // we want absolute certainty they never re-appear in actionable tabs.
+    if (!isDoneTab && TERMINAL_STATUSES.includes(t.status)) return false;
+    // Primary gate per tab. Cancelled tasks classify as 'done' (above), so
+    // these checks exclude them from Upcoming/Ongoing naturally; the
+    // terminal-status guard above is belt-and-suspenders.
     if (tab === 'ongoing' && cls !== 'ongoing') return false;
     if (tab === 'upcoming' && cls !== 'upcoming') return false;
     if (tab === 'done' && cls !== 'done') return false;

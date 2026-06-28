@@ -76,28 +76,46 @@ export default function AppLayout() {
     if (!n.meta?.newDept || !n.meta?.empId) return;
     const nowStr = new Date().toISOString();
     const todayStr = toDay();
-    // Cancel all upcoming tasks (schedDate > today, status pending) assigned
-    // to this employee — they no longer belong to the employee's new dept.
-    // Currently-due tasks must still be completed; only future ones get cancelled.
+    // Remove all upcoming tasks (schedDate > today, status pending) assigned
+    // to this employee. The user's reasoning: after a dept change new tasks
+    // will be assigned in the new department, so the old upcoming queue is
+    // obsolete. We DELETE the entries (not just mark cancelled) so they
+    // never reappear in any tab — Ongoing, Upcoming, or Done.
+    //
+    // For tasks assigned to MULTIPLE people we keep the task but remove this
+    // employee from `assignedTo` so the task stays valid for the other
+    // assignees. For tasks assigned to only this employee we drop the row.
     const upcomingTasks = (tasks || []).filter(t =>
       t.status === 'pending' &&
       t.schedDate &&
       t.schedDate > todayStr &&
       isAssignedTo(t, n.toName)
     );
-    const cancelledTaskIds = upcomingTasks.map(t => t.id);
+    const removedTaskIds = [];
+    const unassignedOnlyIds = [];
     let updatedTasks = tasks || [];
-    if (cancelledTaskIds.length > 0) {
-      updatedTasks = updatedTasks.map(t =>
-        cancelledTaskIds.includes(t.id)
-          ? { ...t, status: 'cancelled', cancelledAt: nowStr, cancelReason: `Dept change: ${n.meta.oldDept || ''} → ${n.meta.newDept}` }
-          : t
-      );
+    if (upcomingTasks.length > 0) {
+      updatedTasks = updatedTasks
+        .map((t) => {
+          if (!upcomingTasks.find((u) => u.id === t.id)) return t;
+          const others = (t.assignedTo || []).filter((name) => (name || '').toUpperCase() !== n.toName.toUpperCase());
+          if (others.length === 0) {
+            // Only this employee assigned — drop the row entirely.
+            removedTaskIds.push(t.id);
+            return null;
+          }
+          // Other assignees remain — just strip this employee from the list.
+          unassignedOnlyIds.push(t.id);
+          return { ...t, assignedTo: others };
+        })
+        .filter(Boolean);
       await save('hops-tasks', updatedTasks);
-      await logAct('UPCOMING TASKS CANCELLED — DEPT CHANGE',
-        `${n.toName}: ${cancelledTaskIds.length} upcoming task(s) cancelled on dept change to "${n.meta.newDept}" (IDs: ${cancelledTaskIds.slice(0, 5).map(id => id.slice(-6)).join(', ')}${cancelledTaskIds.length > 5 ? '…' : ''})`
+      const summary = `${n.toName}: ${removedTaskIds.length} removed, ${unassignedOnlyIds.length} unassigned-only on dept change to "${n.meta.newDept}"`;
+      await logAct('UPCOMING TASKS CLEARED — DEPT CHANGE',
+        `${summary} (IDs: ${[...removedTaskIds, ...unassignedOnlyIds].slice(0, 5).map((id) => id.slice(-6)).join(', ')}${removedTaskIds.length + unassignedOnlyIds.length > 5 ? '…' : ''})`
       );
     }
+    const clearedTaskIds = [...removedTaskIds, ...unassignedOnlyIds];
     // Apply dept change + clear pendingDept
     const updatedEmps = (employees || []).map(e =>
       e.id === n.meta.empId ? { ...e, dept: n.meta.newDept, pendingDept: '' } : e
@@ -105,14 +123,14 @@ export default function AppLayout() {
     await save('hops-employees', updatedEmps);
     // Mark approval notice as read AND record acceptance in meta
     const updatedNotices = (notices || []).map(x =>
-      x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr, cancelledTaskIds } } : x
+      x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr, clearedTaskIds } } : x
     );
     // Confirmation notice (to employee)
     const confirmNotice = {
       id: uid(), toEmpId: n.toEmpId, toName: n.toName,
       fromName: 'MAIN ADMIN',
       subject: 'DEPARTMENT CHANGED SUCCESSFULLY',
-      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\n${cancelledTaskIds.length > 0 ? `${cancelledTaskIds.length} upcoming task(s) assigned to you have been cancelled automatically — please disregard them.\n\n` : ''}Please report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
+      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\n${clearedTaskIds.length > 0 ? `${clearedTaskIds.length} upcoming task(s) previously assigned to you have been cleared automatically — please disregard them. Your new department will assign fresh tasks as needed.\n\n` : ''}Please report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
       type: 'general', isRead: false, sentAt: nowStr, meta: null,
     };
     // Admin bell alert — employee accepted the dept change
@@ -120,9 +138,9 @@ export default function AppLayout() {
       id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',
       fromName: n.toName,
       subject: `✅ ${n.toName} accepted dept change`,
-      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".${cancelledTaskIds.length > 0 ? ` ${cancelledTaskIds.length} upcoming task(s) cancelled.` : ''}`,
+      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".${clearedTaskIds.length > 0 ? ` ${clearedTaskIds.length} upcoming task(s) cleared.` : ''}`,
       type: 'dept_change_accepted', isRead: false, sentAt: nowStr,
-      meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept, cancelledTaskIds },
+      meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept, clearedTaskIds },
     };
     await save('hops-notices', [...updatedNotices, confirmNotice, adminAlert]);
     setActiveNotice(null);
