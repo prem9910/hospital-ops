@@ -87,13 +87,38 @@ export function useTaskNotifications(tasks, handovers, currentUser, currentRole,
   // First page load: all current tasks → toast (not yet in sessionStorage).
   // Subsequent refreshes: already in sessionStorage → no toast.
   // Truly new task assigned mid-session: also toasts (not yet in sessionStorage).
+  //
+  // IMPORTANT: only surface the toast for tasks whose schedDate is today or
+  // earlier. A recurring task that an employee just marked done spawns a
+  // next-slot child with `schedDate = tomorrow` (for daily), +15d, next
+  // month, etc. That child IS a new pending task assigned to the employee
+  // by definition, but it's NOT due yet — its "assigned" toast must wait
+  // until the scheduled date arrives. processPendingNotifications (in
+  // MyTasks.jsx) handles the admin-bell/email/activity-log deferral; this
+  // filter mirrors that for the in-app toast so all three surfaces fire
+  // together on the actual schedDate.
   useEffect(() => {
     if (!currentUser || currentRole === 'mainadmin') return;
     const myName = currentUser.name;
     const ssKeyAssigned = ssKey(myName, 'assigned');
+    const todayStr = toDay();
+
+    // Only consider tasks that are actually due now (schedDate <= today).
+    // Tasks with a future schedDate are pending but not actionable yet —
+    // they're EXCLUDED from `myTasks` here so no toast fires for them.
+    // Their ids are also NOT added to `seen`, which means when the
+    // schedDate eventually arrives and the user opens (or refreshes) the
+    // app, `fresh` will include the task and the toast will fire on the
+    // right day. processPendingNotifications (in MyTasks.jsx) handles the
+    // admin-bell / email / activity-log deferral for the same tasks; this
+    // filter keeps the in-app "assigned" toast in lockstep with that.
+    const isDue = (tk) => {
+      if (!tk.schedDate) return true; // backstop: no date = treat as due
+      return tk.schedDate <= todayStr;
+    };
 
     const myTasks = tasks.filter(tk =>
-      tk.status === 'pending' && isAssignedTo(tk, myName)
+      tk.status === 'pending' && isAssignedTo(tk, myName) && isDue(tk)
     );
 
     if (!assignedReady.current) {

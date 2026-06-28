@@ -187,6 +187,76 @@ export const getDuplicateCycleIds = (tasks) => {
   return toRemove;
 };
 
+// Compute the next scheduled occurrence of a recurring task. The returned
+// date string is the day the *next* slot should sit on, derived from the
+// task's freq + schedDate (the original anchor). When `fromDate` is provided,
+// we anchor the cycle from that date (so completion today → next due is
+// tomorrow for daily, 15 days later for 15-day, etc.).
+//
+// For `freq='daily'` we want the next occurrence strictly AFTER `fromDate`
+// (returning fromDate itself would land the new slot on the same day it was
+// just completed, which is the bug this helper exists to fix).
+export const getNextScheduledDate = (freq, schedDate, fromDate) => {
+  const anchor = schedDate || fromDate || toDay();
+  const from = fromDate || toDay();
+  const freqKey = freq || 'daily';
+
+  const parseDay = (s) => {
+    if (!s) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const fmt = (dt) => dt.getFullYear() + '-' +
+    String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getDate()).padStart(2, '0');
+
+  const base = parseDay(anchor);
+  const frm = parseDay(from);
+  if (!base) return from;
+  if (!frm) return fmt(base);
+
+  // daily → next occurrence strictly after `fromDate`
+  if (freqKey === 'daily') {
+    if (frm >= base) {
+      // fromDate is on or after the anchor → next daily slot is tomorrow.
+      const d = new Date(frm.getTime());
+      d.setDate(d.getDate() + 1);
+      return fmt(d);
+    }
+    // fromDate is before the anchor — the anchor itself is the next due
+    // (shouldn't normally happen, but be safe).
+    return fmt(base);
+  }
+
+  // delegation: due-date is its `dueDate` field — the caller passes schedDate
+  // as the due. We treat it like a one-off, so next is the anchor day if it's
+  // after `from`, else the day after.
+  if (freqKey === 'delegation') {
+    return fmt(base);
+  }
+
+  // Anchor-relative cycles (15-day, monthly, quarterly, half-yearly, yearly).
+  // Walk forward from `base` by the freq period until we land strictly after
+  // `from`. This guarantees the slot sits on its proper periodic date, not
+  // on the day it was completed.
+  const stepMonths = (freqKey === '15-day') ? 0
+                   : (freqKey === 'monthly')    ? 1
+                   : (freqKey === 'quarterly')  ? 3
+                   : (freqKey === 'half-yearly')? 6
+                   : (freqKey === 'yearly')     ? 12
+                   : 1;
+  const is15Day = freqKey === '15-day';
+
+  let next = new Date(base.getTime());
+  // If fromDate is on or before the anchor, the first slot is the anchor.
+  // If fromDate is AFTER the anchor, walk forward.
+  while (fmt(next) <= fmt(frm)) {
+    if (is15Day) next.setDate(next.getDate() + 15);
+    else next.setMonth(next.getMonth() + stepMonths);
+  }
+  return fmt(next);
+};
+
 export const autoCycleTasks = (tasks) => {
   const today = toDay();
   const newTasks = [];
@@ -201,12 +271,17 @@ export const autoCycleTasks = (tasks) => {
       (x) => x.parentTaskId === t.id && x.status === 'pending'
     );
     if (exists) return;
+    // Compute the proper next-scheduled date for the child instead of pinning
+    // it to `today`. Today is the COMPLETION date — the next slot must sit on
+    // its actual recurring date (tomorrow for daily, +15d for 15-day, next
+    // month-day for monthly, etc.).
+    const childSched = getNextScheduledDate(t.freq, t.schedDate, today);
     newTasks.push({
       id: uid(),
       name: t.name, dept: t.dept, freq: t.freq,
       assignedTo: [...(t.assignedTo || [])],
       assigneeEmails: [...(t.assigneeEmails || [])],
-      time: t.time || '', schedDate: today, priority: t.priority,
+      time: t.time || '', schedDate: childSched, priority: t.priority,
       notes: t.notes || '', status: 'pending',
       doneBy: '', doneTime: '', doneRemark: '', delayReason: '',
       isDelayed: false, lastDone: '', completionHistory: [],
@@ -305,6 +380,223 @@ export const ls = {
   get: (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+
+// ─── JSON Export / Import ───────────────────────────────────────────────────
+// Used by Settings → Export & Import card. We treat the export as a single
+// document so the user can move data between devices or restore a snapshot.
+
+// Date field per entity — used when filtering by year. Falls back to `at` /
+// `createdAt` if the primary field is missing so a row is still kept.
+const EXPORT_DATE_FIELD = {
+  tasks:       'schedDate',   // fall back: created
+  issues:      'date',
+  handovers:   'date',
+  delegations: 'dueDate',     // fall back: createdAt
+  notices:     'sentAt',
+  actLog:      'at',
+};
+
+function rowDateStr(row, type) {
+  if (!row) return '';
+  const primary = EXPORT_DATE_FIELD[type];
+  if (row[primary]) return row[primary];
+  // fallback — created/createdAt/at
+  return row.created || row.createdAt || row.at || '';
+}
+
+// Apply [from, to] (YYYY-MM-DD inclusive) to a row's primary date. If a row
+// has no parsable date, include it (don't drop records the user can't date).
+function inYearRange(row, from, to, type) {
+  if (!from && !to) return true;
+  const d = rowDateStr(row, type);
+  if (!d) return true;
+  // Normalise to YYYY-MM-DD prefix. Many `at`/`sentAt` values are full ISO
+  // strings, so slice the leading 10 chars before the lexicographic compare.
+  const day = String(d).slice(0, 10);
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+
+// Build a year-range string. mode: 'current' → 2026-01-01..today,
+// 'all' → '', 'custom' → [customFrom, customTo].
+export function buildYearRange(mode, customFrom, customTo) {
+  if (mode === 'all') return { from: '', to: '' };
+  if (mode === 'custom') return { from: customFrom || '', to: customTo || '' };
+  // 'current' (default)
+  const t = toDay();
+  const yy = t.slice(0, 4);
+  return { from: `${yy}-01-01`, to: t };
+}
+
+// Collect every record the user is allowed to export. Admin sees everything;
+// staff sees only records assigned to / created by / about them.
+export function collectExportData({
+  currentRole,
+  currentUser,
+  tasks, issues, handovers, delegations, notices, actLog,
+  yearRange,
+}) {
+  const isMainAdmin = currentRole === 'mainadmin';
+  const me = (currentUser?.name || '').toUpperCase();
+
+  // Helper: keep a row iff the user is allowed to see it.
+  const filterByUser = (row, kind) => {
+    if (isMainAdmin) return true;
+    if (kind === 'tasks') {
+      const assigned = Array.isArray(row.assignedTo) && row.assignedTo.some((n) => (n || '').toUpperCase() === me);
+      const creator = (row.createdBy || '').toUpperCase() === me;
+      return assigned || creator;
+    }
+    if (kind === 'issues') {
+      const reporter = (row.reporter || '').toUpperCase() === me;
+      const assignee = (row.assigned || '').toUpperCase() === me;
+      return reporter || assignee;
+    }
+    if (kind === 'handovers') {
+      const from = (row.fromName || '').toUpperCase() === me;
+      const to = (row.toName || '').toUpperCase() === me;
+      return from || to;
+    }
+    if (kind === 'delegations') {
+      const doer = (row.doerName || '').toUpperCase() === me;
+      return doer;
+    }
+    if (kind === 'notices') {
+      return (row.toName || '').toUpperCase() === me;
+    }
+    if (kind === 'actLog') {
+      return (row.by || '').toUpperCase() === me;
+    }
+    return true;
+  };
+
+  const inRange = (row, kind) => inYearRange(row, yearRange?.from, yearRange?.to, kind);
+  const filterBoth = (arr, kind) => (arr || []).filter((r) => filterByUser(r, kind) && inRange(r, kind));
+
+  return {
+    tasks:       filterBoth(tasks,       'tasks'),
+    issues:      filterBoth(issues,      'issues'),
+    handovers:   filterBoth(handovers,   'handovers'),
+    delegations: filterBoth(delegations, 'delegations'),
+    notices:     filterBoth(notices,     'notices'),
+    actLog:      filterBoth(actLog,      'actLog'),
+  };
+}
+
+// Build the final JSON object with metadata + the scoped collections.
+export function buildExportPayload({ currentRole, currentUser, collections, yearRange }) {
+  const generated = new Date().toISOString();
+  return {
+    schema: 'hospital-ops-export',
+    version: 1,
+    generatedAt: generated,
+    generatedBy: currentUser?.name || 'UNKNOWN',
+    role: currentRole || 'unknown',
+    yearRange: { from: yearRange?.from || '', to: yearRange?.to || '' },
+    counts: Object.fromEntries(Object.entries(collections).map(([k, v]) => [k, (v || []).length])),
+    data: collections,
+  };
+}
+
+// Trigger a JSON download via Blob + anchor (same pattern as exportToExcel).
+export function downloadJsonFile(payload, filename = 'export') {
+  const safe = (filename || 'export').replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safe}.json`;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+// Read a File object (from <input type="file">) and parse it as JSON.
+// Returns { ok: true, payload } or { ok: false, error } so the caller can
+// surface a friendly message without try/catch on every page.
+export function readJsonFile(file) {
+  return new Promise((resolve) => {
+    if (!file) return resolve({ ok: false, error: 'No file selected.' });
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(String(reader.result || ''));
+        resolve({ ok: true, payload });
+      } catch (e) {
+        resolve({ ok: false, error: 'File is not valid JSON.' });
+      }
+    };
+    reader.onerror = () => resolve({ ok: false, error: 'Could not read the file.' });
+    reader.readAsText(file);
+  });
+}
+
+// Validate a parsed payload has the shape we expect. Returns an array of
+// missing/invalid keys so the UI can show a single friendly error.
+export function validateImportPayload(payload) {
+  if (!payload || typeof payload !== 'object') return ['Not a JSON object.'];
+  if (payload.schema !== 'hospital-ops-export') return ['File is not a hospital-ops export.'];
+  if (!payload.data || typeof payload.data !== 'object') return ['Missing `data` section.'];
+  const valid = ['tasks', 'issues', 'handovers', 'delegations', 'notices', 'actLog'];
+  const missing = valid.filter((k) => !Array.isArray(payload.data[k]));
+  return missing.length ? [`Missing arrays for: ${missing.join(', ')}`] : [];
+}
+
+// Per-entity duplicate detection. A duplicate is a row whose `id` already
+// exists in the destination. We DON'T compare content — IDs are the source of
+// truth. The UI then lets the user pick per-type: replace / skip / import-as-new.
+export function detectDuplicates(payload, current) {
+  const out = {};
+  const types = ['tasks', 'issues', 'handovers', 'delegations', 'notices', 'actLog'];
+  types.forEach((type) => {
+    const incoming = (payload?.data?.[type] || []);
+    const existingIds = new Set((current[type] || []).map((r) => r.id).filter(Boolean));
+    const dupes = incoming.filter((r) => r.id && existingIds.has(r.id));
+    out[type] = {
+      incoming,
+      duplicates: dupes,
+      fresh: incoming.filter((r) => !r.id || !existingIds.has(r.id)),
+    };
+  });
+  return out;
+}
+
+// Merge helper: produce next-state arrays for each entity given the user's
+// per-type choice ('replace' | 'skip' | 'keep-both').
+//   replace → drop dupes, write fresh rows
+//   skip    → drop dupes, write fresh rows (same as replace for now; reserved)
+//   keep-both → drop dupes, write fresh rows + dupes with regenerated IDs
+//
+// For 'replace'/'skip' we DO NOT touch the duplicate (existing row stays).
+// Only fresh rows are added. Implemented idempotently so a user can re-run.
+export function mergeImport({ detected, choices }) {
+  const out = {};
+  const types = ['tasks', 'issues', 'handovers', 'delegations', 'notices', 'actLog'];
+  types.forEach((type) => {
+    const choice = choices[type] || 'skip';
+    const { incoming, duplicates, fresh } = detected[type] || {};
+    let mergedFresh = fresh || [];
+    if (choice === 'keep-both') {
+      // Regenerate ids for the duplicate set so they coexist with the existing
+      // rows. uid() lives in utils — we approximate by appending -<ts>-<rand>
+      // to keep this helper dependency-free. The actual uid() helper is fine
+      // to import here; the suffix only needs to be unique.
+      const stamped = (duplicates || []).map((row) => ({
+        ...row,
+        id: `imp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${row.id}`,
+      }));
+      mergedFresh = [...mergedFresh, ...stamped];
+    }
+    // For 'replace' / 'skip' we keep the existing duplicate untouched and only
+    // add the fresh rows.
+    out[type] = mergedFresh;
+  });
+  return out;
+}
 
 export const purgeOldTrash = (trashItems, ONE_YEAR_MS) => {
   const now = Date.now();

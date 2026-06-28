@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isTaskDueToday, isAssignedTo, notifyAdmins, exportToExcel } from '../utils';
+import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isTaskDueToday, isAssignedTo, notifyAdmins, exportToExcel, getNextScheduledDate } from '../utils';
 import { FREQ_LABELS } from '../constants';
 import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
@@ -94,12 +94,49 @@ function ExtensionRequestModal({ task, open, onClose, onSubmit }) {
 }
 
 export default function MyTasks() {
-  const { currentUser } = useAuth();
+  const { currentUser, currentRole } = useAuth();
   const { tasks, handovers, employees, notices, save, saveSingle, logAct, ensureCycles } = useApp();
   const [tab, setTab] = useState('task');
 
   // Ensure auto-cycled pending tasks exist as soon as this page loads
   useEffect(() => { if (tasks.length) ensureCycles(); }, [tasks.length]);
+
+  // Fire deferred notifications for tasks whose schedDate is today.
+  // When an employee marks a recurring task done, the admin-bell notice,
+  // email, and activity-log entry are stored on the next-slot child
+  // (pendingNotify) and surface only when the task actually reappears in
+  // My Tasks on its scheduled date — not the moment it's marked done.
+  useEffect(() => {
+    if (!tasks.length) return;
+    const todayStr = toDay();
+    const dueToday = tasks.filter(t => t.pendingNotify && !t.pendingNotify.notifySent && t.schedDate === todayStr);
+    if (!dueToday.length) return;
+    (async () => {
+      let mutated = false;
+      const newAll = tasks.map((t) => {
+        if (!t.pendingNotify || t.pendingNotify.notifySent || t.schedDate !== todayStr) return t;
+        mutated = true;
+        const pn = t.pendingNotify;
+        // 1. Admin bell notice
+        notifyAdmins({
+          notices, save,
+          subject: pn.subject, message: pn.message, type: pn.type, meta: pn.meta,
+        }).catch(e => console.error('Deferred notify failed:', e));
+        // 2. Email (if employee record was captured)
+        if (pn.emailEmployeeId) {
+          const emp = employees.find(e => e.id === pn.emailEmployeeId);
+          if (emp) sendTaskCompletedEmail(t, emp);
+        }
+        // 3. Global activity-log entry
+        logAct('TASK COMPLETED', pn.meta?.taskName || t.name).catch(e => console.error('Deferred logAct failed:', e));
+        return { ...t, pendingNotify: { ...pn, notifySent: true } };
+      });
+      if (mutated) {
+        try { await save('hops-tasks', newAll); } catch (e) { console.error('processPendingNotifications save failed:', e); }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks]);
 
   const [showDone, setShowDone] = useState(null);
   const [showExtReq, setShowExtReq] = useState(null);
@@ -111,6 +148,11 @@ export default function MyTasks() {
 
   const today = toDay();
   const myName = currentUser.name.toUpperCase();
+
+  // Employees cannot delete tasks from My Tasks. Tasks assigned to them by
+  // admin/others are only deletable from the admin-side Manage Tasks page —
+  // that's where admin oversight lives. So no canDel / handleDelete surface
+  // here at all.
 
   // Quick lookup to detect grandchild tasks (bug artifacts from duplicate handover completions)
   const taskById = {};
@@ -175,22 +217,28 @@ export default function MyTasks() {
     ) || null;
   }
 
-  // My own pending tasks — show:
-  //   - any pending task assigned to me that's due today (normal case), OR
-  //   - any pending task whose schedDate is today or earlier (overdue / past-due),
-  //     even if freq logic doesn't flag it as due today (e.g. schedDate < today for a
-  //     monthly task the user hasn't been cycled yet for).
-  // This guarantees tasks the admin assigned with a backdated schedDate still show up.
+  // My own pending tasks — show ONLY when the task's `schedDate` is today or
+  // in the past. This is a hard gate: a freshly-cycled child whose `schedDate`
+  // is tomorrow (e.g. daily done today → next slot tomorrow) must NOT appear
+  // in My Tasks today — it shows up on its own scheduled date. Even if
+  // My Tasks stays empty for that task in between, that's the desired
+  // behaviour: the slot belongs to its date, not the completion date.
+  //
+  // We don't gate on `isTaskDueToday` here because for `daily` that helper
+  // returns `true` unconditionally — which would defeat the schedDate gate.
+  // The schedDate check already covers all freq types correctly:
+  //   daily:      next slot is tomorrow (one day after completion)
+  //   15-day:     +15 days from anchor
+  //   monthly/quarterly/half-yearly/yearly: anchor day in the next period
   const ownPending = tasks.filter((t) => {
     if (!isAssignedTo(t, currentUser.name)) return false;
     if (t.status !== 'pending') return false;
     if (isGrandchild(t)) return false;
     if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name))) return false;
-    // Normal: freq logic says it's due today
-    if (isTaskDueToday(t)) return true;
-    // Backstop: schedDate is today or in the past — task is overdue, still show it
-    if (t.schedDate && t.schedDate <= today) return true;
-    return false;
+    // Hard gate: must have a schedDate and it must be today or in the past.
+    if (!t.schedDate) return false;
+    if (t.schedDate > today) return false;
+    return true;
   });
 
   // Handover tasks for me — only match tasks whose own ID is in the handover (not children)
@@ -212,6 +260,13 @@ export default function MyTasks() {
 
   // Recurring tasks that PREM completed but aren't yet cycled for today
   // Covers case where assignedTo != PREM but PREM was the doer
+  //
+  // Gate: just like `ownPending`, the template's `schedDate` must be today or
+  // in the past. This prevents a stale done-template (whose schedDate was the
+  // ORIGINAL date, possibly in the past) from being shown again immediately
+  // after the user marks it done today — `lastDone === today` is the primary
+  // exclusion, but if there's any timing gap between save and re-render we
+  // still want to fall back on schedDate.
   const dueTodayUnCycled = tasks.filter(t => {
     if (t.status !== 'done') return false;
     if (t.parentTaskId) return false;
@@ -219,8 +274,8 @@ export default function MyTasks() {
     if (t.lastDone === today) return false;
     if (!isAssignedTo(t, currentUser.name) && t.doneBy !== currentUser.name) return false;
     if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name))) return false;
-    // Normal: freq logic says it's due
-    if (isTaskDueToday(t)) return true;
+    // Normal: freq logic says it's due AND schedDate is today/past (no future-dated done template)
+    if (isTaskDueToday(t) && (!t.schedDate || t.schedDate <= today)) return true;
     // Backstop: backdated schedDate still pending and in past
     if (t.schedDate && t.schedDate < today) return true;
     return false;
@@ -307,26 +362,68 @@ export default function MyTasks() {
     const nowStr = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
 
     if (t._virtualPending) {
+      // Virtual pending = a done template (e.g. backdated daily) being shown
+      // as pending because no next-slot child has been created yet. Mark it
+      // done and create the next-slot child as PENDING (status='pending')
+      // with the proper next scheduled date — it will appear in My Tasks on
+      // its own date, NOT today.
+      const rootId = t.id; // templates have no parentTaskId
+      const pendingChildExists = tasks.some(x => x.parentTaskId === rootId && x.status === 'pending' && x.id !== t.id);
       const parentUpdated = { ...t, lastDone: today, _virtualPending: undefined };
-      const child = {
-        id: uid(), name: t.name, dept: t.dept, freq: t.freq,
-        assignedTo: [...(t.assignedTo || [])], assigneeEmails: [...(t.assigneeEmails || [])],
-        time: t.time || '', schedDate: today, priority: t.priority,
-        notes: t.notes || '', status: 'done',
-        doneBy: currentUser.name, doneTime: nowStr,
-        doneRemark: remark, delayReason, isDelayed,
-        lastDone: today, completionHistory: [],
-        extensions: [], created: today, createdBy: 'SYSTEM',
-        activityLog: [
-          { by: 'SYSTEM', action: 'AUTO CYCLE', details: 'Freq: ' + t.freq, at: nowStr },
-          { by: currentUser.name, action: 'COMPLETED' + (isDelayed ? ' (DELAYED)' : ''), details: remark, at: nowStr },
-        ],
-        parentTaskId: t.id,
-      };
-      const newAll = [...tasks.map(x => x.id === t.id ? parentUpdated : x), child];
-      await saveSingle('hops-tasks', child, newAll);
-      await saveSingle('hops-tasks', parentUpdated, newAll);
-      await logAct('TASK COMPLETED', t.name);
+      let newAll = tasks.map(x => x.id === t.id ? parentUpdated : x);
+
+      if (!pendingChildExists && t.freq !== 'delegation') {
+        const nextDate = getNextScheduledDate(t.freq, t.schedDate, today);
+        const child = {
+          id: uid(), name: t.name, dept: t.dept, freq: t.freq,
+          assignedTo: [...(t.assignedTo || [])], assigneeEmails: [...(t.assigneeEmails || [])],
+          time: t.time || '', schedDate: nextDate, priority: t.priority,
+          notes: t.notes || '', status: 'pending',
+          doneBy: '', doneTime: '', doneRemark: '', delayReason: '',
+          isDelayed: false, lastDone: '', completionHistory: [],
+          extensions: [], created: today, createdBy: 'SYSTEM',
+          activityLog: [
+            { by: 'SYSTEM', action: 'AUTO CYCLE', details: 'Freq: ' + t.freq + ' — next slot: ' + nextDate, at: nowStr },
+            { by: currentUser.name, action: 'COMPLETED' + (isDelayed ? ' (DELAYED)' : ''), details: remark, at: nowStr },
+          ],
+          parentTaskId: rootId,
+          // Defer admin-bell notice + email + activity-log entry until the
+          // task actually surfaces in My Tasks on its next schedule date.
+          // processPendingNotifications effect (in this file) fires them
+          // when schedDate === today.
+          pendingNotify: {
+            subject: isDelayed ? `⚠️ ${currentUser.name} — DELAYED TASK COMPLETED` : `✅ ${currentUser.name} completed: ${t.name}`,
+            message: `Task: ${t.name}\nDepartment: ${t.dept}\nDone By: ${currentUser.name}\nTime: ${nowStr}${isDelayed ? '\n\n⚠️ Completed late — Reason: ' + (delayReason || '—') : ''}${remark ? '\nRemark: ' + remark : ''}`,
+            type: 'task_completed',
+            meta: { taskId: t.id, doneBy: currentUser.name, isDelayed, taskName: t.name },
+            emailEmployeeId: (employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase()) || {}).id || '',
+            notifySent: false,
+          },
+        };
+        newAll = [...newAll, child];
+      } else if (pendingChildExists && t.freq !== 'delegation') {
+        // A pending child already exists for this root — attach the deferred
+        // notification payload to that child so it fires on its schedDate.
+        // Without this, completing a task while a pending child exists would
+        // never trigger notifications.
+        const pn = {
+          subject: isDelayed ? `⚠️ ${currentUser.name} — DELAYED TASK COMPLETED` : `✅ ${currentUser.name} completed: ${t.name}`,
+          message: `Task: ${t.name}\nDepartment: ${t.dept}\nDone By: ${currentUser.name}\nTime: ${nowStr}${isDelayed ? '\n\n⚠️ Completed late — Reason: ' + (delayReason || '—') : ''}${remark ? '\nRemark: ' + remark : ''}`,
+          type: 'task_completed',
+          meta: { taskId: t.id, doneBy: currentUser.name, isDelayed, taskName: t.name },
+          emailEmployeeId: (employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase()) || {}).id || '',
+          notifySent: false,
+        };
+        newAll = newAll.map(x => (x.parentTaskId === rootId && x.status === 'pending' && !x.pendingNotify)
+          ? { ...x, pendingNotify: pn }
+          : x);
+      }
+      // Atomic upsert: send both rows (parent update + optional new child) in a
+      // single Supabase batch so realtime fires AFTER all rows are visible.
+      // Two sequential saveSingle calls create a window where realtime can fire
+      // with only the new child echoed back, dispatching stale state and a
+      // phantom task that disappears on refresh.
+      await save('hops-tasks', newAll);
       try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
       setShowDone(null);
       return;
@@ -338,41 +435,79 @@ export default function MyTasks() {
       activityLog: [...(t.activityLog || []), { by: currentUser.name, action: 'COMPLETED' + (isDelayed ? ' (DELAYED)' : ''), details: remark, at: nowStr }],
     };
 
-    const isBackDated = t.freq === 'daily' && t.schedDate && today > t.schedDate && !t.parentTaskId;
-    const pendingChildExists = tasks.some(x => x.parentTaskId === t.id && x.status === 'pending');
-    if (isBackDated && !pendingChildExists) {
+    // Always create a PENDING child for the next occurrence so My Tasks shows
+    // the task on its proper next-scheduled date (tomorrow for daily, +15d
+    // for 15-day, etc.) instead of today. Skip if a pending child already
+    // exists for the parent root, or if this is a delegation task (those
+    // have their own workflow and never auto-cycle).
+    // Find the original template of this chain — every child in a recurring
+    // cycle should link back to the same root, so the chain never deepens
+    // and the `isGrandchild` filter stays out of the way for clean cycles.
+    const root = (() => {
+      let cur = t;
+      const seen = new Set();
+      while (cur && cur.parentTaskId && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        cur = taskById[cur.parentTaskId];
+        if (!cur) break;
+      }
+      return cur || t;
+    })();
+    const rootId = root.id;
+    const pendingChildExists = tasks.some(x => x.parentTaskId === rootId && x.status === 'pending' && x.id !== t.id);
+    let newAll = tasks.map(x => x.id === t.id ? updated : x);
+
+    if (!pendingChildExists && t.freq !== 'delegation') {
+      const nextDate = getNextScheduledDate(t.freq, t.schedDate, today);
       const child = {
         id: uid(), name: t.name, dept: t.dept, freq: t.freq,
         assignedTo: [...(t.assignedTo || [])], assigneeEmails: [...(t.assigneeEmails || [])],
-        time: t.time || '', schedDate: today, priority: t.priority,
+        time: t.time || '', schedDate: nextDate, priority: t.priority,
         notes: t.notes || '', status: 'pending',
         doneBy: '', doneTime: '', doneRemark: '', delayReason: '', isDelayed: false,
         lastDone: '', completionHistory: [], extensions: [],
         created: today, createdBy: 'SYSTEM',
-        activityLog: [{ by: 'SYSTEM', action: 'AUTO CYCLE (BACKDATE)', details: 'Freq: daily — original was ' + t.schedDate, at: nowStr }],
-        parentTaskId: t.id,
+        activityLog: [{ by: 'SYSTEM', action: 'AUTO CYCLE', details: 'Freq: ' + t.freq + (t.schedDate && t.schedDate !== nextDate ? ' — original sched: ' + t.schedDate : '') + ', next slot: ' + nextDate, at: nowStr }],
+        parentTaskId: rootId,
+        // Defer the admin-bell notice + email + activity-log entry until the
+        // task actually surfaces in My Tasks on its next schedule date.
+        // The notifications live on the child and a mount/realtime effect
+        // (processPendingNotifications) fires them when schedDate === today.
+        pendingNotify: {
+          subject: t.isDelayed ? `⚠️ ${currentUser.name} — DELAYED TASK COMPLETED` : `✅ ${currentUser.name} completed: ${t.name}`,
+          message: `Task: ${t.name}\nDepartment: ${t.dept}\nDone By: ${currentUser.name}\nTime: ${t.doneTime || ''}${t.isDelayed ? '\n\n⚠️ Completed late — Reason: ' + (t.delayReason || '—') : ''}${t.doneRemark ? '\nRemark: ' + t.doneRemark : ''}`,
+          type: 'task_completed',
+          meta: { taskId: t.id, doneBy: currentUser.name, isDelayed: t.isDelayed, taskName: t.name },
+          emailEmployeeId: (employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase()) || {}).id || '',
+          notifySent: false,
+        },
       };
-      const newAll = [...tasks.map(x => x.id === t.id ? updated : x), child];
-      await saveSingle('hops-tasks', updated, newAll);
-      await saveSingle('hops-tasks', child, newAll);
-    } else {
-      const newAll = tasks.map(x => x.id === t.id ? updated : x);
-      await saveSingle('hops-tasks', updated, newAll);
-    }
-    await logAct('TASK COMPLETED', t.name);
-    const emp = employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase());
-    if (emp) sendTaskCompletedEmail(t, emp);
-    try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
-    // Notify main admin bell — covers both employee flow (My Tasks) and admin-self completion
-    try {
-      await notifyAdmins({
-        notices, save,
+      newAll = [...newAll, child];
+    } else if (pendingChildExists && t.freq !== 'delegation') {
+      // A pending child already exists — attach the deferred notification
+      // payload to that child so the notifications still fire on its schedDate.
+      const pn = {
         subject: t.isDelayed ? `⚠️ ${currentUser.name} — DELAYED TASK COMPLETED` : `✅ ${currentUser.name} completed: ${t.name}`,
         message: `Task: ${t.name}\nDepartment: ${t.dept}\nDone By: ${currentUser.name}\nTime: ${t.doneTime || ''}${t.isDelayed ? '\n\n⚠️ Completed late — Reason: ' + (t.delayReason || '—') : ''}${t.doneRemark ? '\nRemark: ' + t.doneRemark : ''}`,
         type: 'task_completed',
         meta: { taskId: t.id, doneBy: currentUser.name, isDelayed: t.isDelayed, taskName: t.name },
-      });
-    } catch (e) { console.error('Admin notify failed:', e); }
+        emailEmployeeId: (employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase()) || {}).id || '',
+        notifySent: false,
+      };
+      newAll = newAll.map(x => (x.parentTaskId === rootId && x.status === 'pending' && !x.pendingNotify)
+        ? { ...x, pendingNotify: pn }
+        : x);
+    }
+    // Atomic upsert: send both the parent status update and the next-slot child
+    // in one batched Supabase call. Two sequential saveSingle calls create a
+    // race window where realtime can fire with only the child echoed back,
+    // dispatching stale state and a phantom task that disappears on refresh.
+    // DEBUG: log what we're about to upsert
+    const updatedBreakdown = newAll.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
+    const targetRow = newAll.find(r => r.id === t.id);
+    console.log(`[handleDone] task "${t.name}" (${t.id}): newAll has ${newAll.length} rows (${JSON.stringify(updatedBreakdown)}), target row status="${targetRow?.status}", lastDone="${targetRow?.lastDone}"`);
+    await save('hops-tasks', newAll);
+    try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
     setShowDone(null);
   }
 
@@ -407,6 +542,10 @@ export default function MyTasks() {
     } catch (e) { console.error('Admin notify failed:', e); }
     setShowExtReq(null);
   }
+
+  // No handleDelete here — employees cannot delete tasks from My Tasks.
+  // Tasks assigned to them by admin/others can only be deleted from the
+  // admin-side Manage Tasks page. See Tasks.jsx for the only delete path.
 
   // Sort each list: latest schedDate first, done tasks by lastDone desc
   const sortedTaskPending = [...taskPending].sort((a, b) => (b.schedDate || '').localeCompare(a.schedDate || ''));
@@ -465,6 +604,9 @@ export default function MyTasks() {
                   </span>
                 )}
               </div>
+              {/* Employees can only Mark Done — they cannot delete tasks assigned
+                  to them by others. Deletion is reserved for the admin-side
+                  Manage Tasks page. */}
               <div style={{ marginTop: 10 }}>
                 <button onClick={() => setShowDone(t)} style={{ padding: '7px 16px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>✅ Mark Done</button>
               </div>
@@ -592,6 +734,9 @@ export default function MyTasks() {
                   {hoverToMe && t.doneBy !== currentUser.name && <span style={{ color: '#155724', fontWeight: 700 }}> (via Handover)</span>}
                   {delayed && t.delayReason && <div style={{ color: '#6d28d9', marginTop: 4 }}>⏰ {t.delayReason}</div>}
                 </div>
+                {/* No Delete button on Done tab — employees cannot delete tasks
+                    assigned by others. Admin-side Manage Tasks is the only
+                    place to delete a task. */}
               </div>
             );
           }) : <EmptyState icon="📋" message="NO TASKS FOUND" />}
