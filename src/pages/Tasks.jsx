@@ -492,10 +492,14 @@ export default function Tasks() {
   //   upcoming → not yet due: daily/delegation with schedDate in the future,
   //              or periodic off-period.
   //
-  // Status (pending/done) is intentionally NOT considered here — both tabs
-  // include both states. The user can combine with the Status dropdown to
-  // narrow further (e.g. "Ongoing + Done" shows completed tasks of the
-  // current period; "Ongoing + Pending" shows the active queue).
+  // Status (pending/done) is NOT part of classifyTask's decision — the
+  // date split is purely date-based. The TAB CONTENT still includes both
+  // statuses (combine with the Status dropdown to narrow), but the COUNT
+  // BADGES on the tab labels are pending-only so the badge answers
+  // "how many do I still need to do?" rather than "how many total are
+  // scheduled?". Done counts are surfaced via the Status dropdown filter
+  // (pick DONE to see them) and the MIS Reporting / Activity Log pages
+  // for historical reporting.
   const todayStr = toDay();
   function classifyTask(t) {
     const freq = t.freq || 'daily';
@@ -512,8 +516,17 @@ export default function Tasks() {
     // the slot is in the future / off-period (upcoming).
     return isTaskDueToday(t) ? 'ongoing' : 'upcoming';
   }
-  const ongoingCount = sourceList.filter((t) => classifyTask(t) === 'ongoing').length;
-  const upcomingCount = sourceList.filter((t) => classifyTask(t) === 'upcoming').length;
+  // Counts reflect PENDING tasks only — the actionable queue. Done tasks
+  // are excluded so the badge answers "how many do I still need to do?"
+  // rather than "how many total are scheduled?". Done counts are surfaced
+  // via the Status dropdown filter (pick DONE to see them) and the
+  // /misreporting and /activitylog pages for historical reporting.
+  //
+  // Status (pending/done) is intentionally not part of the classifyTask
+  // decision — the tab split is purely date-based. The count filter is
+  // separate: same sourceList, but only status === 'pending' rows.
+  const ongoingCount = sourceList.filter((t) => t.status !== 'done' && classifyTask(t) === 'ongoing').length;
+  const upcomingCount = sourceList.filter((t) => t.status !== 'done' && classifyTask(t) === 'upcoming').length;
 
   const rawFiltered = sourceList.filter((t) => {
     // Tab classification is the primary filter — splits the list into
