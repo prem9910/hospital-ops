@@ -464,12 +464,24 @@ function StaffDashboard() {
   tasks.forEach(t => { taskMap[t.id] = t; });
   const isGC = (t) => !!(t.parentTaskId && taskMap[t.parentTaskId]?.parentTaskId);
 
+  const today = toDay();
+  // Today-scope rules: a task belongs in the "Today" tab (and therefore
+  // counts toward My Pending / My Done / My Delayed) only if it is
+  // actionable right now. Daily/delegation freq tasks with no schedDate
+  // are always actionable. A task with a FUTURE schedDate belongs in
+  // the Upcoming tab instead — it shouldn't inflate My Pending or pollute
+  // the Today view. (Bug: previously `isTaskDueToday` returns true for
+  // daily tasks regardless of schedDate, so a daily task created with
+  // schedDate = next week would still appear in Today and Today's Status
+  // donut.)
   const myTasksBase = tasks.filter((t) => {
     if (!isAssignedTo(t, currentUser.name)) return false;
     if (isGC(t)) return false;
-    // Show task if it's due today (freq logic) OR if schedDate is today/past (overdue)
+    if (t.schedDate && t.schedDate > today) return false;
     if (isTaskDueToday(t)) return true;
-    if (t.schedDate && t.schedDate <= new Date().toISOString().slice(0, 10)) return true;
+    // Past schedDate that hasn't been actioned yet = overdue, still
+    // belongs in the Today tab so it can be flagged + completed.
+    if (t.schedDate && t.schedDate < today) return true;
     return false;
   });
   // Deduplicate: if pending child exists, hide parent
@@ -495,7 +507,6 @@ function StaffDashboard() {
   // Upcoming = tasks assigned to me that aren't due yet. Excludes grand-
   // children (the parent task is the actionable unit) and parents hidden
   // by a pending child (same dedup as `myTasks`).
-  const today = toDay();
   const myUpcoming = tasks.filter((t) =>
     isAssignedTo(t, currentUser.name) &&
     !isGC(t) &&
@@ -671,6 +682,13 @@ function StaffDashboard() {
           preFilter="all"
           title={openStaffCard.title}
           columns={openStaffCard.columns}
+          // Staff users typically don't have /tasks permission. Route the
+          // "Open in Manage Tasks" affordance to the dashboard's My Tasks
+          // section instead — same data, accessible to everyone. (Pass
+          // `null` to hide the button entirely if a future screen wants
+          // a pure read-only inline detail.)
+          manageUrl="/dashboard"
+          manageLabel="📋 Open in My Tasks →"
         />
       )}
       {openStaffCard?.type === 'delegations' && (

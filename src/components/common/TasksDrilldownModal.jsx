@@ -32,6 +32,12 @@ export function TasksDrilldownModal({
   title = '📋 Tasks',
   columns = DEFAULT_COLUMNS,
   scopeFn, // optional predicate (task) => boolean applied after preFilter
+  manageUrl = '/tasks', // URL for the "Open in Manage Tasks" affordance.
+                        // When null/undefined the button is hidden (use
+                        // for pure read-only inline detail).
+  manageLabel = '📋 Open in Manage Tasks →', // Button label. Override to
+                                             // point the affordance at a
+                                             // different destination.
 }) {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
@@ -233,7 +239,7 @@ export function TasksDrilldownModal({
                   expandedNode={isExpanded ? (
                     <InlineTaskDetail
                       task={t}
-                      onOpenManage={() => { onClose(); navigate('/tasks?focus=' + encodeURIComponent(t.id)); }}
+                      onOpenManage={manageUrl ? () => { onClose(); navigate(manageUrl + (manageUrl.includes('?') ? '&' : '?') + 'focus=' + encodeURIComponent(t.id)); } : null}
                       onCollapse={() => setExpandedId(null)}
                     />
                   ) : null}
@@ -355,19 +361,23 @@ function InlineTaskDetail({ task, onOpenManage, onCollapse }) {
           )) : <span style={{ color: '#6b7a90', fontSize: 12 }}>No activity</span>}
         </Panel>
 
-        {/* Action row — Open in Manage Tasks (primary) + Collapse. */}
+        {/* Action row — primary CTA + Collapse. The primary CTA is hidden
+            when `onOpenManage` is null (e.g. staff users without /tasks
+            permission) so the inline detail remains read-only. */}
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-          <button
-            onClick={onOpenManage}
-            style={{
-              padding: '9px 16px', borderRadius: 8,
-              background: '#0d7377', color: 'white',
-              border: 'none', cursor: 'pointer',
-              fontWeight: 800, fontSize: 12.5,
-            }}
-          >
-            📋 Open in Manage Tasks →
-          </button>
+          {onOpenManage && (
+            <button
+              onClick={onOpenManage}
+              style={{
+                padding: '9px 16px', borderRadius: 8,
+                background: '#0d7377', color: 'white',
+                border: 'none', cursor: 'pointer',
+                fontWeight: 800, fontSize: 12.5,
+              }}
+            >
+              {manageLabel}
+            </button>
+          )}
           <button
             onClick={onCollapse}
             style={{
@@ -380,7 +390,11 @@ function InlineTaskDetail({ task, onOpenManage, onCollapse }) {
             ✕ Collapse
           </button>
           <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#6b7a90', alignSelf: 'center' }}>
-            💡 For Edit / Delete / Mark Complete, open in Manage Tasks.
+            {manageUrl === '/tasks'
+              ? '💡 For Edit / Delete / Mark Complete, open in Manage Tasks.'
+              : manageUrl
+                ? '💡 This task is also listed in your dashboard.'
+                : '💡 Read-only view.'}
           </span>
         </div>
       </td>
