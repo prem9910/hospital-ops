@@ -66,6 +66,16 @@ export function useTaskNotifications(tasks, handovers, currentUser, currentRole,
     return t
       .filter(tk => {
         if (tk.status !== 'pending') return false;
+        // Future-dated gate — applies to ALL frequencies (including delegation).
+        // A delegation with schedDate=tomorrow must NOT surface in reminders,
+        // toast queue, or browser push until that date arrives. Mirrors the
+        // same gate MyTasks uses on `ownPending` so the in-app surface and
+        // the notification surface stay in lockstep. Without this, an admin
+        // scheduling a delegation for next week would trigger reminder
+        // emails and toasts for the assignee today — which the user
+        // explicitly reported as a bug ("upcoming task ki notification
+        // current date pe aa rahi hai").
+        if (tk.schedDate && tk.schedDate > today) return false;
         if (isAssignedTo(tk, myName)) {
           if (tk.freq === 'delegation') return true;
           if (isTaskDueToday(tk)) return true;
@@ -283,6 +293,10 @@ export function useTaskNotifications(tasks, handovers, currentUser, currentRole,
       if (emp?.email) {
         tagged.forEach(({ task: tk }) => {
           if (tk.freq === 'daily') return;
+          // Defensive future-date guard — getMyPendingTagged already excludes
+          // tasks with schedDate > today, but if that ever changes we still
+          // don't want to email employees about a task that isn't due yet.
+          if (tk.schedDate && tk.schedDate > today) return;
           const isOverdue  = tk.schedDate && tk.schedDate < today;
           const isDueToday = tk.schedDate === today;
           const rType = isOverdue ? 'overdue' : isDueToday ? 'due_today' : 'scheduled';
