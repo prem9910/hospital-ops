@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isAssignedTo, isTaskDueToday, notifyAdmins, exportToExcel, getNextScheduledDate } from '../utils';
@@ -441,6 +441,23 @@ async function syncDelegationFromTask(task, delegations, { save, moveToTrash }, 
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+// Track viewport width so we can swap the desktop filter row for a
+// compact mobile sheet. Returns true when viewport is <= 768px. Updates
+// live when the user rotates the device or resizes the window.
+function useMediaQuery(query) {
+  const get = () => typeof window !== 'undefined' && window.matchMedia(query).matches;
+  const [matches, setMatches] = useState(get);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const handler = (e) => setMatches(e.matches);
+    mq.addEventListener('change', handler);
+    setMatches(mq.matches);
+    return () => mq.removeEventListener('change', handler);
+  }, [query]);
+  return matches;
+}
+
 export default function Tasks() {
   const { currentRole, currentUser, hasPerm } = useAuth();
   const { tasks, delegations, depts, employees, notices, save, logAct, moveToTrash } = useApp();
@@ -459,6 +476,25 @@ export default function Tasks() {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Mobile-only filter sheet state. Empty on desktop — the existing
+  // inline filter bar stays in charge there. We track active filter
+  // count so the toggle button can show "Filters (2)" and the user
+  // knows they have filters applied even with the sheet closed.
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const clearAllFilters = useCallback(() => {
+    setSearch(''); setFilterDept(''); setFilterStatus(''); setFilterFreq(''); setFilterDelay('');
+  }, []);
+  const activeFilterCount = (search ? 1 : 0) + (filterDept ? 1 : 0) + (filterStatus ? 1 : 0) + (filterFreq ? 1 : 0) + (filterDelay ? 1 : 0);
+
+  // Lock body scroll while the mobile sheet is open so the page behind
+  // doesn't scroll when the user drags inside the sheet. Mirrors the
+  // pattern used by src/components/common/Modal.jsx.
+  useEffect(() => {
+    if (mobileSheetOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileSheetOpen]);
 
   // Reset multi-select when user switches tabs so they don't accidentally
   // bulk-delete across tab boundaries (e.g. selections from "Mine" leaking
@@ -992,7 +1028,59 @@ export default function Tasks() {
         })}
       </div>
 
-      {/* Filters */}
+      {/* Filters — desktop row OR mobile sheet trigger.
+          We keep ONE set of state and render two layouts conditionally:
+          • Desktop: the existing filter-bar row (no visual change)
+          • Mobile: a single "🔍 Filters (N)" button. Tap → bottom sheet
+            with the same controls. The clear button is always reachable
+            either way. */}
+      {isMobile ? (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+          <button
+            onClick={() => setMobileSheetOpen(true)}
+            style={{
+              flex: 1, padding: '10px 14px', borderRadius: 9,
+              background: activeFilterCount > 0 ? '#0d7377' : 'white',
+              color: activeFilterCount > 0 ? 'white' : '#0d7377',
+              border: `1.5px solid #0d7377`,
+              fontWeight: 800, fontSize: 13,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              cursor: 'pointer',
+              boxShadow: activeFilterCount > 0 ? '0 2px 8px rgba(13,115,119,0.25)' : 'none',
+            }}
+            aria-label="Open filters"
+          >
+            🔍 Filters
+            {activeFilterCount > 0 && (
+              <span style={{
+                background: 'rgba(255,255,255,0.25)',
+                color: 'white',
+                padding: '2px 8px', borderRadius: 12,
+                fontSize: 11, fontWeight: 800,
+                minWidth: 22, textAlign: 'center',
+              }}>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={clearAllFilters}
+              style={{
+                padding: '10px 14px', borderRadius: 9,
+                background: '#fde8e8', color: '#c0392b',
+                border: '1.5px solid #f5b7b1',
+                fontWeight: 800, fontSize: 13,
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+              title="Clear all filters"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="filter-bar">
         <div className="filter-bar-search" style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, pointerEvents: 'none' }}>🔍</span>
@@ -1019,7 +1107,7 @@ export default function Tasks() {
         {(search || filterDept || filterStatus || filterFreq || filterDelay) && (
           <button
             className="filter-bar-clear"
-            onClick={() => { setSearch(''); setFilterDept(''); setFilterStatus(''); setFilterFreq(''); setFilterDelay(''); }}
+            onClick={clearAllFilters}
             style={{ padding: '8px 13px', borderRadius: 7, background: '#fde8e8', color: '#c0392b', border: '1.5px solid #f5b7b1', cursor: 'pointer', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', fontSize: 12.5 }}
             title="Clear all filters"
           >
@@ -1027,6 +1115,155 @@ export default function Tasks() {
           </button>
         )}
       </div>
+      )}
+
+      {/* Mobile filter sheet — only mounts when isMobile AND sheet is open.
+          Bottom-anchored sheet with the same controls as the desktop row,
+          plus a sticky Apply button. State stays in sync because we use
+          the same setters. Scroll lock on body while open so the sheet
+          doesn't scroll the page behind it. */}
+      {isMobile && mobileSheetOpen && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setMobileSheetOpen(false); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(10,22,40,0.55)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}
+        >
+          <div style={{
+            background: 'white', width: '100%', maxWidth: 520,
+            borderRadius: '18px 18px 0 0',
+            boxShadow: '0 -16px 48px rgba(0,0,0,0.25)',
+            maxHeight: '88vh', display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Drag handle */}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+              <div style={{ width: 44, height: 4, background: '#d8e2ef', borderRadius: 4 }} />
+            </div>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 18px 12px', borderBottom: '1px solid #e8eef5' }}>
+              <div>
+                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d', fontWeight: 700 }}>🔍 Filters</div>
+                <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 2 }}>{activeFilterCount > 0 ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied` : 'No filters applied'}</div>
+              </div>
+              <button
+                onClick={() => setMobileSheetOpen(false)}
+                style={{ width: 32, height: 32, borderRadius: 8, background: '#f3f7fc', border: 'none', color: '#1a2535', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}
+                aria-label="Close filters"
+              >✕</button>
+            </div>
+
+            {/* Scrollable body */}
+            <div style={{ overflowY: 'auto', padding: '16px 18px 8px' }}>
+              {/* Search input — always at the top so the user can type without scrolling */}
+              <div style={{ position: 'relative', marginBottom: 14 }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="SEARCH TASK OR DEPT..."
+                  style={{ ...IS, paddingLeft: 36, paddingRight: search ? 36 : 13 }}
+                  autoFocus
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6b7a90', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
+                    aria-label="Clear search"
+                  >✕</button>
+                )}
+              </div>
+
+              {/* Dept */}
+              <Field label="Department">
+                <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
+                  <option value="">ALL DEPTS</option>
+                  {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+              </Field>
+
+              {/* Status — radio-style chip row so it's tappable on touch */}
+              <Field label="Status">
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[{ v: '', l: 'ALL' }, { v: 'pending', l: '⏳ PENDING' }, { v: 'done', l: '✅ DONE' }].map((opt) => (
+                    <button
+                      key={opt.v}
+                      onClick={() => setFilterStatus(opt.v)}
+                      style={{
+                        flex: 1, padding: '9px 8px', borderRadius: 8,
+                        background: filterStatus === opt.v ? '#0d7377' : '#f8fbff',
+                        color: filterStatus === opt.v ? 'white' : '#1a2535',
+                        border: `1.5px solid ${filterStatus === opt.v ? '#0d7377' : '#d8e2ef'}`,
+                        fontWeight: 800, fontSize: 11.5, cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              </Field>
+
+              {/* Frequency */}
+              <Field label="Frequency">
+                <select value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
+                  <option value="">ALL FREQ</option>
+                  {FREQ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+
+              {/* Delay status — also chip row */}
+              <Field label="Completion">
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[{ v: '', l: 'ALL' }, { v: 'ontime', l: '✅ ON TIME' }, { v: 'delayed', l: '⏰ DELAYED' }].map((opt) => (
+                    <button
+                      key={opt.v}
+                      onClick={() => setFilterDelay(opt.v)}
+                      style={{
+                        flex: 1, padding: '9px 8px', borderRadius: 8,
+                        background: filterDelay === opt.v ? '#0d7377' : '#f8fbff',
+                        color: filterDelay === opt.v ? 'white' : '#1a2535',
+                        border: `1.5px solid ${filterDelay === opt.v ? '#0d7377' : '#d8e2ef'}`,
+                        fontWeight: 800, fontSize: 11.5, cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+
+            {/* Sticky footer */}
+            <div style={{
+              display: 'flex', gap: 8, padding: '12px 18px 18px',
+              borderTop: '1px solid #e8eef5',
+              background: 'white',
+            }}>
+              <button
+                onClick={clearAllFilters}
+                disabled={activeFilterCount === 0}
+                style={{
+                  flex: '0 0 auto', padding: '11px 16px', borderRadius: 9,
+                  background: activeFilterCount === 0 ? '#f3f7fc' : 'white',
+                  color: activeFilterCount === 0 ? '#b0bec5' : '#c0392b',
+                  border: `1.5px solid ${activeFilterCount === 0 ? '#d8e2ef' : '#f5b7b1'}`,
+                  fontWeight: 800, fontSize: 13,
+                  cursor: activeFilterCount === 0 ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >✕ Clear</button>
+              <button
+                onClick={() => setMobileSheetOpen(false)}
+                style={{
+                  flex: 1, padding: '11px 16px', borderRadius: 9,
+                  background: '#0d7377', color: 'white', border: 'none',
+                  fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                }}
+              >Apply Filters ({activeFilterCount})</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk-action bar — appears once at least one task is selected */}
       {canDel && selectedIds.size > 0 && (
