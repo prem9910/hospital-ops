@@ -64,6 +64,26 @@ export default function Staff() {
     const newEmps = editEmp ? employees.map((e) => e.id === obj.id ? objToSave : e) : [...employees, obj];
     await save('hops-employees', newEmps);
 
+    // Audit trail: when editing an existing employee, log every field that
+    // changed so the activity log captures role/dept/permission transitions.
+    // Without this the activity log only shows "EMPLOYEE UPDATED" with no
+    // detail about what actually changed, which makes auditing impossible.
+    if (editEmp) {
+      const fields = [];
+      if ((editEmp.name || '') !== obj.name) fields.push(`name: "${editEmp.name}" → "${obj.name}"`);
+      if ((editEmp.dept || '') !== obj.dept) fields.push(`dept: "${editEmp.dept || '—'}" → "${obj.dept || '—'}"`);
+      if ((editEmp.role || '') !== obj.role) fields.push(`role: "${editEmp.role || '—'}" → "${obj.role}"`);
+      if (!!editEmp.isIncharge !== !!obj.isIncharge) fields.push(`incharge: ${editEmp.isIncharge ? 'yes' : 'no'} → ${obj.isIncharge ? 'yes' : 'no'}`);
+      const oldPerms = (editEmp.perms || []).slice().sort().join(',');
+      const newPerms = obj.perms.slice().sort().join(',');
+      if (oldPerms !== newPerms) {
+        fields.push(`perms: [${oldPerms || '∅'}] → [${newPerms || '∅'}]`);
+      }
+      if (fields.length > 0) {
+        await logAct('EMPLOYEE FIELDS CHANGED', `${obj.name} · ${fields.join('; ')}`);
+      }
+    }
+
     if (deptChanged) {
       if (empPendingCount === 0) {
         // No pending tasks → auto-send dept_change_approval notice right now

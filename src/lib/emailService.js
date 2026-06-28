@@ -10,8 +10,19 @@ import {
 
 const SERVER = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
+// Read the email config. The settings page writes it as `hops-email`; an
+// older version of this service used the `hops-emailcfg` key which left a
+// bunch of deployments with empty cfg. New key wins; fall back to old key
+// only if new key is missing — never overwrite, so user-saved config
+// can't be clobbered.
 function getCfg() {
-  try { return JSON.parse(localStorage.getItem('hops-emailcfg') || '{}'); } catch { return {}; }
+  try {
+    const newer = JSON.parse(localStorage.getItem('hops-email') || '{}');
+    if (newer && Object.keys(newer).length > 0) return newer;
+    return JSON.parse(localStorage.getItem('hops-emailcfg') || '{}');
+  } catch {
+    return {};
+  }
 }
 
 async function send({ to_email, to_name, subject, message_html }) {

@@ -1,6 +1,22 @@
 // Responsive email templates — mobile / tablet / desktop
 // Uses media queries + fluid tables (email-client compatible)
 
+// HTML-entity escape for any string interpolated into the email body.
+// Without this, a malicious user who puts `<script>alert(1)</script>` in
+// their name, dept, task title, etc. could inject code into every email
+// recipient's mail client. The escape covers the 5 HTML-significant
+// chars; everything else passes through as-is (we don't want to break
+// Unicode names etc.).
+function esc(s) {
+  if (s === undefined || s === null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function signature(hospitalName, headerColor) {
   return `<div class="email-signature">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
@@ -171,13 +187,13 @@ export function buildWelcomeHtml({ to_name, to_email, dept, role, hospital_name 
     <p>Welcome to the Team!</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
     <p class="subtext">You have been successfully registered as an <strong>Employee</strong> on the <strong>Hospital Ops System</strong>.</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
-      ${row('👤 Name',       `<strong>${to_name}</strong>`, false)}
-      ${row('🏢 Department', dept,                           true)}
-      ${row('🔑 Role',       role,                           false)}
-      ${row('📧 Email',      to_email,                       true)}
+      ${row('👤 Name',       `<strong>${esc(to_name)}</strong>`, false)}
+      ${row('🏢 Department', esc(dept),                          true)}
+      ${row('🔑 Role',       esc(role),                          false)}
+      ${row('📧 Email',      esc(to_email),                      true)}
     </table>
     ${alertBox('#1a7a4a', '#e8f5e9', '#1a7a4a', '✅ Please contact your admin for your login credentials.')}`;
 
@@ -196,17 +212,17 @@ export function buildAssignedHtml({ to_name, task_name, task_type, assigned_by, 
     <p>You have been assigned a new task</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
-    <p class="subtext"><strong>${assigned_by}</strong> has assigned you a <strong>${task_type}</strong>:</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
+    <p class="subtext"><strong>${esc(assigned_by)}</strong> has assigned you a <strong>${esc(task_type)}</strong>:</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
-      ${row('📌 Task Name',    `<strong>${task_name}</strong>`, false)}
-      ${row('🏢 Department',   dept,                            true)}
-      ${row('📅 Date',         sched_date || '—',               false)}
-      ${row('⏰ Time',          task_time  || '—',               true)}
-      ${row('🔁 Frequency',    freq       || '—',               false)}
-      ${row('⚡ Priority',     priority   || 'Medium',          true)}
-      ${row('👤 Assigned By',  `<strong>${assigned_by}</strong>`, false)}
-      ${notes ? row('📝 Notes', notes, true) : ''}
+      ${row('📌 Task Name',    `<strong>${esc(task_name)}</strong>`, false)}
+      ${row('🏢 Department',   esc(dept),                              true)}
+      ${row('📅 Date',         esc(sched_date) || '—',                 false)}
+      ${row('⏰ Time',         esc(task_time)  || '—',                 true)}
+      ${row('🔁 Frequency',    esc(freq)       || '—',                 false)}
+      ${row('⚡ Priority',     esc(priority)   || 'Medium',            true)}
+      ${row('👤 Assigned By',  `<strong>${esc(assigned_by)}</strong>`, false)}
+      ${notes ? row('📝 Notes', esc(notes), true) : ''}
     </table>
     ${alertBox('#856404', '#fff3cd', '#f5c842', '⚠️ Please complete this task by the scheduled date and time.')}`;
 
@@ -220,15 +236,15 @@ export function buildCompletedHtml({ to_name, task_name, dept, completed_on, com
     <p>Well done! You have completed your task.</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
     <p class="subtext">You have successfully completed the following task:</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
-      ${row('📌 Task Name',    `<strong>${task_name}</strong>`,      false)}
-      ${row('🏢 Department',   dept,                                  true)}
-      ${row('📅 Completed On', `<strong>${completed_on}</strong>`,   false)}
-      ${row('⏰ Completed At', completed_at || '—',                   true)}
-      ${row('⚡ Priority',     priority     || 'Medium',             false)}
-      ${row('🔁 Frequency',    freq         || '—',                   true)}
+      ${row('📌 Task Name',    `<strong>${esc(task_name)}</strong>`,    false)}
+      ${row('🏢 Department',   esc(dept),                                true)}
+      ${row('📅 Completed On', `<strong>${esc(completed_on)}</strong>`, false)}
+      ${row('⏰ Completed At', esc(completed_at) || '—',                 true)}
+      ${row('⚡ Priority',     esc(priority)     || 'Medium',            false)}
+      ${row('🔁 Frequency',    esc(freq)         || '—',                 true)}
     </table>
     ${alertBox('#1a7a4a', '#d4edda', '#1a7a4a', '🎯 Thank you for completing your work on time.')}`;
 
@@ -249,16 +265,16 @@ export function buildReminderHtml({ to_name, task_name, dept, sched_date, task_t
     <p>${c.label}</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
     <p class="subtext">This is a reminder for your scheduled task:</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
-      ${row('📌 Task Name',     `<strong>${task_name}</strong>`,         false)}
-      ${row('🏢 Department',    dept,                                     true)}
-      ${row('📅 Schedule Date', `<strong>${sched_date || '—'}</strong>`, false)}
-      ${row('⏰ Time',           task_time   || '—',                      true)}
-      ${row('🔁 Frequency',     freq        || '—',                      false)}
-      ${row('⚡ Priority',      priority    || 'Medium',                  true)}
-      ${row('👤 Assigned By',   assigned_by || '—',                      false)}
+      ${row('📌 Task Name',     `<strong>${esc(task_name)}</strong>`,         false)}
+      ${row('🏢 Department',    esc(dept),                                      true)}
+      ${row('📅 Schedule Date', `<strong>${esc(sched_date) || '—'}</strong>`, false)}
+      ${row('⏰ Time',          esc(task_time)   || '—',                       true)}
+      ${row('🔁 Frequency',     esc(freq)        || '—',                       false)}
+      ${row('⚡ Priority',      esc(priority)    || 'Medium',                   true)}
+      ${row('👤 Assigned By',   esc(assigned_by) || '—',                        false)}
     </table>
     ${alertBox(c.alertText, c.alertBg, c.alertBorder, c.alertMsg)}`;
 
@@ -272,16 +288,16 @@ export function buildHandoverCreatedHtml({ to_name, from_name, dept, date_start,
     <p>You have received a handover request</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
-    <p class="subtext"><strong>${from_name}</strong> has sent you a request to handover their tasks. Please review the details below and accept or reject:</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
+    <p class="subtext"><strong>${esc(from_name)}</strong> has sent you a request to handover their tasks. Please review the details below and accept or reject:</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
-      ${row('👤 Handover From',  `<strong>${from_name}</strong>`, false)}
-      ${row('👤 Handover To',    `<strong>${to_name}</strong>`,   true)}
-      ${row('🏢 Department',     dept || '—',                     false)}
-      ${row('📅 Start Date',     `<strong>${date_start}</strong>`, true)}
-      ${row('📅 End Date',       `<strong>${date_end}</strong>`,   false)}
-      ${row('📌 Tasks Count',    `<strong>${task_count} tasks</strong>`, true)}
-      ${notes ? row('📝 Notes',  notes, false) : ''}
+      ${row('👤 Handover From',  `<strong>${esc(from_name)}</strong>`, false)}
+      ${row('👤 Handover To',    `<strong>${esc(to_name)}</strong>`,   true)}
+      ${row('🏢 Department',     esc(dept) || '—',                     false)}
+      ${row('📅 Start Date',     `<strong>${esc(date_start)}</strong>`, true)}
+      ${row('📅 End Date',       `<strong>${esc(date_end)}</strong>`,   false)}
+      ${row('📌 Tasks Count',    `<strong>${esc(task_count)} tasks</strong>`, true)}
+      ${notes ? row('📝 Notes',  esc(notes), false) : ''}
     </table>
     ${alertBox('#7c3aed', '#f5f3ff', '#7c3aed', '⏳ Please log in to Hospital Ops System to <strong>Accept</strong> or <strong>Reject</strong> this request.')}`;
 
@@ -292,12 +308,12 @@ export function buildHandoverCreatedHtml({ to_name, from_name, dept, date_start,
 export function buildHandoverTasksHtml({ to_name, from_name, dept, date_start, date_end, tasks, hospital_name }) {
   const taskRows = tasks.map((t, i) => `
     <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fbff'}">
-      <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#0b1e3d;border-bottom:1px solid #e2e8f0">${t.name}</td>
-      <td style="padding:10px 14px;font-size:12px;color:#4a5568;border-bottom:1px solid #e2e8f0">${t.dept || '—'}</td>
-      <td style="padding:10px 14px;font-size:12px;color:#4a5568;border-bottom:1px solid #e2e8f0">${t.schedDate || '—'}</td>
+      <td style="padding:10px 14px;font-size:13px;font-weight:700;color:#0b1e3d;border-bottom:1px solid #e2e8f0">${esc(t.name)}</td>
+      <td style="padding:10px 14px;font-size:12px;color:#4a5568;border-bottom:1px solid #e2e8f0">${esc(t.dept) || '—'}</td>
+      <td style="padding:10px 14px;font-size:12px;color:#4a5568;border-bottom:1px solid #e2e8f0">${esc(t.schedDate) || '—'}</td>
       <td style="padding:10px 14px;font-size:12px;border-bottom:1px solid #e2e8f0">
         <span style="background:${t.priority === 'high' ? '#fee2e2' : t.priority === 'medium' ? '#fff3cd' : '#d4edda'};color:${t.priority === 'high' ? '#7f1d1d' : t.priority === 'medium' ? '#7a4800' : '#155724'};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:800">
-          ${(t.priority || 'medium').toUpperCase()}
+          ${esc((t.priority || 'medium').toUpperCase())}
         </span>
       </td>
     </tr>`).join('');
@@ -307,8 +323,8 @@ export function buildHandoverTasksHtml({ to_name, from_name, dept, date_start, d
     <p>These tasks have been handed over to you — please complete them</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
-    <p class="subtext">You have accepted the handover from <strong>${from_name}</strong>. The following <strong>${tasks.length} tasks</strong> are now your responsibility from <strong>${date_start}</strong> to <strong>${date_end}</strong>:</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
+    <p class="subtext">You have accepted the handover from <strong>${esc(from_name)}</strong>. The following <strong>${tasks.length} tasks</strong> are now your responsibility from <strong>${esc(date_start)}</strong> to <strong>${esc(date_end)}</strong>:</p>
 
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin:16px 0">
       <thead>
@@ -323,9 +339,9 @@ export function buildHandoverTasksHtml({ to_name, from_name, dept, date_start, d
     </table>
 
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0" style="margin-top:8px">
-      ${row('🏢 Department',  dept || '—',  false)}
-      ${row('📅 From',        date_start,   true)}
-      ${row('📅 To',          date_end,     false)}
+      ${row('🏢 Department',  esc(dept) || '—',  false)}
+      ${row('📅 From',        esc(date_start),   true)}
+      ${row('📅 To',          esc(date_end),     false)}
       ${row('📌 Total Tasks', `<strong>${tasks.length}</strong>`, true)}
     </table>
     ${alertBox('#1a7a4a', '#d4edda', '#1a7a4a', '✅ Please complete these tasks as per the schedule. Contact your admin if you need any assistance.')}`;
@@ -346,18 +362,18 @@ export function buildHandoverResponseHtml({ to_name, by_name, decision, remark, 
     <p>${isAccepted ? `${by_name} has accepted your handover` : `${by_name} has rejected your handover`}</p>`;
 
   const body = `
-    <p class="greeting">Hello <strong>${to_name}</strong>,</p>
-    <p class="subtext"><strong>${by_name}</strong> has responded to your handover request:</p>
+    <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
+    <p class="subtext"><strong>${esc(by_name)}</strong> has responded to your handover request:</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
-      ${row('📋 Decision',    `<strong style="color:${color}">${icon} ${decision.toUpperCase()}</strong>`, false)}
-      ${row('👤 Decided By', `<strong>${by_name}</strong>`,           true)}
-      ${row('🏢 Department', dept || '—',                              false)}
-      ${row('📅 Period',     `${date_start} → ${date_end}`,            true)}
-      ${row('📌 Tasks',      `${task_count} tasks`,                    false)}
-      ${remark ? row('💬 Remark', `<em>${remark}</em>`, true) : ''}
+      ${row('📋 Decision',    `<strong style="color:${color}">${icon} ${esc((decision || '').toUpperCase())}</strong>`, false)}
+      ${row('👤 Decided By', `<strong>${esc(by_name)}</strong>`,           true)}
+      ${row('🏢 Department', esc(dept) || '—',                             false)}
+      ${row('📅 Period',     `${esc(date_start)} → ${esc(date_end)}`,      true)}
+      ${row('📌 Tasks',      `${esc(task_count)} tasks`,                   false)}
+      ${remark ? row('💬 Remark', `<em>${esc(remark)}</em>`, true) : ''}
     </table>
     ${isAccepted
-      ? alertBox('#1a7a4a', '#d4edda', '#1a7a4a', `✅ ${by_name} will handle your tasks from ${date_start} to ${date_end}.`)
+      ? alertBox('#1a7a4a', '#d4edda', '#1a7a4a', `✅ ${esc(by_name)} will handle your tasks from ${esc(date_start)} to ${esc(date_end)}.`)
       : alertBox('#7f1d1d', '#fee2e2', '#dc2626', `❌ The handover has been rejected. Please select another employee or manage these tasks directly.`)}`;
 
   return baseWrap(color, header, body, hospital_name);

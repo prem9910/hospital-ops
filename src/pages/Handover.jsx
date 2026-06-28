@@ -209,8 +209,27 @@ export default function Handover() {
 
   async function cancelHandover(h) {
     if (!window.confirm('Are you sure you want to cancel this handover?')) return;
+    // Edge case: if the recipient had already accepted and the handover
+    // window is current, the tasks may have been reassigned to the new
+    // owner in the tasks table. Cancelling should restore the original
+    // owner for any tasks that haven't been done yet — otherwise the
+    // tasks are stranded with no clear owner.
+    if (h.status === 'accepted' && h.fromName && h.toName) {
+      const originalOwner = h.fromName.toUpperCase();
+      const newOwner = h.toName.toUpperCase();
+      const taskIds = h.taskIds || [];
+      const updatedTasks = tasks.map((t) => {
+        if (!taskIds.includes(t.id)) return t;
+        if (t.status === 'done') return t; // done tasks keep whoever did them
+        const assigned = (t.assignedTo || []).map((n) => (n.toUpperCase() === newOwner ? originalOwner : n));
+        // De-duplicate (in case original owner was already in the list)
+        const deduped = [...new Set(assigned)];
+        return { ...t, assignedTo: deduped };
+      });
+      await save('hops-tasks', updatedTasks);
+    }
     await save('hops-handovers', handovers.map(x => x.id === h.id ? { ...x, status: 'cancelled' } : x));
-    await logAct('HANDOVER CANCELLED', `${h.fromName} → ${h.toName}`);
+    await logAct('HANDOVER CANCELLED', `${h.fromName} → ${h.toName}${h.status === 'accepted' ? ' (tasks restored to original owner)' : ''}`);
   }
 
   const today = toDay();
@@ -272,7 +291,7 @@ export default function Handover() {
           {pendingAcceptCount > 0 && <span style={{ background: '#fff3cd', color: '#7a4800', padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800, border: '1px solid #f5c842' }}>⏳ {pendingAcceptCount} Pending Accept</span>}
           {activeCount > 0 && <span style={{ background: '#d4edda', color: '#155724', padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800 }}>🟢 {activeCount} Active</span>}
           {upcomingCount > 0 && <span style={{ background: '#cfe2ff', color: '#0a3870', padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800 }}>🔵 {upcomingCount} Upcoming</span>}
-          <button onClick={() => exportToExcel(handovers.map(h => ({ From: h.fromName, To: h.toName, Department: h.dept, 'Start Date': h.dateStart, 'End Date': h.dateEnd, Status: h.status, Reason: h.reason, Tasks: (h.taskIds || []).length })), 'handovers-export')} style={{ padding: '8px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
+          <button onClick={() => exportToExcel(handovers.map(h => ({ From: h.fromName, To: h.toName, Department: h.dept, 'Start Date': h.dateStart, 'End Date': h.dateEnd, Status: h.status, Notes: h.notes || '', Tasks: (h.taskIds || []).length, 'Done By': (h.taskIds || []).filter(id => { const t = tasks.find(x => x.id === id); return t && t.status === 'done'; }).length })), 'handovers-export')} style={{ padding: '8px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '8px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
           {canCreate && (
             <button onClick={() => { showForm ? resetForm() : setShowForm(true); setMsg(''); }} style={{ padding: '8px 16px', borderRadius: 8, background: showForm ? '#e4eaf2' : '#0d7377', color: showForm ? '#1a2535' : 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>

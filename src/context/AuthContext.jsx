@@ -4,6 +4,26 @@ import { MAIN_ADMIN_USER, MAIN_ADMIN_PASS, INACTIVITY_MS } from '../constants';
 
 const AuthContext = createContext(null);
 
+// Constant-time string comparison. Prevents a timing oracle from leaking
+// how many leading characters of the typed password matched. Without this,
+// a sophisticated attacker could brute-force the password one character at
+// a time by measuring how long the comparison takes. Note: this is a
+// browser-side mitigation only — full security requires server-side
+// hashing (TODO: bcrypt/argon2 via Supabase Auth). The constant-time
+// helper stops the *easier* client-side attack vector.
+function timingSafeEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  // Pad to equal length so the comparison runs in constant time regardless
+  // of how many characters match.
+  const len = Math.max(a.length, b.length, 1);
+  let mismatch = a.length ^ b.length;
+  for (let i = 0; i < len; i++) {
+    mismatch |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return mismatch === 0;
+}
+
 export function AuthProvider({ children }) {
   const [currentRole, setCurrentRole] = useState('');
   const [currentUser, setCurrentUser] = useState({ name: '', dept: '', adminId: '', perms: {} });
@@ -126,9 +146,13 @@ export function AuthProvider({ children }) {
   const adminLogin = useCallback(
     (username, password) => {
       if (!username || !password) return { ok: false, error: '❌ Please enter your username and password.' };
+      // TODO(security): passwords are compared in plaintext against a hardcoded
+      // constant (MAIN_ADMIN_PASS in src/constants/index.js). When migrating to
+      // Supabase Auth, replace this with a server-side bcrypt/argon2 check
+      // and stop shipping the master password in the bundle.
       if (
         username.toUpperCase() === MAIN_ADMIN_USER.toUpperCase() &&
-        (password === MAIN_ADMIN_PASS || password.trim() === MAIN_ADMIN_PASS)
+        (timingSafeEqual(password, MAIN_ADMIN_PASS) || timingSafeEqual(password.trim(), MAIN_ADMIN_PASS))
       ) {
         const user = { name: MAIN_ADMIN_USER, dept: 'MAIN ADMIN', adminId: 'mainadmin', perms: {} };
         setCurrentRole('mainadmin');
@@ -145,11 +169,15 @@ export function AuthProvider({ children }) {
     (nameRaw, password, employees) => {
       if (!nameRaw || !password) return { ok: false, error: '❌ Please enter your username and password.' };
       const nUp = nameRaw.toUpperCase();
+      // TODO(security): staff passwords are stored in plaintext in hops-employees
+      // and compared client-side. Migrate to Supabase Auth + bcrypt for any
+      // production deployment. Until then, at least stop leaking match info
+      // via timing.
       const emp = employees.find((e) => {
         const nameMatch = e.name === nUp || e.name === nameRaw;
         const usernameMatch = e.username && (e.username === nameRaw || e.username.toLowerCase() === nameRaw.toLowerCase());
         if (!nameMatch && !usernameMatch) return false;
-        return e.password === password || e.password === password.trim();
+        return timingSafeEqual(password, e.password || '') || timingSafeEqual(password.trim(), e.password || '');
       });
       if (!emp) return { ok: false, error: '❌ Username ya Password galat hai!' };
 

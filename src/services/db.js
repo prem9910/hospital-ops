@@ -274,12 +274,27 @@ export async function deleteLinkRecord(id) {
 }
 
 export function setupRealtime(onUpdate) {
-  const tables = ['tasks', 'issues', 'departments', 'employees', 'delegations', 'admins', 'handovers', 'notices', 'trash'];
+  // Map of PG table name → local state key. Includes `activity_log` and
+  // `user_links` so live updates show up everywhere — without these two,
+  // new admin notices and activity log entries only appeared after a
+  // manual reload.
+  const TABLE_TO_KEY = {
+    tasks: 'hops-tasks',
+    issues: 'hops-issues',
+    departments: 'hops-depts',
+    employees: 'hops-employees',
+    delegations: 'hops-delegations',
+    admins: 'hops-admins',
+    handovers: 'hops-handovers',
+    notices: 'hops-notices',
+    trash: 'hops-trash',
+    activity_log: 'hops-actlog',
+  };
+  const tables = Object.keys(TABLE_TO_KEY);
   const channels = tables.map((tbl) =>
     supabase.channel('rt-' + tbl)
       .on('postgres_changes', { event: '*', schema: 'public', table: tbl }, () => {
-        const key = Object.keys(TABLES).find((k) => TABLES[k].table === tbl);
-        if (key) onUpdate(key);
+        onUpdate(TABLE_TO_KEY[tbl]);
       })
       .subscribe()
   );
