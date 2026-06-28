@@ -69,6 +69,7 @@ export default function ActivityLog() {
           {actLog.length > 0 && (
             <button
               onClick={() => setShowConfirm(true)}
+              className="activity-log-clear-btn"
               style={{ padding: '7px 15px', borderRadius: 8, background: '#fde8e8', color: '#c0392b', border: '1px solid #f5b7b1', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}
             >
               🗑️ Clear All
@@ -81,7 +82,7 @@ export default function ActivityLog() {
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH..." style={{ ...IS, width: '100%' }} />
       </div>
 
-      <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
+      <div className="activity-log-wrap" style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>{['Date/Time', 'By', 'Action', 'Details'].map((h) => <th key={h} style={{ background: '#f3f7fc', padding: '9px 14px', textAlign: 'left', fontSize: 10.5, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.8, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef' }}>{h}</th>)}</tr>

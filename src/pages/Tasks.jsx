@@ -1247,12 +1247,12 @@ export default function Tasks() {
       )}
 
       {/* Table */}
-      <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
+      <div className="tasks-table" style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={{ width: 36, padding: '9px 13px', background: '#f3f7fc', borderBottom: '1px solid #d8e2ef', textAlign: 'center' }}>
+                <th className="col-hide-mobile" style={{ width: 36, padding: '9px 13px', background: '#f3f7fc', borderBottom: '1px solid #d8e2ef', textAlign: 'center' }}>
                   {canDel && paged.items.length > 0 && (
                     <input
                       type="checkbox"
@@ -1263,9 +1263,14 @@ export default function Tasks() {
                     />
                   )}
                 </th>
-                {['Assign Date', 'Status', 'Task', 'Dept', 'Assigned', 'Frequency', 'Sched. Date', 'Completion', 'Actions'].map((h) => (
-                  <th key={h} style={{ background: '#f3f7fc', padding: '9px 13px', textAlign: 'left', fontSize: 10.5, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.8, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef' }}>{h}</th>
-                ))}
+                {['Assign Date', 'Status', 'Task', 'Dept', 'Assigned', 'Frequency', 'Sched. Date', 'Completion', 'Actions'].map((h) => {
+                  // Mobile-only: hide 6 of the 9 columns to leave Assign Date,
+                  // Status, Task visible. `col-hide-mobile` is no-op on desktop.
+                  const hideOnMobile = ['Dept', 'Assigned', 'Frequency', 'Sched. Date', 'Completion', 'Actions'].includes(h);
+                  return (
+                    <th key={h} className={hideOnMobile ? 'col-hide-mobile' : ''} style={{ background: '#f3f7fc', padding: '9px 13px', textAlign: 'left', fontSize: 10.5, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.8, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef' }}>{h}</th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -1278,7 +1283,7 @@ export default function Tasks() {
                     onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f8ff'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = late ? '#faf5ff' : 'white'; }}
                   >
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                       {canDel && (
                         <input
                           type="checkbox"
@@ -1314,17 +1319,17 @@ export default function Tasks() {
                       {t.assignedTo?.length ? <div style={{ fontSize: 10.5, color: '#1a56db' }}>👤 {t.assignedTo.join('+')}</div> : null}
                       {t.createdBy && <div style={{ fontSize: 10.5, color: '#6b7a90' }}>📌 By: {t.createdBy}</div>}
                     </td>
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle' }}><DeptTag name={t.dept} /></td>
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 12 }}>{t.assignedTo?.join(', ') || '—'}</td>
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle' }}><FreqBadge freq={t.freq} /></td>
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 12, color: '#0d7377', fontWeight: 700 }}>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle' }}><DeptTag name={t.dept} /></td>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 12 }}>{t.assignedTo?.join(', ') || '—'}</td>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle' }}><FreqBadge freq={t.freq} /></td>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 12, color: '#0d7377', fontWeight: 700 }}>
                       {t.schedDate ? fDate(t.schedDate) : '—'}
                       {t.time && <div style={{ fontSize: 11 }}>⏰ {t.time}</div>}
                     </td>
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 11 }}>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 11 }}>
                       {t.doneBy ? <><strong>{t.doneBy}</strong><br /><span style={{ color: '#0d7377' }}>{t.doneTime || ''}</span></> : '—'}
                     </td>
-                    <td style={{ padding: '11px 13px', verticalAlign: 'middle' }} onClick={(e) => e.stopPropagation()}>
+                    <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle' }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {t.freq === 'delegation' && (currentUser.name === t.createdBy || currentRole === 'mainadmin') && (
                           <button

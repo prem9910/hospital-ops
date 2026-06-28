@@ -315,6 +315,20 @@ export default function MisReporting() {
   const range = rangeByTab[tab];
   const setRange = (next) => setRangeByTab((s) => ({ ...s, [tab]: next }));
 
+  // Mobile-only: collapse the DateRangePicker behind a trigger button on
+  // phones (CSS .mis-dr-trigger / .mis-dr-collapsible). Desktop shows the
+  // picker inline — this state is a no-op there. The label mirrors the
+  // drilldown-modal pattern so the button is self-explanatory.
+  const [misDrOpen, setMisDrOpen] = useState(false);
+  const drLabel = (() => {
+    if (range.preset === 'currentMonth') return 'Current Month';
+    if (range.preset === 'last30') return 'Last 30 Days';
+    if (range.preset === 'custom') {
+      return range.from && range.to ? `${range.from} → ${range.to}` : 'Custom Range';
+    }
+    return 'Date Range';
+  })();
+
   // Pull the active tab's tasks/handover through the date filter once so
   // every stat + chart + table below is consistent.
   //
@@ -556,14 +570,27 @@ export default function MisReporting() {
         ))}
       </div>
 
-      {/* Date range filter — applies to the active tab. */}
+      {/* Date range filter — applies to the active tab.
+          Mobile: hidden behind a trigger button (CSS .mis-dr-trigger shows the
+          button + hides the picker; tap to expand). Desktop: picker stays inline. */}
       <div style={{ marginBottom: 20 }}>
-        <DateRangePicker
-          value={range}
-          onChange={setRange}
-          showField
-          fieldOptions={FIELD_OPTIONS[tab]}
-        />
+        <button
+          type="button"
+          className="mis-dr-trigger"
+          onClick={() => setMisDrOpen((v) => !v)}
+          aria-expanded={misDrOpen}
+        >
+          <span>📅 Date Range: {drLabel}</span>
+          <span style={{ fontSize: 10, color: '#6b7a90' }}>{misDrOpen ? '▲' : '▼'}</span>
+        </button>
+        <div className={`mis-dr-collapsible${misDrOpen ? ' is-open' : ''}`}>
+          <DateRangePicker
+            value={range}
+            onChange={setRange}
+            showField
+            fieldOptions={FIELD_OPTIONS[tab]}
+          />
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <button onClick={resetActiveRange} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #d8e2ef', background: 'white', color: '#0d7377', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>
             ↺ Reset filter
@@ -575,7 +602,7 @@ export default function MisReporting() {
       {tab === 'employee' && (
         <div>
           {/* Summary row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+          <div className="mis-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
             <SummaryCard label="Avg Performance" val={`${avgScore}%`} color={scoreColor(avgScore)} />
             <SummaryCard label="Total Assigned" val={totAssigned} color="#0d7377" />
             <SummaryCard label="Total Completed" val={totCompleted} color="#1a7a4a" />
@@ -585,7 +612,7 @@ export default function MisReporting() {
           </div>
 
           {/* Filter */}
-          <div style={{ marginBottom: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="mis-filter-row" style={{ marginBottom: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {isAdminRole && (
               <>
                 <select value={filterDept} onChange={e => handleDeptChange(e.target.value)} style={IS}>
@@ -599,14 +626,14 @@ export default function MisReporting() {
               </>
             )}
             {!isAdminRole && (
-              <div style={{ fontSize: 12, color: '#0d7377', fontWeight: 800, background: '#e8f4fd', border: '1px solid #bae6fd', padding: '6px 14px', borderRadius: 7 }}>
+              <div className="mis-personal-pill" style={{ fontSize: 12, color: '#0d7377', fontWeight: 800, background: '#e8f4fd', border: '1px solid #bae6fd', padding: '6px 14px', borderRadius: 7 }}>
                 👤 Showing your personal performance — {currentUser?.name}{myEmpRecord?.dept ? ` · ${myEmpRecord.dept}` : ''}
               </div>
             )}
           </div>
 
           {/* Charts row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, marginBottom: 20 }}>
+          <div className="mis-breakdown-row" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, marginBottom: 20 }}>
             {/* Grouped bars per employee */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
               <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, color: '#0b1e3d', marginBottom: 16 }}>📊 Employee Task Breakdown</div>
@@ -700,7 +727,7 @@ export default function MisReporting() {
       {tab === 'delegation' && (
         <div>
           {/* Summary */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+          <div className="mis-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
             <SummaryCard label="Total Delegation" val={delegTasks.length} color="#d4920a" />
             <SummaryCard label="Completed" val={delegDone.length} color="#1a7a4a" />
             <SummaryCard label="Pending" val={delegPending.length} color="#c0392b" />
@@ -708,7 +735,7 @@ export default function MisReporting() {
           </div>
 
           {/* Charts row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+          <div className="mis-breakdown-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
             {/* Status donut */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, display: 'flex', gap: 20, alignItems: 'center' }}>
               <DonutChart size={130} centerLabel={`${delegTasks.length}`} centerSub="Total" data={[
@@ -842,7 +869,7 @@ export default function MisReporting() {
         return (
           <div>
             {/* Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+            <div className="mis-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
               <SummaryCard label="Total Handovers" val={newHandovers.length} color="#0d7377" />
               <SummaryCard label="Active Now" val={activeH.length} color="#1a7a4a" />
               <SummaryCard label="Upcoming" val={upcomingH.length} color="#1a56db" />
