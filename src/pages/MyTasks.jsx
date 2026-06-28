@@ -609,13 +609,24 @@ export default function MyTasks() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header my-tasks-header">
         <h2 className="page-header-title" style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>My Tasks</h2>
         <div className="page-header-actions">
-          <button onClick={() => { setTab('task'); setPageTask(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'task' ? '#0d7377' : '#f3f7fc', color: tab === 'task' ? 'white' : '#1a2535' }}>📋 Task ({taskPending.length})</button>
-          <button onClick={() => { setTab('handover'); setPageHandoverFrom(1); setPageHandoverTo(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'handover' ? '#d4920a' : '#f3f7fc', color: tab === 'handover' ? 'white' : '#1a2535' }}>🔄 Handover ({handoverCount})</button>
-          <button onClick={() => { setTab('delegation'); setPageDelegation(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'delegation' ? '#7c3aed' : '#f3f7fc', color: tab === 'delegation' ? 'white' : '#1a2535' }}>📤 Delegation ({delegationPending.length})</button>
-          <button onClick={() => { setTab('done'); setPageDone(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'done' ? '#1a7a4a' : '#f3f7fc', color: tab === 'done' ? 'white' : '#1a2535' }}>✅ Done ({myDone.length})</button>
+          {/* Tabs — wrapped in .my-tabs-row so on mobile they stay in a
+              single horizontal scroll row instead of wrapping to multiple
+              lines. Desktop wraps normally. */}
+          <div className="my-tabs-row">
+            <button onClick={() => { setTab('task'); setPageTask(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'task' ? '#0d7377' : '#f3f7fc', color: tab === 'task' ? 'white' : '#1a2535' }}>📋 Task ({taskPending.length})</button>
+            <button onClick={() => { setTab('handover'); setPageHandoverFrom(1); setPageHandoverTo(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'handover' ? '#d4920a' : '#f3f7fc', color: tab === 'handover' ? 'white' : '#1a2535' }}>🔄 Handover ({handoverCount})</button>
+            <button onClick={() => { setTab('delegation'); setPageDelegation(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'delegation' ? '#7c3aed' : '#f3f7fc', color: tab === 'delegation' ? 'white' : '#1a2535' }}>📤 Delegation ({delegationPending.length})</button>
+            <button onClick={() => { setTab('done'); setPageDone(1); }} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'done' ? '#1a7a4a' : '#f3f7fc', color: tab === 'done' ? 'white' : '#1a2535' }}>✅ Done ({myDone.length})</button>
+          </div>
+        </div>
+        {/* Export + Print split out of page-header-actions so the mobile
+            layout can place them inline with the title (grid-area: extras)
+            instead of stacked below the tabs. Desktop still shows them
+            next to the tabs via flex. */}
+        <div className="header-extras">
           <button onClick={() => exportToExcel((tab === 'done' ? myDone : tab === 'delegation' ? delegationPending : taskPending).map(t => ({ Task: t.name, Department: t.dept, Frequency: t.freq, Status: t.status, 'Sched. Date': t.schedDate, 'Done By': t.doneBy, 'Done Time': t.doneTime, Delayed: t.isDelayed ? 'YES' : 'NO' })), 'my-tasks')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
         </div>

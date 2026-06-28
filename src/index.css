@@ -321,7 +321,8 @@ body {
 .page-header { display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
 .page-header > .page-header-title { min-width: 0; }
-.page-header > .page-header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.page-header > .page-header-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.page-header > .header-extras { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Compact stat card padding on mobile */
 .stat-card { padding: 16px; }
@@ -382,6 +383,120 @@ body {
   .hops-main-pad { padding: 10px; }
   .page-header > .page-header-actions > button { font-size: 11.5px; padding: 8px 6px; }
   .hops-notice-dropdown { right: 6px !important; }
+}
+
+/* ── Drill-down modal mobile responsiveness ──────────────────────────────────
+   Filter row stacks vertically and goes full-width on mobile. The DateRangePicker
+   collapses behind a trigger button that shows the current range — tap to
+   expand. Inline task-detail grid collapses from 2-col to 1-col. Tables get a
+   min-width so columns don't squish and a horizontal scroll appears instead. */
+
+.modal-filter-row {
+  display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.modal-filter-row > .modal-filter-search { flex: 1; min-width: 160px; }
+.modal-filter-row > select,
+.modal-filter-row > button {
+  flex-shrink: 0;
+}
+
+/* Date range collapse — default (desktop) shows the picker inline, hides
+   the trigger. Mobile flips both. The `.is-open` class on the collapsible
+   wrapper overrides the mobile hide so the picker can be expanded on tap. */
+.modal-dr-trigger { display: none; }
+.modal-dr-collapsible { display: block; }
+
+@media (max-width: 768px) {
+  .modal-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .modal-filter-row > .modal-filter-search,
+  .modal-filter-row > select,
+  .modal-filter-row > button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .modal-dr-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1.5px solid #d8e2ef;
+    background: white;
+    color: #1a2535;
+    font-family: 'Nunito', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 6px;
+  }
+  .modal-dr-trigger:hover { border-color: #0d7377; color: #0d7377; }
+  .modal-dr-collapsible { display: none; }
+  .modal-dr-collapsible.is-open { display: block; }
+
+  /* Table horizontal scroll on narrow screens — column header chips stay
+     readable, rows can be swiped. */
+  .modal-table-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-table-wrap table { min-width: 520px; }
+
+  /* Inline task-detail 2-col grid → 1-col on mobile */
+  .inline-task-detail-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── MyTasks page mobile responsiveness ───────────────────────────────────────
+   On desktop: title on left, [tabs | export | print] on right (existing layout).
+   On mobile: title + export/print on row 1, tabs in a single horizontal scroll
+   row on row 2. Uses CSS Grid named areas to swap layout at the 768px breakpoint. */
+
+.my-tabs-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.my-tabs-row > button { flex-shrink: 0; }
+
+.header-extras {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .my-tasks-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "title extras" "actions actions";
+    align-items: center;
+    gap: 8px;
+    flex-direction: initial;
+  }
+  .my-tasks-header > .page-header-title { grid-area: title; text-align: left; }
+  .my-tasks-header > .page-header-actions {
+    grid-area: actions;
+    width: 100%;
+    margin-left: 0;
+  }
+  .my-tasks-header > .header-extras {
+    grid-area: extras;
+    margin-left: 0;
+  }
+  /* Tabs go single-row on mobile — horizontal scroll if they overflow the
+     viewport rather than wrapping to a second row. */
+  .my-tabs-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+  }
+  .my-tabs-row > button {
+    padding: 8px 12px !important;
+    font-size: 11.5px !important;
+  }
 }
 
 /* ── Dark Mode — only sidebar darkens, main content stays light ─────────────── */

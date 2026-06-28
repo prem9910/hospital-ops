@@ -41,6 +41,9 @@ export function TasksDrilldownModal({
 }) {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
+  // Mobile date-range trigger — collapsed by default on phones, tap to expand.
+  // Desktop layout is unaffected (the trigger button is hidden via CSS).
+  const [drOpen, setDrOpen] = useState(false);
   const initialRange = useMemo(() => currentMonthRange(), []);
   const [dateRange, setDateRange] = useState({ preset: 'currentMonth', from: initialRange.from, to: initialRange.to, field: 'created' });
   // Inline expansion state: row id whose detail is shown directly below
@@ -178,11 +181,22 @@ export function TasksDrilldownModal({
     }
   }
 
+  // Compact label for the mobile date-range trigger button.
+  // Shows the active preset name + the actual from/to when it's not a preset.
+  const drLabel = (() => {
+    if (dateRange.preset === 'currentMonth') return 'Current Month';
+    if (dateRange.preset === 'last30') return 'Last 30 Days';
+    if (dateRange.preset === 'custom') {
+      return dateRange.from && dateRange.to ? `${dateRange.from} → ${dateRange.to}` : 'Custom Range';
+    }
+    return 'Date Range';
+  })();
+
   return (
     <Modal open={open} onClose={onClose} title={title} maxWidth="max-w-2xl">
       {/* Filter row — Status and Priority dropdowns removed: preFilter already scopes rows. */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK NAME…" style={{ ...IS, flex: 1, minWidth: 160 }} />
+      <div className="modal-filter-row">
+        <input className="modal-filter-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 SEARCH TASK NAME…" style={IS} />
         <select value={dept} onChange={(e) => setDept(e.target.value)} style={IS}>
           <option value="">ALL DEPTS</option>
           {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
@@ -190,8 +204,18 @@ export function TasksDrilldownModal({
         <button onClick={clearFilters} style={{ ...IS, cursor: 'pointer', color: '#0d7377', borderColor: '#0d7377', background: 'white' }}>↺ Clear</button>
       </div>
 
-      {/* Date range */}
-      <div style={{ marginBottom: 12 }}>
+      {/* Date range — desktop shows inline, mobile shows a trigger button
+          that expands the picker on tap. CSS controls which is visible. */}
+      <button
+        type="button"
+        className="modal-dr-trigger"
+        onClick={() => setDrOpen((v) => !v)}
+        aria-expanded={drOpen}
+      >
+        <span>📅 Date Range: {drLabel}</span>
+        <span style={{ fontSize: 10, color: '#6b7a90' }}>{drOpen ? '▲' : '▼'}</span>
+      </button>
+      <div className={`modal-dr-collapsible${drOpen ? ' is-open' : ''}`} style={{ marginBottom: 12 }}>
         <DateRangePicker
           value={dateRange}
           onChange={setDateRange}
@@ -216,8 +240,9 @@ export function TasksDrilldownModal({
       {/* Table — columns come from the per-card `columns` prop. Clicking
           a row's View button toggles an inline detail panel directly below
           the row. The detail lives INSIDE the tbody's scrollable area so
-          it can't get cropped behind the modal header. */}
-      <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
+          it can't get cropped behind the modal header. The wrap class adds
+          horizontal scroll on narrow screens so columns don't squish. */}
+      <div className="modal-table-wrap" style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
             <tr>
@@ -302,7 +327,7 @@ function InlineTaskDetail({ task, onOpenManage, onCollapse, manageLabel, manageU
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="inline-task-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {/* Task Information */}
           <Panel title="📋 Task Information">
             <DetailRow label="Task Name"><strong>{task.name}</strong></DetailRow>
