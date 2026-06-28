@@ -180,16 +180,26 @@ function DoneModal({ task, open, onClose, onSubmit, currentUser }) {
 
 // ─── Task Form Modal ────────────────────────────────────────────────────────
 function TaskFormModal({ open, onClose, onSave, editTask, depts, employees }) {
-  const blank = { name: '', dept: '', freq: 'daily', assignedTo: [], assigneeEmails: [], schedDate: '', time: '', priority: 'medium', notes: '' };
-  const [form, setForm] = useState(blank);
+  // Default schedDate to today so admin-assigned tasks appear in My Tasks
+  // immediately (the MyTasks filter gates on schedDate <= today). Admins
+  // can override by picking a different date in the date picker. We compute
+  // today's date fresh inside makeBlank() so an app left open past midnight
+  // gets the correct "today" the next time admin opens the form.
+  function makeBlank() {
+    return { name: '', dept: '', freq: 'daily', assignedTo: [], assigneeEmails: [], schedDate: toDay(), time: '', priority: 'medium', notes: '' };
+  }
+  const [form, setForm] = useState(makeBlank);
 
   function reset(t) {
     setForm(t ? {
       name: t.name, dept: t.dept, freq: t.freq,
       assignedTo: t.assignedTo || [], assigneeEmails: t.assigneeEmails || [],
-      schedDate: t.schedDate || '', time: t.time || '',
+      // For edits: keep the existing schedDate (don't overwrite with today
+      // unless the original was empty — that would silently change the
+      // scheduled date every time admin opened an old task to edit).
+      schedDate: t.schedDate || (t.parentTaskId ? '' : toDay()), time: t.time || '',
       priority: t.priority, notes: t.notes || '',
-    } : blank);
+    } : makeBlank());
   }
 
   // Reset form when modal opens/closes or edit task changes.

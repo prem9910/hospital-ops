@@ -230,14 +230,18 @@ export default function MyTasks() {
   //   daily:      next slot is tomorrow (one day after completion)
   //   15-day:     +15 days from anchor
   //   monthly/quarterly/half-yearly/yearly: anchor day in the next period
+  //
+  // Backstop: tasks with no schedDate are still shown — these are typically
+  // admin-assigned tasks created via the New Task form. If a future
+  // schedDate is set, gate on it; if missing or set to today/past, show.
   const ownPending = tasks.filter((t) => {
     if (!isAssignedTo(t, currentUser.name)) return false;
     if (t.status !== 'pending') return false;
     if (isGrandchild(t)) return false;
     if (tasks.some(x => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name))) return false;
-    // Hard gate: must have a schedDate and it must be today or in the past.
-    if (!t.schedDate) return false;
-    if (t.schedDate > today) return false;
+    // Future-dated tasks (schedDate > today) are NOT yet due — keep hidden.
+    // Missing or today-or-past schedDate is treated as due now.
+    if (t.schedDate && t.schedDate > today) return false;
     return true;
   });
 
