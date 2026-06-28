@@ -442,30 +442,21 @@ async function syncDelegationFromTask(task, delegations, { save, moveToTrash }, 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-// Track viewport width so we can swap the desktop filter row for a
-// compact mobile sheet. Returns true when viewport is <= 768px. Updates
-// live when the user rotates the device or resizes the window.
-function useMediaQuery(query) {
-  const get = () => typeof window !== 'undefined' && window.matchMedia(query).matches;
-  const [matches, setMatches] = useState(get);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const handler = (e) => setMatches(e.matches);
-    mq.addEventListener('change', handler);
-    setMatches(mq.matches);
-    return () => mq.removeEventListener('change', handler);
-  }, [query]);
-  return matches;
-}
-
 export default function Tasks() {
   const { currentRole, currentUser, hasPerm } = useAuth();
   const { tasks, delegations, depts, employees, notices, save, logAct, moveToTrash } = useApp();
   const [search, setSearch] = useState('');
   const [filterDept, setFilterDept] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterFreq, setFilterFreq] = useState('');
-  const [filterDelay, setFilterDelay] = useState('');
+  // Date filter — three preset options (current month / last 30 days / all)
+  // and an optional custom range that the user can fill in regardless of
+  // the preset. Custom range is applied on top of (or instead of) the
+  // preset; if preset is 'custom', only from/to are used.
+  const [filterDatePreset, setFilterDatePreset] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  // Employee filter — only meaningful once a department is selected,
+  // because employees are scoped by department.
+  const [filterEmployee, setFilterEmployee] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [showDetail, setShowDetail] = useState(null);
@@ -476,16 +467,23 @@ export default function Tasks() {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  // Mobile-only filter sheet state. Empty on desktop — the existing
-  // inline filter bar stays in charge there. We track active filter
-  // count so the toggle button can show "Filters (2)" and the user
-  // knows they have filters applied even with the sheet closed.
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  // Filter sheet state. The same compact "🔍 Filters (N)" button is now
+  // used for all viewports — a single click opens a sheet on mobile and a
+  // centered modal on desktop, both driven by the same state. We track
+  // active filter count so the toggle button can show "Filters (2)" and
+  // the user knows they have filters applied even with the sheet closed.
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const clearAllFilters = useCallback(() => {
-    setSearch(''); setFilterDept(''); setFilterStatus(''); setFilterFreq(''); setFilterDelay('');
+    setSearch(''); setFilterDept(''); setFilterEmployee('');
+    setFilterDatePreset(''); setFilterDateFrom(''); setFilterDateTo('');
   }, []);
-  const activeFilterCount = (search ? 1 : 0) + (filterDept ? 1 : 0) + (filterStatus ? 1 : 0) + (filterFreq ? 1 : 0) + (filterDelay ? 1 : 0);
+  // Count active filter "pills" so the toolbar button can show "(N)" and
+  // the user knows filters are applied even with the sheet closed.
+  // Each date preset OR a custom range counts as one filter pill (whichever
+  // is active); both being set would be redundant so we only count once.
+  const activeFilterCount = (search ? 1 : 0)
+    + (filterDept ? 1 : 0) + (filterEmployee ? 1 : 0)
+    + ((filterDatePreset && filterDatePreset !== 'custom') || (filterDatePreset === 'custom' && (filterDateFrom || filterDateTo)) ? 1 : 0);
 
   // Lock body scroll while the mobile sheet is open so the page behind
   // doesn't scroll when the user drags inside the sheet. Mirrors the
@@ -570,22 +568,54 @@ export default function Tasks() {
   const upcomingCount = sourceList.filter((t) => t.status === 'pending' && classifyTask(t) === 'upcoming').length;
   const doneCount = sourceList.filter((t) => t.status === 'done').length;
 
+  // Resolve the user's date filter into an actual [from, to] window.
+  // `todayStr` is the current day; preset picks a relative window;
+  // 'custom' falls through to whatever from/to the user typed.
+  // Returns [null, null] when no date filter is active (so the caller
+  // can skip the comparison entirely).
+  function dateRangeFromPreset() {
+    if (filterDatePreset === 'thisMonth') {
+      const d = new Date(todayStr + 'T00:00:00');
+      const y = d.getFullYear(); const m = d.getMonth();
+      const from = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      // Last day of current month — day 0 of next month = last of this
+      const to = new Date(y, m + 1, 0);
+      const toStr = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`;
+      return [from, toStr];
+    }
+    if (filterDatePreset === 'last30') {
+      const d = new Date(todayStr + 'T00:00:00');
+      d.setDate(d.getDate() - 30);
+      const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return [from, todayStr];
+    }
+    if (filterDatePreset === 'custom') {
+      return [filterDateFrom || null, filterDateTo || null];
+    }
+    return [null, null];
+  }
+  const [dateFrom, dateTo] = dateRangeFromPreset();
+
   const rawFiltered = sourceList.filter((t) => {
     // Tab classification is the primary filter — splits the list into
     // ongoing (current-date pending) vs upcoming (future-dated pending)
-    // vs done (completed). Once classified into a tab, the Status
-    // dropdown filter can narrow further (e.g. Ongoing + Done is empty
-    // by design — done tasks live in the Done tab).
+    // vs done (completed). Once classified into a tab, the date filter
+    // narrows further (e.g. Ongoing + Current Month).
     const cls = classifyTask(t);
     if (tab === 'ongoing' && cls !== 'ongoing') return false;
     if (tab === 'upcoming' && cls !== 'upcoming') return false;
     if (tab === 'done' && cls !== 'done') return false;
     if (search && !t.name.toUpperCase().includes(search.toUpperCase()) && !t.dept.toUpperCase().includes(search.toUpperCase())) return false;
     if (filterDept && t.dept !== filterDept) return false;
-    if (filterStatus && t.status !== filterStatus) return false;
-    if (filterFreq && t.freq !== filterFreq) return false;
-    if (filterDelay === 'ontime' && !(t.status === 'done' && !wasCompletedLate(t))) return false;
-    if (filterDelay === 'delayed' && !(t.status === 'done' && wasCompletedLate(t))) return false;
+    // Employee filter — match against assignedTo[] (case-insensitive).
+    // Empty filterDept means "all depts" but we still let the user
+    // narrow by a single employee if they want; that's a useful shortcut.
+    if (filterEmployee && !(t.assignedTo || []).some((a) => a.toUpperCase() === filterEmployee.toUpperCase())) return false;
+    // Date filter — applied to schedDate (the field shown in the Sched.
+    // Date column). Tasks with no schedDate are skipped when a date
+    // window is active, otherwise they'd show through inconsistently.
+    if (dateFrom && (!t.schedDate || t.schedDate < dateFrom)) return false;
+    if (dateTo && (!t.schedDate || t.schedDate > dateTo)) return false;
     return true;
   }).sort((a, b) => {
     const getTs = (id) => { const m = (id || '').match(/id-(\d{10,13})/); return m ? parseInt(m[1]) : 0; };
@@ -1028,122 +1058,96 @@ export default function Tasks() {
         })}
       </div>
 
-      {/* Filters — desktop row OR mobile sheet trigger.
-          We keep ONE set of state and render two layouts conditionally:
-          • Desktop: the existing filter-bar row (no visual change)
-          • Mobile: a single "🔍 Filters (N)" button. Tap → bottom sheet
-            with the same controls. The clear button is always reachable
-            either way. */}
-      {isMobile ? (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+      {/* Filters — small right-aligned button matching the New Task button size.
+          Click → opens a bottom-anchored sheet on mobile (<=768px) and
+          a centered modal on desktop. Same controls in both cases; state
+          lives at the page level so the search box stays in sync.
+          A small "✕ Clear" pill appears next to the button only when
+          filters are active. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        {activeFilterCount > 0 && (
           <button
-            onClick={() => setMobileSheetOpen(true)}
-            style={{
-              flex: 1, padding: '10px 14px', borderRadius: 9,
-              background: activeFilterCount > 0 ? '#0d7377' : 'white',
-              color: activeFilterCount > 0 ? 'white' : '#0d7377',
-              border: `1.5px solid #0d7377`,
-              fontWeight: 800, fontSize: 13,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              cursor: 'pointer',
-              boxShadow: activeFilterCount > 0 ? '0 2px 8px rgba(13,115,119,0.25)' : 'none',
-            }}
-            aria-label="Open filters"
-          >
-            🔍 Filters
-            {activeFilterCount > 0 && (
-              <span style={{
-                background: 'rgba(255,255,255,0.25)',
-                color: 'white',
-                padding: '2px 8px', borderRadius: 12,
-                fontSize: 11, fontWeight: 800,
-                minWidth: 22, textAlign: 'center',
-              }}>
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          {activeFilterCount > 0 && (
-            <button
-              onClick={clearAllFilters}
-              style={{
-                padding: '10px 14px', borderRadius: 9,
-                background: '#fde8e8', color: '#c0392b',
-                border: '1.5px solid #f5b7b1',
-                fontWeight: 800, fontSize: 13,
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
-              title="Clear all filters"
-            >
-              ✕ Clear
-            </button>
-          )}
-        </div>
-      ) : (
-      <div className="filter-bar">
-        <div className="filter-bar-search" style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', fontSize: 12, pointerEvents: 'none' }}>🔍</span>
-          <input className="filter-bar-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH..." style={{ ...IS, paddingLeft: 30 }} />
-        </div>
-        <select className="filter-bar-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
-          <option value="">ALL DEPTS</option>
-          {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-        </select>
-        <select className="filter-bar-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={IS}>
-          <option value="">ALL STATUS</option>
-          <option value="pending">PENDING</option>
-          <option value="done">DONE</option>
-        </select>
-        <select className="filter-bar-select" value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
-          <option value="">ALL FREQ</option>
-          {FREQ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select className="filter-bar-select" value={filterDelay} onChange={(e) => setFilterDelay(e.target.value)} style={IS}>
-          <option value="">ALL</option>
-          <option value="ontime">ON TIME</option>
-          <option value="delayed">DELAYED</option>
-        </select>
-        {(search || filterDept || filterStatus || filterFreq || filterDelay) && (
-          <button
-            className="filter-bar-clear"
             onClick={clearAllFilters}
-            style={{ padding: '8px 13px', borderRadius: 7, background: '#fde8e8', color: '#c0392b', border: '1.5px solid #f5b7b1', cursor: 'pointer', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', fontSize: 12.5 }}
+            style={{
+              padding: '9px 14px', borderRadius: 8,
+              background: '#fde8e8', color: '#c0392b',
+              border: '1.5px solid #f5b7b1',
+              fontWeight: 800, fontSize: 13,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              fontFamily: "'Nunito',sans-serif",
+            }}
             title="Clear all filters"
           >
-            ✕ Clear Filters
+            ✕ Clear
           </button>
         )}
+        <button
+          onClick={() => setMobileSheetOpen(true)}
+          style={{
+            padding: '9px 18px', borderRadius: 8, border: 'none',
+            background: activeFilterCount > 0 ? '#0d7377' : '#334155',
+            color: 'white',
+            fontWeight: 800, fontSize: 13,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            cursor: 'pointer',
+            fontFamily: "'Nunito',sans-serif",
+            boxShadow: activeFilterCount > 0 ? '0 2px 8px rgba(13,115,119,0.25)' : 'none',
+          }}
+          aria-label="Open filters"
+        >
+          🔍 Filters
+          {activeFilterCount > 0 && (
+            <span style={{
+              background: 'rgba(255,255,255,0.25)',
+              color: 'white',
+              padding: '1px 7px', borderRadius: 10,
+              fontSize: 11, fontWeight: 800,
+              minWidth: 20, textAlign: 'center',
+            }}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
       </div>
-      )}
 
-      {/* Mobile filter sheet — only mounts when isMobile AND sheet is open.
-          Bottom-anchored sheet with the same controls as the desktop row,
-          plus a sticky Apply button. State stays in sync because we use
-          the same setters. Scroll lock on body while open so the sheet
-          doesn't scroll the page behind it. */}
-      {isMobile && mobileSheetOpen && (
+      {/* Filter sheet — works on all viewports.
+          Mobile (<=768px): bottom-anchored sheet with drag handle.
+          Desktop (>768px): centered modal with rounded corners.
+          State stays in sync because we use the same setters. Scroll lock
+          on body while open so the sheet doesn't scroll the page behind it. */}
+      {mobileSheetOpen && (() => {
+        const isMobileLayout = typeof window !== 'undefined' && window.innerWidth <= 768;
+        return (
         <div
           onClick={(e) => { if (e.target === e.currentTarget) setMobileSheetOpen(false); }}
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             background: 'rgba(10,22,40,0.55)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            display: 'flex',
+            alignItems: isMobileLayout ? 'flex-end' : 'center',
+            justifyContent: 'center',
+            padding: isMobileLayout ? 0 : 20,
           }}
         >
           <div style={{
-            background: 'white', width: '100%', maxWidth: 520,
-            borderRadius: '18px 18px 0 0',
-            boxShadow: '0 -16px 48px rgba(0,0,0,0.25)',
-            maxHeight: '88vh', display: 'flex', flexDirection: 'column',
+            background: 'white',
+            width: '100%',
+            maxWidth: isMobileLayout ? 520 : 460,
+            borderRadius: isMobileLayout ? '18px 18px 0 0' : 14,
+            boxShadow: isMobileLayout ? '0 -16px 48px rgba(0,0,0,0.25)' : '0 20px 60px rgba(0,0,0,0.30)',
+            maxHeight: isMobileLayout ? '88vh' : '85vh',
+            display: 'flex', flexDirection: 'column',
           }}>
-            {/* Drag handle */}
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
-              <div style={{ width: 44, height: 4, background: '#d8e2ef', borderRadius: 4 }} />
-            </div>
+            {/* Drag handle — mobile only */}
+            {isMobileLayout && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+                <div style={{ width: 44, height: 4, background: '#d8e2ef', borderRadius: 4 }} />
+              </div>
+            )}
 
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 18px 12px', borderBottom: '1px solid #e8eef5' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobileLayout ? '4px 18px 12px' : '16px 20px 14px', borderBottom: '1px solid #e8eef5' }}>
               <div>
                 <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d', fontWeight: 700 }}>🔍 Filters</div>
                 <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 2 }}>{activeFilterCount > 0 ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied` : 'No filters applied'}</div>
@@ -1176,60 +1180,109 @@ export default function Tasks() {
                 )}
               </div>
 
-              {/* Dept */}
-              <Field label="Department">
-                <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} style={IS}>
-                  <option value="">ALL DEPTS</option>
-                  {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
+              {/* Dept + Employee — same row. Employee dropdown is scoped by
+                  the selected department so it only lists people who
+                  actually belong there. If the user clears the dept, the
+                  employee list resets so we don't show stale options. */}
+              <Field label="Department / Employee">
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    value={filterDept}
+                    onChange={(e) => {
+                      setFilterDept(e.target.value);
+                      // Reset employee when dept changes — the previously
+                      // selected employee may not belong to the new dept.
+                      if (filterEmployee) setFilterEmployee('');
+                    }}
+                    style={{ ...IS, flex: 1 }}
+                  >
+                    <option value="">ALL DEPTS</option>
+                    {depts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                  <select
+                    value={filterEmployee}
+                    onChange={(e) => setFilterEmployee(e.target.value)}
+                    style={{ ...IS, flex: 1 }}
+                    disabled={!filterDept}
+                    title={!filterDept ? 'Select a department first' : 'Filter by employee'}
+                  >
+                    <option value="">{filterDept ? 'ALL EMPLOYEES' : 'SELECT DEPT'}</option>
+                    {filterDept && employees
+                      .filter((emp) => (emp.dept || '').toUpperCase() === filterDept.toUpperCase())
+                      .map((emp) => <option key={emp.id} value={emp.name}>{emp.name}</option>)}
+                  </select>
+                </div>
               </Field>
 
-              {/* Status — radio-style chip row so it's tappable on touch */}
-              <Field label="Status">
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {[{ v: '', l: 'ALL' }, { v: 'pending', l: '⏳ PENDING' }, { v: 'done', l: '✅ DONE' }].map((opt) => (
+              {/* Date filter — chip row for presets, plus a from/to input
+                  row that becomes required when "custom" is selected.
+                  Applied to schedDate (the column shown in the table).
+                  Custom range is inclusive on both ends.
+                  Labels are kept short + flexWrap allows chips to drop
+                  to the next line on narrow widths so text never clips. */}
+              <Field label="Date Range">
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[
+                    { v: '', l: 'ALL' },
+                    { v: 'thisMonth', l: 'THIS MONTH' },
+                    { v: 'last30', l: 'LAST 30D' },
+                    { v: 'custom', l: 'CUSTOM' },
+                  ].map((opt) => (
                     <button
-                      key={opt.v}
-                      onClick={() => setFilterStatus(opt.v)}
+                      key={opt.v || 'all'}
+                      onClick={() => {
+                        setFilterDatePreset(opt.v);
+                        // Switching to/from custom clears the from/to
+                        // inputs so the user starts fresh each time.
+                        if (opt.v !== 'custom') {
+                          setFilterDateFrom('');
+                          setFilterDateTo('');
+                        }
+                      }}
                       style={{
-                        flex: 1, padding: '9px 8px', borderRadius: 8,
-                        background: filterStatus === opt.v ? '#0d7377' : '#f8fbff',
-                        color: filterStatus === opt.v ? 'white' : '#1a2535',
-                        border: `1.5px solid ${filterStatus === opt.v ? '#0d7377' : '#d8e2ef'}`,
-                        fontWeight: 800, fontSize: 11.5, cursor: 'pointer',
-                        whiteSpace: 'nowrap',
+                        flex: '1 1 0', minWidth: 0, padding: '9px 6px', borderRadius: 8,
+                        background: filterDatePreset === opt.v ? '#0d7377' : '#f8fbff',
+                        color: filterDatePreset === opt.v ? 'white' : '#1a2535',
+                        border: `1.5px solid ${filterDatePreset === opt.v ? '#0d7377' : '#d8e2ef'}`,
+                        fontWeight: 800, fontSize: 11, cursor: 'pointer',
+                        // Allow text to wrap inside the chip rather than
+                        // forcing the chip to overflow — at narrow widths
+                        // a two-line chip is better than clipped text.
+                        whiteSpace: 'normal',
+                        textAlign: 'center',
+                        lineHeight: 1.25,
                       }}
                     >{opt.l}</button>
                   ))}
                 </div>
-              </Field>
-
-              {/* Frequency */}
-              <Field label="Frequency">
-                <select value={filterFreq} onChange={(e) => setFilterFreq(e.target.value)} style={IS}>
-                  <option value="">ALL FREQ</option>
-                  {FREQ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Field>
-
-              {/* Delay status — also chip row */}
-              <Field label="Completion">
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {[{ v: '', l: 'ALL' }, { v: 'ontime', l: '✅ ON TIME' }, { v: 'delayed', l: '⏰ DELAYED' }].map((opt) => (
-                    <button
-                      key={opt.v}
-                      onClick={() => setFilterDelay(opt.v)}
-                      style={{
-                        flex: 1, padding: '9px 8px', borderRadius: 8,
-                        background: filterDelay === opt.v ? '#0d7377' : '#f8fbff',
-                        color: filterDelay === opt.v ? 'white' : '#1a2535',
-                        border: `1.5px solid ${filterDelay === opt.v ? '#0d7377' : '#d8e2ef'}`,
-                        fontWeight: 800, fontSize: 11.5, cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >{opt.l}</button>
-                  ))}
-                </div>
+                {/* Custom range inputs — only render when preset === 'custom'
+                    so the form stays compact for users who picked a preset. */}
+                {filterDatePreset === 'custom' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      style={{ ...IS, flex: 1 }}
+                      aria-label="From date"
+                    />
+                    <span style={{ color: '#6b7a90', fontSize: 12, fontWeight: 800 }}>→</span>
+                    <input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      style={{ ...IS, flex: 1 }}
+                      aria-label="To date"
+                    />
+                  </div>
+                )}
+                {/* Active date window — small readout under the chips so
+                    the user can confirm what they actually applied. */}
+                {(dateFrom || dateTo) && (
+                  <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 8 }}>
+                    Showing: <strong style={{ color: '#0d7377' }}>{dateFrom || '…'} → {dateTo || '…'}</strong>
+                  </div>
+                )}
               </Field>
             </div>
 
@@ -1263,7 +1316,8 @@ export default function Tasks() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Bulk-action bar — appears once at least one task is selected */}
       {canDel && selectedIds.size > 0 && (
