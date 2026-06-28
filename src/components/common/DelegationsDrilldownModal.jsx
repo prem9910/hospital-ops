@@ -24,6 +24,7 @@ export function DelegationsDrilldownModal({
   preFilter = 'all',
   title = '📤 Delegations',
   columns = DEFAULT_COLUMNS,
+  scopeFn, // optional predicate (delegation) => boolean applied after preFilter
 }) {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
@@ -35,14 +36,17 @@ export function DelegationsDrilldownModal({
   const navigate = useNavigate();
 
   const preFiltered = useMemo(() => {
-    switch (preFilter) {
-      case 'pending':  return delegations.filter((d) => d.status === 'pending');
-      case 'accepted': return delegations.filter((d) => d.status === 'accepted');
-      case 'done':     return delegations.filter((d) => d.status === 'done');
-      case 'overdue':  return delegations.filter((d) => (d.status === 'pending' || d.status === 'accepted') && d.dueDate && d.dueDate < currentMonthRange().from);
-      default:         return delegations;
-    }
-  }, [delegations, preFilter]);
+    const base = (() => {
+      switch (preFilter) {
+        case 'pending':  return delegations.filter((d) => d.status === 'pending');
+        case 'accepted': return delegations.filter((d) => d.status === 'accepted');
+        case 'done':     return delegations.filter((d) => d.status === 'done');
+        case 'overdue':  return delegations.filter((d) => (d.status === 'pending' || d.status === 'accepted') && d.dueDate && d.dueDate < currentMonthRange().from);
+        default:         return delegations;
+      }
+    })();
+    return scopeFn ? base.filter(scopeFn) : base;
+  }, [delegations, preFilter, scopeFn]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();

@@ -1,7 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useState, useMemo } from 'react';
-import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate, isEscalatedIssue } from '../utils';
+import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate, isEscalatedIssue, toDay } from '../utils';
 import { DeptTag, PriorityBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { TasksDrilldownModal } from '../components/common/TasksDrilldownModal';
@@ -479,6 +479,8 @@ function StaffDashboard() {
   const myPending = myTasks.filter((t) => t.status === 'pending');
   const myDone = myTasks.filter((t) => t.status === 'done');
   const myDelayed = myTasks.filter((t) => wasCompletedLate(t));
+  // Active delegations doer-scoped to me — matches the existing "My Active
+  // Delegations" list exactly so card count = popup row count.
   const myDels = delegations.filter((d) => d.doerName === currentUser.name && (d.status === 'pending' || d.status === 'accepted'));
   const allDone = tasks.filter((t) => isAssignedTo(t, currentUser.name) && t.status === 'done' && !isGC(t));
   // Score denominator excludes future-dated pending tasks (just like the
@@ -490,6 +492,27 @@ function StaffDashboard() {
   const myDelayAll = allDone.filter((t) => wasCompletedLate(t)).length;
   const myScore = allMineActionable.length > 0 ? Math.max(0, Math.round((allDone.length / allMineActionable.length) * 100 - myDelayAll * 10)) : 100;
 
+  // Upcoming = tasks assigned to me that aren't due yet. Excludes grand-
+  // children (the parent task is the actionable unit) and parents hidden
+  // by a pending child (same dedup as `myTasks`).
+  const today = toDay();
+  const myUpcoming = tasks.filter((t) =>
+    isAssignedTo(t, currentUser.name) &&
+    !isGC(t) &&
+    t.status === 'pending' &&
+    t.schedDate && t.schedDate > today &&
+    !(t.status === 'pending' && tasks.some((x) => x.parentTaskId === t.id && x.status === 'pending' && isAssignedTo(x, currentUser.name)))
+  ).sort((a, b) => (a.schedDate || '').localeCompare(b.schedDate || ''));
+
+  // Drill-down popup state. Same shape as main-admin `openCard` but
+  // pre-baked with the user's task/delegation subset so the popup shows
+  // only their data.
+  const [openStaffCard, setOpenStaffCard] = useState(null);
+
+  // Active tab for the bottom "My Tasks" card. Default to the tab with
+  // data, falling back to Today → Upcoming → Completed.
+  const [myTab, setMyTab] = useState(myPending.length > 0 ? 'today' : myUpcoming.length > 0 ? 'upcoming' : 'completed');
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
@@ -499,19 +522,31 @@ function StaffDashboard() {
         </div>
         <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
       </div>
-      {/* Stat Cards */}
+
+      {/* Stat Cards — every card opens a drill-down popup scoped to this
+          user. The popup receives the already-filtered array so card
+          counts equal popup row counts (no scopeFn juggling). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 14, marginBottom: 18 }}>
-        <StatCard num={myPending.length} label="My Pending" color="red" />
-        <StatCard num={myDone.length} label="Done Today" color="green" />
-        <StatCard num={myDelayed.length} label="Delayed" color="purple" />
-        <StatCard num={myDels.length} label="My Delegations" color="blue" />
-        <StatCard num={allDone.length} label="Total Completed" color="green" />
+        <StatCard num={myPending.length} label="My Pending" color="red" onClick={() => setOpenStaffCard({ type: 'tasks', tasks: myPending, title: '⏳ My Pending Tasks', columns: ['Sched. Date', 'Task', 'Priority', 'Action'] })} />
+        <StatCard num={myDone.length} label="Done Today" color="green" onClick={() => setOpenStaffCard({ type: 'tasks', tasks: myDone, title: '✅ Tasks Done Today', columns: ['Sched. Date', 'Task', 'Done By', 'Action'] })} />
+        <StatCard num={myDelayed.length} label="Delayed" color="purple" onClick={() => setOpenStaffCard({ type: 'tasks', tasks: myDelayed, title: '⏰ My Delayed Tasks', columns: ['Sched. Date', 'Task', 'Done By', 'Action'] })} />
+        <StatCard num={myDels.length} label="My Delegations" color="blue" onClick={() => setOpenStaffCard({ type: 'delegations', delegations: myDels, title: '📤 My Delegations', columns: ['Task', 'Due Date', 'Doer', 'Action'] })} />
+        <StatCard num={allDone.length} label="Total Completed" color="green" onClick={() => setOpenStaffCard({ type: 'tasks', tasks: allDone, title: '📊 All My Completed Tasks', columns: ['Sched. Date', 'Task', 'Done By', 'Result', 'Action'] })} />
       </div>
 
-      {/* Charts */}
+      {/* Charts — both donuts are clickable and open a popup with the
+          tasks that feed into the chart. */}
       <div className="resp-grid-2" style={{ marginBottom: 18 }}>
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
-          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>📊 My Performance Score</div>
+        <div
+          onClick={() => setOpenStaffCard({ type: 'tasks', tasks: allDone, title: '📊 My Completed Tasks (Performance)', columns: ['Sched. Date', 'Task', 'Done By', 'Result', 'Action'] })}
+          style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>📊 My Performance Score</div>
+            <div style={{ fontSize: 10, color: '#0d7377', fontWeight: 700 }}>Click to drill down →</div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
             <DonutChart size={110} centerLabel={`${myScore}`} centerSub="Score" data={[
               { value: myScore, color: scoreColor(myScore) },
@@ -526,8 +561,16 @@ function StaffDashboard() {
           </div>
         </div>
 
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
-          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>📤 Today's Task Status</div>
+        <div
+          onClick={() => setOpenStaffCard({ type: 'tasks', tasks: myTasks, title: '📅 My Tasks Today', columns: ['Sched. Date', 'Task', 'Status', 'Action'] })}
+          style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 13, color: '#0b1e3d', marginBottom: 14 }}>📤 Today's Task Status</div>
+            <div style={{ fontSize: 10, color: '#0d7377', fontWeight: 700 }}>Click to drill down →</div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
             <DonutChart size={110} centerLabel={`${myTasks.length}`} centerSub="Today" data={[
               { value: myDone.length, color: '#1a7a4a' },
@@ -549,23 +592,58 @@ function StaffDashboard() {
         </div>
       </div>
 
-      {/* My Pending Tasks list */}
-      {myPending.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, marginBottom: 18 }}>
-          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, color: '#0b1e3d', marginBottom: 12 }}>⏳ My Pending Tasks</div>
-          {myPending.map((t) => (
-            <div key={t.id} style={{ background: '#f8fbff', border: '1px solid #d8e2ef', borderLeft: `4px solid ${t.priority === 'high' ? '#c0392b' : t.priority === 'low' ? '#1a7a4a' : '#d4920a'}`, borderRadius: 9, padding: '12px 14px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div>
-              <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 4 }}>
-                <DeptTag name={t.dept} /> &nbsp; <PriorityBadge priority={t.priority} />
-                {t.schedDate && <span style={{ marginLeft: 6 }}>📅 {fDate(t.schedDate)}</span>}
-              </div>
-            </div>
-          ))}
+      {/* My Tasks — tabbed list. Replaces the flat "My Pending" + "My
+          Active Delegations" sections. Tab counts match the lists they
+          label so the user can predict what's behind each tab. */}
+      <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18, marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, color: '#0b1e3d' }}>📋 My Tasks</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <TabBtn active={myTab === 'today'} onClick={() => setMyTab('today')}>Today ({myPending.length})</TabBtn>
+            <TabBtn active={myTab === 'upcoming'} onClick={() => setMyTab('upcoming')}>Upcoming ({myUpcoming.length})</TabBtn>
+            <TabBtn active={myTab === 'completed'} onClick={() => setMyTab('completed')}>Completed ({allDone.length})</TabBtn>
+          </div>
         </div>
-      )}
 
-      {/* My Active Delegations list */}
+        {myTab === 'today' && (
+          myPending.length === 0 ? (
+            <EmptyHint icon="🌅" message="Nothing pending for today. Enjoy the breather!" />
+          ) : myPending.map((t) => (
+            <TaskRow key={t.id} task={t} />
+          ))
+        )}
+
+        {myTab === 'upcoming' && (
+          myUpcoming.length === 0 ? (
+            <EmptyHint icon="📭" message="No upcoming tasks scheduled." />
+          ) : myUpcoming.map((t) => (
+            <TaskRow key={t.id} task={t} />
+          ))
+        )}
+
+        {myTab === 'completed' && (
+          allDone.length === 0 ? (
+            <EmptyHint icon="📜" message="No completed tasks yet — they'll show up here once you mark something done." />
+          ) : allDone.slice(0, 10).map((t) => (
+            <TaskRow key={t.id} task={t} showResult />
+          ))
+        )}
+
+        {myTab === 'completed' && allDone.length > 10 && (
+          <div style={{ marginTop: 10, textAlign: 'center' }}>
+            <button
+              onClick={() => setOpenStaffCard({ type: 'tasks', tasks: allDone, title: '📊 All My Completed Tasks', columns: ['Sched. Date', 'Task', 'Done By', 'Result', 'Action'] })}
+              style={{ padding: '8px 16px', borderRadius: 8, background: '#f8fbff', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}
+            >
+              📋 View all {allDone.length} completed tasks →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* My Active Delegations — kept as a separate card so it doesn't get
+          buried under the tabbed tasks section. Same content as before,
+          just inline (no popup) because it never had a card trigger. */}
       {myDels.length > 0 && (
         <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: 18 }}>
           <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 14, color: '#0b1e3d', marginBottom: 12 }}>📤 My Active Delegations</div>
@@ -579,6 +657,96 @@ function StaffDashboard() {
           ))}
         </div>
       )}
+
+      {/* Drill-down modals — only one open at a time, dispatched by
+          openStaffCard.type. Tasks/Delegations drilldowns handle their own
+          inline-expansion + "Open in Manage Tasks" affordance from the
+          previous commit, so we just feed them the right array. */}
+      {openStaffCard?.type === 'tasks' && (
+        <TasksDrilldownModal
+          open
+          onClose={() => setOpenStaffCard(null)}
+          tasks={openStaffCard.tasks}
+          depts={[]}
+          preFilter="all"
+          title={openStaffCard.title}
+          columns={openStaffCard.columns}
+        />
+      )}
+      {openStaffCard?.type === 'delegations' && (
+        <DelegationsDrilldownModal
+          open
+          onClose={() => setOpenStaffCard(null)}
+          delegations={openStaffCard.delegations}
+          depts={[]}
+          preFilter="all"
+          title={openStaffCard.title}
+          columns={openStaffCard.columns}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Staff Dashboard sub-components ──────────────────────────────────────────
+// Tab-style toggle for the My Tasks card. Pill-shaped; active = teal fill.
+function TabBtn({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 14px', borderRadius: 20,
+        border: `1.5px solid ${active ? '#0d7377' : '#d8e2ef'}`,
+        background: active ? '#0d7377' : 'white',
+        color: active ? 'white' : '#6b7a90',
+        fontSize: 11.5, fontWeight: 800, cursor: 'pointer',
+        transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Inline hint shown when a tab has zero rows. Emoji + muted text.
+function EmptyHint({ icon, message }) {
+  return (
+    <div style={{ padding: '24px 12px', textAlign: 'center', color: '#6b7a90' }}>
+      <div style={{ fontSize: 28, marginBottom: 6 }}>{icon}</div>
+      <div style={{ fontSize: 12.5 }}>{message}</div>
+    </div>
+  );
+}
+
+// Single-row card for a task. Mirrors the existing list visual (priority
+// colour on the left border, dept + priority badges + schedDate in meta).
+// Used by the tabbed section. showResult adds the on-time / delayed pill
+// for the Completed tab.
+function TaskRow({ task, showResult }) {
+  const late = wasCompletedLate(task);
+  return (
+    <div style={{
+      background: '#f8fbff',
+      border: '1px solid #d8e2ef',
+      borderLeft: `4px solid ${task.priority === 'high' ? '#c0392b' : task.priority === 'low' ? '#1a7a4a' : '#d4920a'}`,
+      borderRadius: 9,
+      padding: '12px 14px',
+      marginBottom: 8,
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 14 }}>{task.name}</div>
+      <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 4 }}>
+        <DeptTag name={task.dept} /> &nbsp; <PriorityBadge priority={task.priority} />
+        {task.schedDate && <span style={{ marginLeft: 6 }}>📅 {fDate(task.schedDate)}</span>}
+        {task.doneBy && <span style={{ marginLeft: 8 }}>✅ By {task.doneBy}</span>}
+        {showResult && task.status === 'done' && (
+          <span style={{
+            marginLeft: 8, padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800,
+            background: late ? '#ede9fe' : '#d4edda', color: late ? '#4c1d95' : '#155724',
+          }}>
+            {late ? '⏰ Delayed' : '✅ On Time'}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

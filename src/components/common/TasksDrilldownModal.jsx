@@ -31,6 +31,7 @@ export function TasksDrilldownModal({
   preFilter = 'all',
   title = '📋 Tasks',
   columns = DEFAULT_COLUMNS,
+  scopeFn, // optional predicate (task) => boolean applied after preFilter
 }) {
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
@@ -42,20 +43,26 @@ export function TasksDrilldownModal({
   const [expandedId, setExpandedId] = useState(null);
   const navigate = useNavigate();
 
-  // 1. Apply preFilter from the card
+  // 1. Apply preFilter from the card, then scopeFn (e.g. "only tasks
+  //    assigned to me"). scopeFn is optional — when undefined the
+  //    preFilter result passes through unchanged (preserves main-admin
+  //    behaviour where every row counts).
   const preFiltered = useMemo(() => {
-    switch (preFilter) {
-      case 'completed': return tasks.filter((t) => t.status === 'done');
-      case 'onTime':    return tasks.filter((t) => t.status === 'done' && !wasCompletedLate(t));
-      case 'delayed':   return tasks.filter((t) => t.status === 'done' &&  wasCompletedLate(t));
-      // "Pending" drill-down matches the dashboard pending card scope:
-      // current-date pending only. Upcoming tasks can still be explored by
-      // widening the date range on the schedDate field.
-      case 'pending':   return tasks.filter(isCurrentDatePending);
-      case 'high':      return tasks.filter((t) => t.priority === 'high');
-      default:          return tasks;
-    }
-  }, [tasks, preFilter]);
+    const base = (() => {
+      switch (preFilter) {
+        case 'completed': return tasks.filter((t) => t.status === 'done');
+        case 'onTime':    return tasks.filter((t) => t.status === 'done' && !wasCompletedLate(t));
+        case 'delayed':   return tasks.filter((t) => t.status === 'done' &&  wasCompletedLate(t));
+        // "Pending" drill-down matches the dashboard pending card scope:
+        // current-date pending only. Upcoming tasks can still be explored by
+        // widening the date range on the schedDate field.
+        case 'pending':   return tasks.filter(isCurrentDatePending);
+        case 'high':      return tasks.filter((t) => t.priority === 'high');
+        default:          return tasks;
+      }
+    })();
+    return scopeFn ? base.filter(scopeFn) : base;
+  }, [tasks, preFilter, scopeFn]);
 
   // 2-4. Layer search + dept + date range. Status/Priority dropdowns were
   // removed because the card's preFilter already scopes the rows.
@@ -105,6 +112,45 @@ export function TasksDrilldownModal({
         return <td style={{ ...TD, fontSize: 11 }}>{t.doneBy || '—'}</td>;
       case 'Assigned':
         return <td style={{ ...TD, fontSize: 11 }}>{(t.assignedTo || []).join(', ') || '—'}</td>;
+      case 'Priority':
+        return <td style={TD}><PriorityBadge priority={t.priority} /></td>;
+      case 'Status': {
+        // Compact status pill for popup lists — same colour scheme as the
+        // main admin dashboard. Pending tasks show a priority-tinted pill
+        // (high = red, others = amber) so the row reads at a glance.
+        const late = wasCompletedLate(t);
+        if (t.status === 'done') {
+          return (
+            <td style={TD}>
+              <span style={{ background: late ? '#ede9fe' : '#d4edda', color: late ? '#4c1d95' : '#155724', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>
+                {late ? '⏰ DELAYED' : '✅ ON TIME'}
+              </span>
+            </td>
+          );
+        }
+        const bg = t.priority === 'high' ? '#fde8e8' : '#fff3cd';
+        const fg = t.priority === 'high' ? '#7d1a1a' : '#7a4800';
+        return (
+          <td style={TD}>
+            <span style={{ background: bg, color: fg, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>
+              {t.priority === 'high' ? '⚠️ PENDING' : '⏳ PENDING'}
+            </span>
+          </td>
+        );
+      }
+      case 'Result': {
+        // Used by Total Completed / Performance Score popups — shows
+        // whether the task was completed on time or with delay.
+        const late = wasCompletedLate(t);
+        if (t.status !== 'done') return <td style={TD}>—</td>;
+        return (
+          <td style={TD}>
+            <span style={{ background: late ? '#ede9fe' : '#d4edda', color: late ? '#4c1d95' : '#155724', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800 }}>
+              {late ? '⏰ Delayed' : '✅ On Time'}
+            </span>
+          </td>
+        );
+      }
       case 'Action':
         return (
           <td style={TD}>
