@@ -25,8 +25,29 @@ function timingSafeEqual(a, b) {
 }
 
 export function AuthProvider({ children }) {
-  const [currentRole, setCurrentRole] = useState('');
-  const [currentUser, setCurrentUser] = useState({ name: '', dept: '', adminId: '', perms: {} });
+  // Lazy useState initializers read hops-session SYNCHRONOUSLY before the
+  // first render — so the very first AppLayout render already sees a
+  // populated currentRole/currentUser. Without this, AppLayout's
+  // `if (!currentRole) return <Navigate to="/login" replace />` (line 45)
+  // fires on the first render with currentRole === '' and bounces a logged-in
+  // user to /login. After rehydration completes, Login's own effect redirects
+  // to /dashboard unconditionally, dropping whatever deep-link the user was
+  // on (/tasks, /settings, /employees, etc.) — making F5 feel like the whole
+  // app reloaded.
+  const [currentRole, setCurrentRole] = useState(() => {
+    try {
+      const s = ls.get('hops-session', null);
+      return s?.role || '';
+    } catch { return ''; }
+  });
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const s = ls.get('hops-session', null);
+      return s?.user?.name
+        ? s.user
+        : { name: '', dept: '', adminId: '', perms: {} };
+    } catch { return { name: '', dept: '', adminId: '', perms: {} }; }
+  });
   const [savedStaffName, setSavedStaffName] = useState(() => ls.get('hops-saved-staff-name', ''));
   const inactivityTimer = useRef(null);
   const inactivityInterval = useRef(null);
@@ -95,14 +116,11 @@ export function AuthProvider({ children }) {
     };
   }, [currentRole]);
 
-  // Restore session on mount
-  useEffect(() => {
-    const s = ls.get('hops-session', null);
-    if (s?.role && s?.user?.name) {
-      setCurrentRole(s.role);
-      setCurrentUser(s.user);
-    }
-  }, []);
+  // Session restore now happens in the lazy useState initializers above
+  // (synchronously, before first render) — the redundant post-mount
+  // useEffect that used to live here was removed because it ran AFTER the
+  // first render and couldn't prevent AppLayout from briefly bouncing the
+  // user to /login.
 
   const hasPerm = useCallback(
     (p) => {
