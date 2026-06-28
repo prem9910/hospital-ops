@@ -326,7 +326,10 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
   const isAdmin = currentRole === 'admin';
   const isStaff = currentRole === 'staff';
 
-  const myTasksBase = isMain || hasPerm('all_task_details')
+  // Always scope to the current user's tasks for the "Manage Tasks" badge so
+  // it matches what Tasks.jsx actually shows. Main admin gets the full list;
+  // everyone else sees only tasks they're assigned to or created.
+  const myTasksBase = isMain
     ? tasks
     : tasks.filter((t) => isAssignedTo(t, currentUser.name) || t.createdBy === currentUser.name);
 

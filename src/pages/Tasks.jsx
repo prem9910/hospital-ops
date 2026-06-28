@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isAssignedTo, notifyAdmins, exportToExcel } from '../utils';
+import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isAssignedTo, isTaskDueToday, notifyAdmins, exportToExcel, getNextScheduledDate } from '../utils';
 import { FREQ_LABELS, FREQ_OPTIONS, PRIORITY_OPTIONS } from '../constants';
 import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
@@ -444,12 +444,20 @@ export default function Tasks() {
   const [showDetail, setShowDetail] = useState(null);
   const [showDone, setShowDone] = useState(null);
   const [showExtApproval, setShowExtApproval] = useState(null);
-  const [tab, setTab] = useState('mine');
+  const [tab, setTab] = useState('ongoing');
   const [showExport, setShowExport] = useState(false);
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Reset multi-select when user switches tabs so they don't accidentally
+  // bulk-delete across tab boundaries (e.g. selections from "Mine" leaking
+  // into the "All" tab where the same id may have different permission).
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [tab]);
 
   const isMain = currentRole === 'mainadmin';
-  const canSeeAll = isMain || hasPerm('all_task_details');
   const canAdd = isMain || hasPerm('tasks_add');
   const canEdit = isMain || hasPerm('tasks_edit');
   const canDel = isMain || hasPerm('tasks_delete');
@@ -460,9 +468,50 @@ export default function Tasks() {
   );
 
   // Source list depends on tab + permissions
-  const sourceList = isMain ? tasks : (canSeeAll && tab === 'all') ? tasks : myTasks;
+  // Main admin sees everything. Employees always see only their own tasks,
+  // even on the "All" tab — the "All" tab label just means "all of MY tasks",
+  // not "all tasks in the system". all_task_details permission is intentionally
+  // NOT used here so an employee never sees another employee's task data.
+  const sourceList = isMain ? tasks : myTasks;
+
+  // ─── Ongoing vs Upcoming classification ────────────────────────────────────
+  // Splits tasks into two date-based buckets:
+  //   ongoing  → active right now: daily/delegation with schedDate <= today,
+  //              or periodic (15-day, monthly, …) where today matches the
+  //              periodic date per isTaskDueToday().
+  //   upcoming → not yet due: daily/delegation with schedDate in the future,
+  //              or periodic off-period.
+  //
+  // Status (pending/done) is intentionally NOT considered here — both tabs
+  // include both states. The user can combine with the Status dropdown to
+  // narrow further (e.g. "Ongoing + Done" shows completed tasks of the
+  // current period; "Ongoing + Pending" shows the active queue).
+  const todayStr = toDay();
+  function classifyTask(t) {
+    const freq = t.freq || 'daily';
+    const sched = t.schedDate || '';
+    // Daily + delegation are conceptually due every day. The actual schedDate
+    // tells us whether the current slot has arrived (ongoing) or sits in the
+    // future (upcoming).
+    if (freq === 'daily' || freq === 'delegation') {
+      if (!sched) return 'ongoing'; // backstop: no date = treat as active
+      return sched <= todayStr ? 'ongoing' : 'upcoming';
+    }
+    // Periodic freqs — anchor on the original schedDate and check whether
+    // today matches the cycle. If yes, the slot is live (ongoing); if no,
+    // the slot is in the future / off-period (upcoming).
+    return isTaskDueToday(t) ? 'ongoing' : 'upcoming';
+  }
+  const ongoingCount = sourceList.filter((t) => classifyTask(t) === 'ongoing').length;
+  const upcomingCount = sourceList.filter((t) => classifyTask(t) === 'upcoming').length;
 
   const rawFiltered = sourceList.filter((t) => {
+    // Tab classification is the primary filter — splits the list into
+    // ongoing (active now) vs upcoming (future-scheduled). Status (pending
+    // vs done) is handled by filterStatus below; the two filters compose.
+    const cls = classifyTask(t);
+    if (tab === 'ongoing' && cls !== 'ongoing') return false;
+    if (tab === 'upcoming' && cls !== 'upcoming') return false;
     if (search && !t.name.toUpperCase().includes(search.toUpperCase()) && !t.dept.toUpperCase().includes(search.toUpperCase())) return false;
     if (filterDept && t.dept !== filterDept) return false;
     if (filterStatus && t.status !== filterStatus) return false;
@@ -512,7 +561,37 @@ export default function Tasks() {
 // them by someone else. The "my tasks" tab may show tasks assigned to me by
 // others (e.g. by the main admin), but the ✏️ button must stay hidden on those.
   const canEditRow = (t) => isMain || (canEdit && t.createdBy === currentUser.name);
-  const canDelRow = (t) => isMain || (canDel && tab === 'mine');
+  const canDelRow = (t) => isMain || canDel;
+
+  // Multi-select helpers — selection persists across pagination (Set), but
+  // resets on tab switch (see useEffect above).
+  function toggleSelected(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectPage() {
+    const pageItems = paged.items;
+    if (pageItems.length === 0) return;
+    const allSelected = pageItems.every((t) => selectedIds.has(t.id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        pageItems.forEach((t) => next.delete(t.id));
+      } else {
+        pageItems.forEach((t) => next.add(t.id));
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
 
   async function handleSave(form) {
     const existing = editTask ? tasks.find((t) => t.id === editTask.id) : null;
@@ -558,12 +637,42 @@ export default function Tasks() {
     const t = showDone;
     const now = new Date();
     const nowStr = now.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+    const today = toDay();
     const updated = {
       ...t, status: 'done', doneBy: currentUser.name, doneTime: nowStr,
-      doneRemark: remark, delayReason, isDelayed, lastDone: toDay(),
+      doneRemark: remark, delayReason, isDelayed, lastDone: today,
       activityLog: [...(t.activityLog || []), { by: currentUser.name, action: 'COMPLETED' + (isDelayed ? ' (DELAYED)' : ''), details: remark, at: nowStr }],
     };
-    const newTasks = tasks.map((x) => x.id === t.id ? updated : x);
+    // Find the root of the chain so every auto-cycled child links back to
+    // the original template — keeps the chain at depth 1 and prevents the
+    // grandchild filter from hiding fresh pending slots.
+    const root = (() => {
+      let cur = t;
+      const seen = new Set();
+      while (cur && cur.parentTaskId && !seen.has(cur.id)) {
+        seen.add(cur.id);
+        cur = taskById[cur.parentTaskId];
+        if (!cur) break;
+      }
+      return cur || t;
+    })();
+    const rootId = root.id;
+    const pendingChildExists = tasks.some(x => x.parentTaskId === rootId && x.status === 'pending' && x.id !== t.id);
+    let newTasks = tasks.map((x) => x.id === t.id ? updated : x);
+    if (!pendingChildExists && t.freq !== 'delegation') {
+      const child = {
+        id: uid(), name: t.name, dept: t.dept, freq: t.freq,
+        assignedTo: [...(t.assignedTo || [])], assigneeEmails: [...(t.assigneeEmails || [])],
+        time: t.time || '', schedDate: getNextScheduledDate(t.freq, t.schedDate, today), priority: t.priority,
+        notes: t.notes || '', status: 'pending',
+        doneBy: '', doneTime: '', doneRemark: '', delayReason: '',
+        isDelayed: false, lastDone: '', completionHistory: [], extensions: [],
+        created: today, createdBy: 'SYSTEM',
+        activityLog: [{ by: 'SYSTEM', action: 'AUTO CYCLE', details: 'Freq: ' + t.freq + ', next slot: ' + getNextScheduledDate(t.freq, t.schedDate, today), at: fDateTime() }],
+        parentTaskId: rootId,
+      };
+      newTasks = [...newTasks, child];
+    }
     await save('hops-tasks', newTasks);
     await logAct('TASK COMPLETED', t.name + (isDelayed ? ' [DELAYED]' : ''));
     // Mirror completion into hops-delegations so the Delegation Tracker page
@@ -584,7 +693,11 @@ export default function Tasks() {
 
   async function handleDelete(task) {
     if (!confirm(`Move '${task.name}' to Trash?`)) return;
-    await moveToTrash('task', task.id);
+    const result = await moveToTrash('task', task.id);
+    if (result?.error) {
+      alert('Delete failed: ' + (result.message || result.reason || 'unknown error'));
+      return;
+    }
     // Mirror the deletion: if this was a delegation task, drop the matching
     // delegation record too so the Delegation Tracker page doesn't keep
     // showing it as a ghost entry.
@@ -593,6 +706,73 @@ export default function Tasks() {
       if (target) {
         try { await moveToTrash('delegation', task.id); } catch (e) { /* non-fatal */ }
       }
+    }
+    // Non-main-admin deletes notify the main admin's notice bell so the
+    // admin knows who trashed what. Main admin's own deletes skip this
+    // (no need to ping themselves).
+    if (currentRole !== 'mainadmin') {
+      try {
+        await notifyAdmins({
+          notices, save,
+          subject: `🗑️ ${currentUser.name} deleted a task`,
+          message: `Task: ${task.name}\nDepartment: ${task.dept || '—'}\nFrequency: ${task.freq || '—'}\nAssigned To: ${(task.assignedTo || []).join(', ') || '—'}\nDeleted By: ${currentUser.name}`,
+          type: 'task_deleted',
+          meta: { taskId: task.id, deletedBy: currentUser.name, taskName: task.name },
+        });
+      } catch (e) { console.error('notifyAdmins (single delete) failed:', e); }
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      // Only delete rows the current user is allowed to delete (employees
+      // can only delete on the "mine" tab; main admin can delete anywhere).
+      const toDelete = tasks.filter((t) => selectedIds.has(t.id) && canDelRow(t));
+      if (toDelete.length === 0) {
+        alert('None of the selected tasks can be deleted by you.');
+        return;
+      }
+      const msg = `Move ${toDelete.length} task${toDelete.length === 1 ? '' : 's'} to Trash? This cannot be undone.`;
+      if (!confirm(msg)) return;
+
+      // Trash each task. moveToTrash internally logs activity via
+      // logAct('DELETE TASK', ...) so we get one entry per task in the
+      // activity log automatically — preserves per-task audit granularity.
+      for (const t of toDelete) {
+        try { await moveToTrash('task', t.id); } catch (e) { console.error('bulk delete failed for', t.id, e); }
+      }
+      // Mirror deletion into hops-delegations for any delegation tasks in the batch
+      for (const t of toDelete) {
+        if (t.freq === 'delegation') {
+          const target = delegations.find((d) => d.id === t.id);
+          if (target) {
+            try { await moveToTrash('delegation', t.id); } catch (e) { /* non-fatal */ }
+          }
+        }
+      }
+      // Single aggregated notification for non-main-admin users — one bell
+      // entry per bulk action, not per task, so the admin isn't spammed.
+      if (currentRole !== 'mainadmin') {
+        const lines = toDelete.map((t) => `• ${t.name} — ${t.dept || '—'} — ${t.freq || '—'}`);
+        try {
+          await notifyAdmins({
+            notices, save,
+            subject: `🗑️ ${currentUser.name} deleted ${toDelete.length} task${toDelete.length === 1 ? '' : 's'}`,
+            message: `Deleted By: ${currentUser.name}\nCount: ${toDelete.length}\n\nTasks:\n${lines.join('\n')}`,
+            type: 'task_deleted_bulk',
+            meta: {
+              deletedBy: currentUser.name,
+              count: toDelete.length,
+              names: toDelete.slice(0, 20).map((t) => t.name),
+            },
+          });
+        } catch (e) { console.error('notifyAdmins (bulk delete) failed:', e); }
+      }
+      clearSelection();
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -635,17 +815,43 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Tabs — only show if user has all_task_details perm */}
-      {canSeeAll && !isMain && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-          <button onClick={() => setTab('mine')} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'mine' ? '#0d7377' : '#f3f7fc', color: tab === 'mine' ? 'white' : '#1a2535' }}>
-            📋 My Tasks ({myTasks.length})
-          </button>
-          <button onClick={() => setTab('all')} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12, background: tab === 'all' ? '#0b1e3d' : '#f3f7fc', color: tab === 'all' ? 'white' : '#1a2535' }}>
-            🗂 All Task Details ({tasks.length})
-          </button>
-        </div>
-      )}
+      {/* Employees always see only their own tasks (assignedTo / createdBy),
+          so the "Mine" tab IS their full list — no extra "All" tab needed.
+          Main admin sees the full unfiltered list by default. */}
+
+      {/* Ongoing / Upcoming tabs — split pending AND done tasks by date so
+          the user can quickly tell what's actionable now vs what's scheduled
+          for a future slot. Status (pending vs done) is independent and
+          controlled by the Status dropdown — combine as needed. */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 12, borderBottom: '2px solid #d8e2ef' }}>
+        {[
+          { key: 'ongoing', label: '🔄 Ongoing', count: ongoingCount, color: '#0d7377' },
+          { key: 'upcoming', label: '📅 Upcoming', count: upcomingCount, color: '#7c3aed' },
+        ].map((t) => {
+          const isActive = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => { setTab(t.key); setPage(1); }}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '8px 8px 0 0',
+                border: 'none',
+                borderBottom: isActive ? `3px solid ${t.color}` : '3px solid transparent',
+                background: isActive ? 'white' : 'transparent',
+                color: isActive ? t.color : '#6b7a90',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: 13,
+                marginBottom: '-2px',
+                transition: 'all 0.15s',
+              }}
+            >
+              {t.label} ({t.count})
+            </button>
+          );
+        })}
+      </div>
 
       {/* Filters */}
       <div className="filter-bar">
@@ -683,12 +889,48 @@ export default function Tasks() {
         )}
       </div>
 
+      {/* Bulk-action bar — appears once at least one task is selected */}
+      {canDel && selectedIds.size > 0 && (
+        <div style={{
+          background: '#fff3cd', border: '1.5px solid #ffc107', borderRadius: 10,
+          padding: '10px 14px', marginBottom: 12, display: 'flex',
+          alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: '#7a4800' }}>
+            ✅ {selectedIds.size} task{selectedIds.size === 1 ? '' : 's'} selected
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={clearSelection}
+              disabled={bulkBusy}
+              style={{ padding: '7px 14px', borderRadius: 8, background: 'white', color: '#7a4800', border: '1.5px solid #ffc107', cursor: bulkBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 12 }}
+            >✕ Clear</button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkBusy}
+              style={{ padding: '7px 14px', borderRadius: 8, background: bulkBusy ? '#e57373' : '#c0392b', color: 'white', border: 'none', cursor: bulkBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 12 }}
+            >{bulkBusy ? '⏳ Deleting...' : `🗑️ Delete Selected (${selectedIds.size})`}</button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ width: 36, padding: '9px 13px', background: '#f3f7fc', borderBottom: '1px solid #d8e2ef', textAlign: 'center' }}>
+                  {canDel && paged.items.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={paged.items.every((t) => selectedIds.has(t.id))}
+                      onChange={toggleSelectPage}
+                      title="Select all on this page"
+                      style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#0d7377' }}
+                    />
+                  )}
+                </th>
                 {['Assign Date', 'Status', 'Task', 'Dept', 'Assigned', 'Frequency', 'Sched. Date', 'Completion', 'Actions'].map((h) => (
                   <th key={h} style={{ background: '#f3f7fc', padding: '9px 13px', textAlign: 'left', fontSize: 10.5, fontWeight: 800, color: '#6b7a90', letterSpacing: 0.8, textTransform: 'uppercase', borderBottom: '1px solid #d8e2ef' }}>{h}</th>
                 ))}
@@ -704,6 +946,18 @@ export default function Tasks() {
                     onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f8ff'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = late ? '#faf5ff' : 'white'; }}
                   >
+                    <td style={{ padding: '11px 13px', verticalAlign: 'middle', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      {canDel && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(t.id)}
+                          disabled={!canDelRow(t)}
+                          onChange={() => toggleSelected(t.id)}
+                          style={{ width: 15, height: 15, cursor: canDelRow(t) ? 'pointer' : 'not-allowed', accentColor: '#0d7377' }}
+                          title={canDelRow(t) ? 'Select' : 'You cannot delete this task'}
+                        />
+                      )}
+                    </td>
                     <td style={{ padding: '11px 13px', verticalAlign: 'middle', fontSize: 12, color: '#334155', fontWeight: 600, whiteSpace: 'nowrap' }}>
                       {(() => {
                         const m = (t.id || '').match(/id-(\d{10,13})/);
@@ -758,7 +1012,12 @@ export default function Tasks() {
                   </tr>
                 );
               }) : (
-                <tr><td colSpan={9}><EmptyState icon="📋" message="NO TASKS FOUND" /></td></tr>
+                <tr><td colSpan={10}>
+                  <EmptyState
+                    icon={tab === 'upcoming' ? '📅' : '✅'}
+                    message={tab === 'upcoming' ? 'NO UPCOMING TASKS — ALL CLEAR!' : 'NO ONGOING TASKS — ALL CLEAR!'}
+                  />
+                </td></tr>
               )}
             </tbody>
           </table>
