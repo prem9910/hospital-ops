@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
 import { DeptTag, PriorityBadge, StatusBadge } from './Badge';
-import { fDate, currentMonthRange, inDateRange } from '../../utils';
+import { fDate, currentMonthRange, inDateRange, isEscalatedIssue } from '../../utils';
 
 // Drill-down for issues. preFilter maps:
 //   'open'      → status === 'open'
@@ -22,7 +22,7 @@ export function IssuesDrilldownModal({ open, onClose, issues = [], depts = [], p
   const preFiltered = useMemo(() => {
     switch (preFilter) {
       case 'open':      return issues.filter((i) => i.status === 'open');
-      case 'escalated': return issues.filter((i) => i.priority === 'high' && i.status === 'open');
+      case 'escalated': return issues.filter(isEscalatedIssue);
       case 'resolved':  return issues.filter((i) => i.status === 'resolved');
       case 'in-progress': return issues.filter((i) => i.status === 'in-progress');
       default:          return issues;

@@ -85,7 +85,24 @@ export default function Issues() {
   }
 
   async function progressIssue(id) {
-    await save('hops-issues', issues.map((i) => i.id === id ? { ...i, status: 'in-progress' } : i));
+    const issue = issues.find((i) => i.id === id);
+    if (!issue) return;
+    const updated = { ...issue, status: 'in-progress', assigned: issue.assigned || currentUser.name };
+    await save('hops-issues', issues.map((i) => i.id === id ? updated : i));
+    await logAct('ISSUE IN-PROGRESS', issue.title);
+    // Mirror the resolve flow: when a non-admin picks up an issue, surface
+    // it on the admin's bell so they know it's actively being worked on.
+    if (currentRole !== 'mainadmin') {
+      try {
+        await notifyAdmins({
+          notices, save,
+          subject: `▶️ Issue picked up: ${issue.title}`,
+          message: `Issue: ${issue.title}\nDepartment: ${issue.dept || '—'}\nPicked Up By: ${currentUser.name}\nPriority: ${issue.priority.toUpperCase()}`,
+          type: 'issue_in_progress',
+          meta: { issueId: issue.id, pickedUpBy: currentUser.name, title: issue.title },
+        });
+      } catch (e) { console.error('Admin notify failed:', e); }
+    }
   }
 
   return (

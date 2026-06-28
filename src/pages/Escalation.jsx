@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { fDate, exportToExcel } from '../utils';
+import { fDate, exportToExcel, isEscalatedIssue } from '../utils';
 import { DeptTag, PriorityBadge, StatusBadge } from '../components/common/Badge';
 import { EmptyState, Alert } from '../components/common/Alert';
 
@@ -10,7 +10,9 @@ export default function Escalation() {
 
   const IS = { padding: '8px 12px', borderRadius: 7, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 
-  const escalated = issues.filter((i) => i.priority === 'high' && i.status !== 'resolved' && (!filterDept || i.dept === filterDept));
+  // Use the shared helper so this page, the dashboard card, the sidebar
+  // badge and the drill-down modal all agree on what "escalated" means.
+  const escalated = issues.filter((i) => isEscalatedIssue(i) && (!filterDept || i.dept === filterDept));
   const allDepts = [...new Set(issues.map((i) => i.dept).filter(Boolean))];
 
   return (
@@ -28,7 +30,7 @@ export default function Escalation() {
       </div>
 
       {escalated.length > 0 && (
-        <Alert variant="red">🚨 {escalated.length} HIGH PRIORITY issue(s) pending resolution!</Alert>
+        <Alert variant="red">🚨 {escalated.length} HIGH PRIORITY open issue(s) need attention!</Alert>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>

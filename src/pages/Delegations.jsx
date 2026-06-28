@@ -90,8 +90,17 @@ export default function Delegations() {
 
   async function submitExtension() {
     if (!extReason.trim() || !extDate) { alert('Reason and new date required!'); return; }
+    // Cap extensions at 3 per delegation — anything beyond that means the
+    // task should be re-delegated or escalated rather than repeatedly
+    // pushed out. The cap is enforced at submit-time so the user sees an
+    // immediate error instead of the admin silently rejecting later.
+    const existing = showExtModal.extensionRequests || [];
+    if (existing.length >= 3) {
+      alert(`This delegation has already used its 3 allowed extensions. Please close it out, escalate to admin, or re-delegate the task instead of requesting another extension.`);
+      return;
+    }
     const req = { requestedAt: new Date().toISOString(), reason: extReason.toUpperCase(), newDate: extDate };
-    const updated = { ...showExtModal, status: 'extension-requested', extensionRequests: [...(showExtModal.extensionRequests || []), req] };
+    const updated = { ...showExtModal, status: 'extension-requested', extensionRequests: [...existing, req] };
     await save('hops-delegations', delegations.map((x) => x.id === showExtModal.id ? updated : x));
     await logAct('EXTENSION REQUESTED', showExtModal.task);
     setShowExtModal(null); setExtReason(''); setExtDate('');
@@ -119,7 +128,7 @@ export default function Delegations() {
               🧹 Clean {badRows.length} bad row{badRows.length === 1 ? '' : 's'}
             </button>
           )}
-          <button onClick={() => exportToExcel(filtered.map(d => ({ 'Task Name': d.taskName, Department: d.dept, 'Delegated By': d.ownerName, 'Delegated To': d.doerName, Status: d.status, 'Due Date': d.dueDate, Reason: d.reason })), 'delegations-export')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
+          <button onClick={() => exportToExcel(filtered.map(d => ({ 'Task Name': d.task, Department: d.dept || '—', 'Delegated By': d.createdBy || '—', 'Delegated To': d.doerName, Status: d.status, 'Due Date': d.dueDate, Remarks: d.remarks || '', 'Extensions Used': (d.extensionRequests || []).length })), 'delegations-export')} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>⬇ Export</button>
           <button onClick={() => window.print()} style={{ padding: '7px 14px', borderRadius: 8, background: '#334155', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>🖨 Print</button>
           {canAdd && <button onClick={() => setShowForm(true)} style={{ padding: '7px 14px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>+ Delegate Task</button>}
         </div>
@@ -191,10 +200,24 @@ export default function Delegations() {
       <Modal open={!!showExtModal} onClose={() => setShowExtModal(null)} title="Request Extension">
         {showExtModal && <>
           <Alert variant="purple">Extension request will be sent to admin for approval.</Alert>
+          {(() => {
+            const used = (showExtModal.extensionRequests || []).length;
+            const remaining = Math.max(0, 3 - used);
+            if (remaining === 0) {
+              return <Alert variant="red">🚫 Maximum 3 extensions already used. Please close out, escalate, or re-delegate this task instead.</Alert>;
+            }
+            return <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', padding: '8px 12px', borderRadius: 8, fontSize: 11.5, color: '#6d28d9', marginBottom: 12, fontWeight: 700 }}>
+              📊 Extensions used: <strong>{used}/3</strong> — {remaining} remaining.
+            </div>;
+          })()}
           <Field label="Reason for Extension *"><textarea value={extReason} onChange={(e) => setExtReason(e.target.value)} placeholder="WHY DO YOU NEED MORE TIME..." style={{ ...IS, minHeight: 70, resize: 'vertical' }} /></Field>
           <Field label="New Due Date *"><input type="date" value={extDate} onChange={(e) => setExtDate(e.target.value)} style={IS} /></Field>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 16, borderTop: '1px solid #d8e2ef' }}>
-            <button onClick={submitExtension} style={{ padding: '9px 18px', borderRadius: 8, background: '#6d28d9', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>🔄 Submit Request</button>
+            <button
+              onClick={submitExtension}
+              disabled={(showExtModal.extensionRequests || []).length >= 3}
+              style={{ padding: '9px 18px', borderRadius: 8, background: (showExtModal.extensionRequests || []).length >= 3 ? '#cbd5e1' : '#6d28d9', color: 'white', border: 'none', cursor: (showExtModal.extensionRequests || []).length >= 3 ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13 }}
+            >🔄 Submit Request</button>
             <button onClick={() => setShowExtModal(null)} style={{ padding: '9px 18px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>Cancel</button>
           </div>
         </>}

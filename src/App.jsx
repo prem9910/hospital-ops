@@ -27,6 +27,7 @@ import LiveTracking from './pages/LiveTracking';
 import ActivityLog from './pages/ActivityLog';
 import MisReporting from './pages/MisReporting';
 import Notices from './pages/Notices';
+import Admins from './pages/Admins';
 
 function ThemeToggle() {
   const [dark, setDark] = useState(() => localStorage.getItem('hops-theme') === 'dark');
@@ -86,6 +87,7 @@ export default function App() {
               <Route path="/employees" element={<Staff />} />
               <Route path="/handover" element={<Handover />} />
               <Route path="/departments" element={<Departments />} />
+              <Route path="/admins" element={<Admins />} />
               <Route path="/delegation" element={<Delegations />} />
               <Route path="/delegation-tasks" element={<DelegationTasks />} />
               <Route path="/tracking" element={<LiveTracking />} />

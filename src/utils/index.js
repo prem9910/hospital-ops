@@ -143,6 +143,13 @@ export const wasCompletedLate = (task) => {
   return !!task.isDelayed;
 };
 
+// Single source of truth for what counts as an "escalated" issue. Used by
+// the Dashboard escalated card, the Escalation Tracker page, the sidebar
+// badge, and the drill-down modal — all of which previously disagreed.
+// Definition: priority = high AND status = open (i.e. not yet picked up
+// by anyone, not even in-progress).
+export const isEscalatedIssue = (issue) => issue && issue.priority === 'high' && issue.status === 'open';
+
 export const getNextDueMs = (task) => {
   const now = new Date();
   const scheduledMin = parseTimeToMinutes(task.time);

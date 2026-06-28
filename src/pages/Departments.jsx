@@ -17,6 +17,7 @@ export default function Departments() {
   const [editDept, setEditDept] = useState(null);
   const [form, setForm] = useState({ name: '', hod: '', phone: '', email: '', floor: '' });
   const [pendingModal, setPendingModal] = useState(null); // { empsWithTasks, obj, newDepts, editDept }
+  const [deleteModal, setDeleteModal] = useState(null); // { dept, counts }
   const [noticeSent, setNoticeSent] = useState(false);
 
   const canEdit = currentRole === 'mainadmin' || hasPerm('departments_edit');
@@ -94,6 +95,55 @@ export default function Departments() {
     setNoticeSent(true);
   }
 
+  // Compute the impact of deleting a department across all linked records.
+  // Returns null if there is no impact, otherwise counts of affected rows
+  // grouped by entity. Surfacing these counts up front stops the user from
+  // accidentally orphaning tasks, issues, handovers and delegations that
+  // reference the dept by name.
+  function computeDeleteImpact(d) {
+    const empsInDept = employees.filter((e) => e.dept === d.name);
+    const tasksInDept = tasks.filter((t) => t.dept === d.name);
+    const issuesInDept = issues.filter((i) => i.dept === d.name);
+    // handovers + delegations don't carry dept names in this codebase, but
+    // we still surface employees + tasks + issues for transparency.
+    return {
+      emps: empsInDept,
+      tasks: tasksInDept,
+      issues: issuesInDept,
+    };
+  }
+
+  function openDelete(d) {
+    const impact = computeDeleteImpact(d);
+    const total = impact.emps.length + impact.tasks.length + impact.issues.length;
+    if (total === 0) {
+      // Nothing references this dept — straight delete, no modal needed.
+      if (confirm(`Delete dept "${d.name}"?`)) {
+        (async () => { await moveToTrash('dept', d.id); })();
+      }
+      return;
+    }
+    setDeleteModal({ dept: d, impact });
+  }
+
+  async function confirmCascadeDelete() {
+    if (!deleteModal) return;
+    const { dept, impact } = deleteModal;
+    // Strategy: trash the dept, then null/clear `dept` on every dependent
+    // record so the UI no longer references a non-existent department.
+    // This keeps the data for history/audit but stops orphan rendering.
+    const updatedTasks = tasks.map((t) => (t.dept === dept.name ? { ...t, dept: '' } : t));
+    const updatedIssues = issues.map((i) => (i.dept === dept.name ? { ...i, dept: '' } : i));
+    const updatedEmps = employees.map((e) => (e.dept === dept.name ? { ...e, dept: '' } : e));
+
+    await save('hops-tasks', updatedTasks);
+    await save('hops-issues', updatedIssues);
+    await save('hops-employees', updatedEmps);
+    await moveToTrash('dept', dept.id);
+    await logAct('DEPT DELETED (CASCADE)', `${dept.name} · cleared dept on ${impact.tasks.length} tasks, ${impact.issues.length} issues, ${impact.emps.length} employees`);
+    setDeleteModal(null);
+  }
+
   // Employees available as incharge: not already incharge of another department
   const assignedIncharges = depts
     .filter(d => d.id !== editDept?.id)
@@ -161,7 +211,7 @@ export default function Departments() {
               {canEdit && (
                 <div style={{ display: 'flex', gap: 6, padding: '0 14px 14px' }}>
                   <button onClick={() => openEdit(d)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, background: '#f0f7ff', color: '#0d7377', border: '1px solid #cce0f0', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>✏️ Edit</button>
-                  <button onClick={async () => { if (confirm('Delete dept?')) await moveToTrash('dept', d.id); }} style={{ padding: '7px 12px', borderRadius: 8, background: 'transparent', border: '1px solid #e0e8f0', cursor: 'pointer', fontSize: 13, color: '#94a3b8' }}>🗑️</button>
+                  <button onClick={() => openDelete(d)} style={{ padding: '7px 12px', borderRadius: 8, background: 'transparent', border: '1px solid #e0e8f0', cursor: 'pointer', fontSize: 13, color: '#94a3b8' }}>🗑️</button>
                 </div>
               )}
             </div>
@@ -209,6 +259,51 @@ export default function Departments() {
                   </button>
                 )}
                 <button onClick={() => setPendingModal(null)} style={{ flex: 1, padding: '9px 14px', borderRadius: 8, background: 'transparent', color: '#6b7a90', border: '1.5px solid #d8e2ef', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
+                  ✕ Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cascade delete confirmation modal */}
+      {deleteModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'white', borderRadius: 16, maxWidth: 520, width: '100%', boxShadow: '0 16px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#c0392b,#e74c3c)', padding: '18px 22px' }}>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>⚠️</div>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: 'white', fontWeight: 700 }}>Delete Department & Clear References?</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 4 }}>
+                The department <strong>{deleteModal.dept.name}</strong> is referenced by other records. Deleting it will clear the department field on those records (the rows themselves are kept for audit).
+              </div>
+            </div>
+            <div style={{ padding: '18px 22px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', background: '#fff5f5', borderRadius: 9, border: '1px solid #fecaca', fontSize: 12.5, fontWeight: 700, color: '#7d1a1a' }}>
+                  <span>👥 Employees in this dept</span>
+                  <span>{deleteModal.impact.emps.length}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', background: '#fff5f5', borderRadius: 9, border: '1px solid #fecaca', fontSize: 12.5, fontWeight: 700, color: '#7d1a1a' }}>
+                  <span>📋 Tasks in this dept</span>
+                  <span>{deleteModal.impact.tasks.length}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', background: '#fff5f5', borderRadius: 9, border: '1px solid #fecaca', fontSize: 12.5, fontWeight: 700, color: '#7d1a1a' }}>
+                  <span>⚠️ Issues in this dept</span>
+                  <span>{deleteModal.impact.issues.length}</span>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: '#6b7a90', marginBottom: 14, fontStyle: 'italic' }}>
+                💡 Tip: You can rename the department instead of deleting it — renaming reassigns all linked records automatically.
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={confirmCascadeDelete} style={{ flex: 1, padding: '9px 14px', borderRadius: 8, background: '#c0392b', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
+                  🗑️ Delete & Clear
+                </button>
+                <button onClick={() => { setDeleteModal(null); openEdit(deleteModal.dept); }} style={{ flex: 1, padding: '9px 14px', borderRadius: 8, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
+                  ✏️ Rename Instead
+                </button>
+                <button onClick={() => setDeleteModal(null)} style={{ flex: 1, padding: '9px 14px', borderRadius: 8, background: 'transparent', color: '#6b7a90', border: '1.5px solid #d8e2ef', cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>
                   ✕ Cancel
                 </button>
               </div>

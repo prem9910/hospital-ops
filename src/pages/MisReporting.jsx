@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Modal } from '../components/common/Modal';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { wasCompletedLate, fDate, toDay, exportToExcel, isAssignedTo, currentMonthRange, inDateRange } from '../utils';
@@ -247,11 +248,16 @@ const FIELD_OPTIONS = {
 };
 
 export default function MisReporting() {
-  const { tasks, issues, depts, employees, handovers } = useApp();
+  const { tasks, issues, depts, employees, handovers, delegations } = useApp();
   const { currentRole, currentUser } = useAuth();
   const [tab, setTab] = useState('employee');
   const [filterDept, setFilterDept] = useState('');
   const [filterEmp, setFilterEmp] = useState('');
+  // Drill-down modal: when an employee row is clicked on the Handover or
+  // Delegation tab, we open a modal listing just that employee's records.
+  // Without this the user has to scroll through a noisy aggregate and
+  // manually filter — clicking is much faster.
+  const [drillEmp, setDrillEmp] = useState(null);
 
   // Role gating — main admin / admin with mis_view see everything; employees
   // get their data only. `isMain` controls the global aggregate view; for
@@ -366,21 +372,51 @@ export default function MisReporting() {
   const avgScore = empStats.length ? Math.round(empStats.reduce((s, e) => s + e.score, 0) / empStats.length) : 100;
   const maxAssigned = Math.max(...empStats.map(e => e.assigned), 1);
 
-  // ─── Delegation stats (driven by filteredTasks for consistency) ─────────────
+  // ─── Delegation stats (driven by filteredTasks + standalone delegation records) ──
   // Scope: admin sees all delegation tasks; employee only sees their own
   // (where they're in assignedTo). When filterEmp is set (admin only),
   // restrict to that employee's delegations too.
+  //
+  // Two sources of truth are merged here:
+  //   1. Tasks with `freq === 'delegation'` — the older implementation
+  //      writes these into hops-tasks when the user creates a delegation
+  //      via the Assign Task flow.
+  //   2. Standalone records in hops-delegations — written by Delegations.jsx.
+  //      The dashboard donut uses (1) only, but the MIS report needs both
+  //      so the user sees the full picture regardless of which flow was used.
   const delegTasks = useMemo(() => {
-    let pool = filteredTasks.filter((t) => t.freq === 'delegation');
+    let taskPool = filteredTasks.filter((t) => t.freq === 'delegation');
     if (!isAdminRole) {
-      pool = pool.filter((t) => isAssignedTo(t, currentUser.name));
+      taskPool = taskPool.filter((t) => isAssignedTo(t, currentUser.name));
     } else if (effEmp) {
-      pool = pool.filter((t) => isAssignedTo(t, effEmp));
+      taskPool = taskPool.filter((t) => isAssignedTo(t, effEmp));
     } else if (effDept) {
-      pool = pool.filter((t) => t.dept === effDept);
+      taskPool = taskPool.filter((t) => t.dept === effDept);
     }
-    return pool;
-  }, [filteredTasks, isAdminRole, effEmp, effDept, currentUser]);
+    // Normalise standalone records into the same shape as delegation tasks.
+    let standPool = (delegations || []).map((d) => ({
+      id: d.id,
+      name: d.task,
+      assignedTo: [d.doerName],
+      createdBy: d.createdBy || '',
+      created: d.createdAt || '',
+      schedDate: d.dueDate || '',
+      extensions: d.extensionRequests || [],
+      status: d.status === 'done' ? 'done' : 'pending',
+      lastDone: '',
+      dept: d.dept || '',
+      remarks: d.remarks || '',
+      _source: 'delegations',
+    }));
+    if (!isAdminRole) {
+      standPool = standPool.filter((t) => isAssignedTo(t, currentUser.name));
+    } else if (effEmp) {
+      standPool = standPool.filter((t) => isAssignedTo(t, effEmp));
+    } else if (effDept) {
+      standPool = standPool.filter((t) => t.dept === effDept);
+    }
+    return [...taskPool, ...standPool];
+  }, [filteredTasks, delegations, isAdminRole, effEmp, effDept, currentUser]);
   const delegDone = delegTasks.filter(t => t.status === 'done');
   const delegPending = delegTasks.filter(t => t.status === 'pending');
   const totalExts = delegTasks.reduce((s, t) => s + (t.extensions || []).length, 0);
@@ -815,10 +851,12 @@ export default function MisReporting() {
 
             {/* Employee-wise handover summary */}
             {newHandovers.length > 0 && (() => {
-              // Per-employee: how many tasks they received via handover and completed
+              // Per-employee: how many tasks they received via handover and completed.
+              // Skip rows without a recipient (legacy data) — without this guard
+              // every blank-recipient handover would collapse into one ghost row.
               const empHandoverMap = {};
               newHandovers.forEach(h => {
-                const key = h.toName;
+                const key = (h.toName || '').trim() || '(unknown recipient)';
                 if (!empHandoverMap[key]) empHandoverMap[key] = { received: 0, completed: 0, handovers: [] };
                 empHandoverMap[key].received += (h.taskIds || []).length;
                 empHandoverMap[key].completed += (h.taskIds || []).filter(id => {
@@ -841,7 +879,8 @@ export default function MisReporting() {
                         {Object.entries(empHandoverMap).map(([empName, stat]) => {
                           const pct = stat.received > 0 ? Math.round((stat.completed / stat.received) * 100) : 0;
                           return (
-                            <tr key={empName} style={{ background: 'white' }}
+                            <tr key={empName} style={{ background: 'white', cursor: 'pointer' }}
+                              onClick={() => setDrillEmp({ name: empName, kind: 'handover' })}
                               onMouseEnter={e => e.currentTarget.style.background = '#f8fbff'}
                               onMouseLeave={e => e.currentTarget.style.background = 'white'}>
                               <td style={TD}>
@@ -915,6 +954,37 @@ export default function MisReporting() {
               </div>
             </div>
           </div>
+        );
+      })()}
+
+      {/* ══════════ EMPLOYEE DRILL-DOWN MODAL ══════════ */}
+      {drillEmp && drillEmp.kind === 'handover' && (() => {
+        const empName = drillEmp.name;
+        const empUpper = empName.toUpperCase();
+        const list = (scopedHandovers || []).filter((h) => (h.toName || '').toUpperCase() === empUpper);
+        return (
+          <Modal open={!!drillEmp} onClose={() => setDrillEmp(null)} title={`🔄 Handovers to ${empName} (${list.length})`} maxWidth="max-w-3xl">
+            {list.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {list.sort((a, b) => (b.dateStart || '').localeCompare(a.dateStart || '')).map((h) => {
+                  const st = (() => { const t = toDay(); if (!h.dateStart) return 'pending'; return t >= h.dateStart && t <= h.dateEnd ? 'active' : t < h.dateStart ? 'upcoming' : 'completed'; })();
+                  const doneCount = (h.taskIds || []).filter((id) => { const t = tasks.find((x) => x.id === id); return t && t.status === 'done'; }).length;
+                  return (
+                    <div key={h.id} style={{ background: '#f8fbff', borderRadius: 10, border: '1px solid #d8e2ef', padding: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                        <strong style={{ fontSize: 13 }}>From: {h.fromName || '—'}</strong>
+                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 10px', borderRadius: 20, color: 'white', background: st === 'active' ? '#1a7a4a' : st === 'upcoming' ? '#1a56db' : st === 'completed' ? '#6b7a90' : '#d4920a', textTransform: 'uppercase' }}>{st}</span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#6b7a90' }}>
+                        📅 {h.dateStart ? fDate(h.dateStart) : '—'} → {h.dateEnd ? fDate(h.dateEnd) : '—'} &nbsp;|&nbsp; Tasks: {doneCount}/{(h.taskIds || []).length} done
+                      </div>
+                      {h.notes && <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 4 }}>📝 {h.notes}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <div style={{ color: '#6b7a90', textAlign: 'center', padding: 24 }}>No handover records found for {empName}.</div>}
+          </Modal>
         );
       })()}
 

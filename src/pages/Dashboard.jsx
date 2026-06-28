@@ -1,7 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useState, useMemo } from 'react';
-import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate } from '../utils';
+import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate, isEscalatedIssue } from '../utils';
 import { DeptTag, PriorityBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { TasksDrilldownModal } from '../components/common/TasksDrilldownModal';
@@ -129,7 +129,7 @@ export default function Dashboard() {
   const onTime = tasks.filter((t) => t.status === 'done' && !wasCompletedLate(t)).length;
   const openI = issues.filter((i) => i.status !== 'resolved').length;
   const resI = issues.filter((i) => i.status === 'resolved').length;
-  const esc = issues.filter((i) => i.priority === 'high' && i.status === 'open').length;
+  const esc = issues.filter(isEscalatedIssue).length;
   // Donut share = done over (done + current-date pending). Done records are
   // always historical; pending tasks due today are the actionable scope.
   // Future-dated pending tasks are excluded from BOTH numerator and
@@ -474,9 +474,14 @@ function StaffDashboard() {
   const myDelayed = myTasks.filter((t) => wasCompletedLate(t));
   const myDels = delegations.filter((d) => d.doerName === currentUser.name && (d.status === 'pending' || d.status === 'accepted'));
   const allDone = tasks.filter((t) => isAssignedTo(t, currentUser.name) && t.status === 'done' && !isGC(t));
+  // Score denominator excludes future-dated pending tasks (just like the
+  // main dashboard's `actionScope`). A task that hasn't come due yet isn't
+  // a "missed" task — counting it against the employee punishes them for
+  // work that isn't actionable today.
   const allMine = tasks.filter((t) => isAssignedTo(t, currentUser.name) && !isGC(t));
+  const allMineActionable = allMine.filter((t) => t.status === 'done' || isCurrentDatePending(t));
   const myDelayAll = allDone.filter((t) => wasCompletedLate(t)).length;
-  const myScore = allMine.length > 0 ? Math.max(0, Math.round((allDone.length / allMine.length) * 100 - myDelayAll * 10)) : 100;
+  const myScore = allMineActionable.length > 0 ? Math.max(0, Math.round((allDone.length / allMineActionable.length) * 100 - myDelayAll * 10)) : 100;
 
   return (
     <div>

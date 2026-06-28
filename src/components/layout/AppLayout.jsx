@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAuth as useAuthHook } from '../../context/AuthContext';
 import { useApp as useAppForSaving } from '../../context/AppContext';
 import { useApp } from '../../context/AppContext';
-import { isTaskDueToday, isAssignedTo, notifyAdmins, toDay, uid } from '../../utils';
+import { isTaskDueToday, isAssignedTo, notifyAdmins, toDay, uid, isEscalatedIssue } from '../../utils';
 import { useTaskNotifications } from '../../hooks/useTaskNotifications';
 
 function useDarkTheme() {
@@ -385,7 +385,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
       return ownCount + handoverRealCount + handoverVirtualCount;
     })(),
     issues: issues.filter((i) => i.status !== 'resolved').length,
-    escalation: issues.filter((i) => i.priority === 'high' && i.status === 'open').length,
+    escalation: issues.filter(isEscalatedIssue).length,
     handover: handovers.filter((h) => { const t = toDay(); return h.dateStart ? (t >= h.dateStart && t <= h.dateEnd) : h.status === 'pending'; }).length,
     delegation: delegations.filter((d) => d.status === 'pending' || d.status === 'accepted').length,
     delegationTasks: tasks.filter((t) => t.freq === 'delegation' && t.status === 'pending').length,
