@@ -43,6 +43,18 @@ const KEY_MAP = {
   'hops-notices': 'notices',
 };
 
+// Reverse map: ls-key → deleteRecord's `type` arg. Used by the init merge
+// when re-attempting deletes that didn't propagate to Supabase.
+const TYPE_MAP = {
+  'hops-tasks': 'task',
+  'hops-issues': 'issue',
+  'hops-employees': 'employee',
+  'hops-depts': 'dept',
+  'hops-admins': 'admin',
+  'hops-handovers': 'handover',
+  'hops-delegations': 'delegation',
+};
+
 export function AppProvider({ children }) {
   const { currentUser, currentRole, refreshPermsFromEmployees } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -57,25 +69,34 @@ export function AppProvider({ children }) {
     const stateKey = KEY_MAP[hopKey];
     if (!stateKey) return;
     setIsSaving(true);
-    ls.set(hopKey, newArr);
-    console.log('[save]', hopKey, '→', newArr.length, 'rows; localStorage now:', ls.get(hopKey, []).length);
+    // Stamp every row with updatedAt so the realtime handler's localPending
+    // filter can recognise rows we just wrote locally (Supabase hasn't echoed
+    // back yet). Without this, freshly-created/updated rows get dropped on
+    // the first realtime event because their updatedAt is undefined and the
+    // filter falls back to 0, which fails the >= lastWrite.at - 5s check.
+    const nowMs = Date.now();
+    const stamped = newArr.map((r) => r ? { ...r, updatedAt: nowMs } : r);
+    ls.set(hopKey, stamped);
+    console.log('[save]', hopKey, '→', stamped.length, 'rows; localStorage now:', ls.get(hopKey, []).length);
     // Stamp local-write time BEFORE awaiting the network call so realtime/refresh
     // paths can recognise rows we just wrote but Supabase hasn't echoed back yet.
-    ls.set('hops-last-local-write', { key: hopKey, at: Date.now() });
-    dispatch({ type: 'SET_KEY', key: stateKey, value: newArr });
+    ls.set('hops-last-local-write', { key: hopKey, at: nowMs });
+    dispatch({ type: 'SET_KEY', key: stateKey, value: stamped });
     // Refresh current employee's perms live if their record was updated
-    if (hopKey === 'hops-employees') refreshPermsFromEmployees(newArr);
-    try { await upsertRecord(hopKey, newArr); } catch (e) { console.error('Save error:', e); } finally { setIsSaving(false); }
+    if (hopKey === 'hops-employees') refreshPermsFromEmployees(stamped);
+    try { await upsertRecord(hopKey, stamped); } catch (e) { console.error('Save error:', e); } finally { setIsSaving(false); }
   }, [refreshPermsFromEmployees]);
 
   const saveSingle = useCallback(async (hopKey, item, items) => {
     const stateKey = KEY_MAP[hopKey];
     if (!stateKey) return;
     setIsSaving(true);
-    ls.set(hopKey, items);
-    console.log('[saveSingle]', hopKey, 'item.id=', item?.id, 'rows=', items.length);
-    ls.set('hops-last-local-write', { key: hopKey, at: Date.now() });
-    dispatch({ type: 'SET_KEY', key: stateKey, value: items });
+    const nowMs = Date.now();
+    const stamped = items.map((r) => r ? { ...r, updatedAt: nowMs } : r);
+    ls.set(hopKey, stamped);
+    console.log('[saveSingle]', hopKey, 'item.id=', item?.id, 'rows=', stamped.length);
+    ls.set('hops-last-local-write', { key: hopKey, at: nowMs });
+    dispatch({ type: 'SET_KEY', key: stateKey, value: stamped });
     try { await upsertSingle(hopKey, item); } catch (e) { console.error('SaveSingle error:', e); } finally { setIsSaving(false); }
   }, []);
 
@@ -111,30 +132,108 @@ export function AppProvider({ children }) {
         const results = await Promise.all(keys.map((k) => loadAll(k)));
         const merged = {};
 
-        // Timestamp of the last successful sync — anything older is treated
-        // as a stale localStorage leftover (e.g. a row the user deleted
-        // server-side via the Supabase dashboard), NOT a pending write.
-        const lastSyncAt = ls.get('hops-last-sync', 0);
+        // Recent local deletes — used by the init merge to drop SB-only rows
+        // whose id matches a delete we recorded but that didn't propagate to
+        // Supabase. Without this, a delete that the verify SELECT misread as
+        // success would resurrect on the very next page refresh.
+        const recentDeletesAll = ls.get('hops-recent-deletes', []);
+        const recentDeleteCutoff = Date.now() - 5 * 60 * 1000;
 
         keys.forEach((k, i) => {
           const sbData = results[i] || [];
           const lsData = fromLS[k] || [];
           const sbIds = new Set(sbData.map((x) => x.id));
           const lsOnly = lsData.filter((x) => x.id && !sbIds.has(x.id));
-          // Treat any LS-only row written after the last sync as pending.
-          // updatedAt/createdAt may be ISO strings OR epoch numbers — normalise.
-          const pending = lsOnly.filter((x) => {
-            const tsRaw = x.updatedAt || x.createdAt || 0;
-            const ts = typeof tsRaw === 'number' ? tsRaw : new Date(tsRaw).getTime();
-            return (Number.isFinite(ts) ? ts : 0) > lastSyncAt;
-          });
-          const stale = lsOnly.filter((x) => !pending.includes(x));
-          merged[KEY_MAP[k]] = [...sbData, ...pending];
-          ls.set(k, [...sbData, ...pending]);
-          if (stale.length) {
-            console.warn(`[init] Dropping ${stale.length} stale LS-only records for ${k} (likely deleted server-side)`);
+          // Treat SB as the source of truth. LS-only rows are considered
+          // stale (server-side deleted via the Supabase dashboard, removed
+          // by another admin, or never synced within the 8-second
+          // realtime-echo window). Drop them rather than re-upserting —
+          // re-upserting was the original resurrection bug: save() stamps
+          // updatedAt on every row in the array, so a stale row looks
+          // indistinguishable from a freshly-saved one.
+          const pending = [];
+          const stale = lsOnly.slice();
+
+          // ─── Drop SB-only rows the user recently tried to delete ──────────
+          // If we have a hops-recent-deletes entry for an id that's still in
+          // SB (but not in LS — the user's local delete already removed it),
+          // the Supabase delete didn't persist. Strip it from SB and re-attempt
+          // the delete. Without this, the init merge would happily re-add the
+          // row to state from SB and the user's delete would silently
+          // resurrect on every refresh.
+          const sbOnlyDeleteIds = new Set(
+            recentDeletesAll
+              .filter((d) => d.key === k && d.at >= recentDeleteCutoff)
+              .map((d) => d.id)
+          );
+          let sbDataFiltered = sbData;
+          let reDeleteIds = [];
+          if (sbOnlyDeleteIds.size > 0 && TYPE_MAP[k]) {
+            const kept = [];
+            for (const r of sbData) {
+              if (r && r.id && sbOnlyDeleteIds.has(r.id)) {
+                reDeleteIds.push(r.id);
+              } else {
+                kept.push(r);
+              }
+            }
+            sbDataFiltered = kept;
           }
-          if (pending.length) upsertRecord(k, pending);
+
+          // ─── Resolve SB/LS conflicts by updatedAt ──────────────────────────
+          // When the same row id exists in BOTH SB and LS, prefer whichever
+          // has the newer updatedAt. Without this, if Supabase silently lost
+          // a write (returned success but DB unchanged — rare but observed),
+          // the init merge would discard the newer LS version in favour of
+          // the older SB row, causing the task to revert to its previous
+          // status on every refresh (e.g. employee marks done → SB keeps it
+          // pending → next refresh brings back the pending state).
+          const tsOf = (r) => {
+            const raw = r.updatedAt || r.updated_at || r.createdAt || r.created_at || 0;
+            return typeof raw === 'number' ? raw : new Date(raw).getTime() || 0;
+          };
+          const lsById = {};
+          lsData.forEach((r) => { if (r && r.id) lsById[r.id] = r; });
+          const lsNewerRows = [];  // LS rows newer than their SB counterpart — re-upsert
+          const resolvedSbData = sbDataFiltered.map((sbRow) => {
+            const lsRow = lsById[sbRow.id];
+            if (!lsRow) return sbRow;
+            const lsTs = tsOf(lsRow);
+            const sbTs = tsOf(sbRow);
+            if (Number.isFinite(lsTs) && Number.isFinite(sbTs) && lsTs > sbTs) {
+              // LS is newer — this happens when the local write was stamped
+              // with Date.now() (epoch ms) but Supabase hasn't reflected the
+              // change yet. Use the LS row but flag for re-upsert.
+              lsNewerRows.push(lsRow);
+              return lsRow;
+            }
+            return sbRow;
+          });
+
+          merged[KEY_MAP[k]] = [...resolvedSbData, ...pending];
+          ls.set(k, [...resolvedSbData, ...pending]);
+          // DEBUG: trace init merge for tasks to catch reverts
+          if (k === 'hops-tasks') {
+            const sbBreakdown = sbDataFiltered.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
+            const lsBreakdown = lsData.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
+            console.log(`[init] hops-tasks: sbData (${sbDataFiltered.length})=${JSON.stringify(sbBreakdown)}, lsData (${lsData.length})=${JSON.stringify(lsBreakdown)}, pending=${pending.length}, stale=${stale.length}, lsNewer=${lsNewerRows.length}, reDelete=${reDeleteIds.length}`);
+            if (lsNewerRows.length) {
+              console.log('[init] ⚠️ LS rows newer than SB — re-upserting:', lsNewerRows.map(r => ({ id: r.id, name: r.name, status: r.status, lsTs: tsOf(r), sbTs: tsOf(sbData.find(s => s.id === r.id) || {}) })));
+            }
+            if (reDeleteIds.length) {
+              console.log('[init] ⚠️ SB rows present for ids we recently tried to delete — re-attempting deleteRecord:', reDeleteIds);
+            }
+          }
+          if (stale.length) {
+            console.warn(`[init] Dropping ${stale.length} LS-only records for ${k} (likely deleted server-side, or never synced)`);
+          }
+          if (lsNewerRows.length) upsertRecord(k, lsNewerRows);
+          // Re-attempt the deletes we know didn't propagate. Fire and forget —
+          // if it fails again, the next realtime event will surface it and
+          // the user can try the delete again from the UI.
+          if (reDeleteIds.length && TYPE_MAP[k]) {
+            reDeleteIds.forEach((id) => { deleteRecord(TYPE_MAP[k], id); });
+          }
         });
         ls.set('hops-last-sync', Date.now());
 
@@ -183,19 +282,97 @@ export function AppProvider({ children }) {
       // visible to subsequent reads — without this, an in-flight task would be
       // wiped out the moment realtime fired.
       const lastWrite = ls.get('hops-last-local-write', null);
-      const freshIds = new Set(fresh.map((x) => x.id));
-      const localPending = (lastWrite && lastWrite.key === key)
-        ? ls.get(key, []).filter((row) => {
-            if (!row || !row.id) return false;
-            if (freshIds.has(row.id)) return false;
-            const ts = Number(row.updatedAt || row.createdAt || 0);
-            return ts >= lastWrite.at - 1000; // 1s slack for clock skew
-          })
-        : [];
-      const merged = localPending.length ? [...fresh, ...localPending] : fresh;
-
+      // When we have a recent local write to THIS key, prefer LS over fresh
+      // entirely. Supabase can take 100ms+ to echo an upsert back through
+      // realtime — if a realtime event fires in that window, `fresh` would
+      // contain STALE rows (the pre-update version), and dispatching it
+      // would clobber our correct local state with old data.
+      //
+      // We use a generous 8s window because Supabase realtime can lag,
+      // especially over slow networks, and during that window we know LS
+      // is the source of truth (the user just wrote it).
+      const recentWriteCutoff = Date.now() - 8000;
+      const recentLocalWrite = lastWrite && lastWrite.key === key && lastWrite.at >= recentWriteCutoff;
+      // DEBUG: trace realtime events on tasks to catch reverts
       if (key === 'hops-tasks') {
-        // Always apply autoCycle on fresh Supabase data so cycled tasks survive realtime refreshes
+        const freshBreakdown = fresh.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
+        console.log(`[realtime] hops-tasks event: recentLocalWrite=${recentLocalWrite}, fresh breakdown:`, freshBreakdown);
+      }
+      let merged;
+      if (recentLocalWrite) {
+        // Trust LS entirely — Supabase's fresh snapshot may still have
+        // pre-update rows. Dispatch LS as-is (already up to date).
+        merged = ls.get(key, []);
+      } else {
+        const freshIds = new Set(fresh.map((x) => x.id));
+        // ─── Defense-in-depth: per-row newer-LS-wins ────────────────────────
+        // When the same row id exists in BOTH fresh and LS, prefer the row
+        // with the newer updatedAt. Without this, if Supabase silently lost
+        // a write (returned success but DB unchanged), a subsequent realtime
+        // event would fetch stale SB data and clobber our correct LS state.
+        const tsOf = (r) => {
+          const raw = r.updatedAt || r.updated_at || r.createdAt || r.created_at || 0;
+          return typeof raw === 'number' ? raw : new Date(raw).getTime() || 0;
+        };
+        const lsById = {};
+        ls.get(key, []).forEach((r) => { if (r && r.id) lsById[r.id] = r; });
+        const overrideLsIds = new Set();
+        const resolvedFresh = fresh.map((fRow) => {
+          const lsRow = lsById[fRow.id];
+          if (!lsRow) return fRow;
+          const lsTs = tsOf(lsRow);
+          const fTs = tsOf(fRow);
+          if (Number.isFinite(lsTs) && Number.isFinite(fTs) && lsTs > fTs) {
+            overrideLsIds.add(fRow.id);
+            return lsRow;
+          }
+          return fRow;
+        });
+        merged = resolvedFresh;
+        if (key === 'hops-tasks' && overrideLsIds.size) {
+          console.log(`[realtime] ⚠️ ${overrideLsIds.size} task(s) overridden from LS (LS newer than SB):`, [...overrideLsIds]);
+        }
+      }
+      // Strip recently-deleted IDs from the fresh payload when LS isn't already
+      // canonical. Without this, an in-flight realtime event firing AFTER LS
+      // was updated but BEFORE the Supabase delete completes would dispatch
+      // stale state containing the just-deleted row (resurrecting it in the UI).
+      //
+      // BUG FIX: previously this was gated on `merged !== fresh` which was
+      // always FALSE when localPending was empty (merged IS fresh by reference).
+      // That meant the strip never ran on the most common path — no local
+      // pending writes, just a delete. The deleted row stayed in `fresh` from
+      // Supabase and got dispatched, resurrecting it in the UI.
+      //
+      // NOTE: with the newer-LS-wins fix above, `merged` is built from
+      // `resolvedFresh` (a fresh.map(...) output) or a spread of it, so
+      // `merged !== fresh` is always true now. We still splice from both
+      // to be defensive — `fresh` may be referenced by `loadAll` callers.
+      const recentDeletes = ls.get('hops-recent-deletes', []);
+      const deleteCutoff = Date.now() - 5 * 60 * 1000;
+      if (!recentLocalWrite && recentDeletes.length) {
+        // Build a fast lookup for this key's pending deletes within the window.
+        const deletedIds = new Set(
+          recentDeletes
+            .filter((d) => d.key === key && d.at >= deleteCutoff)
+            .map((d) => d.id)
+        );
+        if (deletedIds.size > 0) {
+          for (let i = fresh.length - 1; i >= 0; i--) {
+            if (deletedIds.has(fresh[i].id)) fresh.splice(i, 1);
+          }
+          for (let i = merged.length - 1; i >= 0; i--) {
+            if (deletedIds.has(merged[i].id)) merged.splice(i, 1);
+          }
+        }
+      }
+
+      if (key === 'hops-tasks' && !recentLocalWrite && !recentDeletes.length) {
+        // Always apply autoCycle on fresh Supabase data so cycled tasks survive realtime refreshes.
+        // Skip during a recent local write OR recent delete — both situations
+        // mean the user just mutated the data, and autoCycle could create
+        // spurious "new task assigned" cycles that the user perceives as
+        // notifications triggered by their delete action.
         const cycled = autoCycleTasks(merged);
         if (cycled.length) {
           const withCycles = [...merged, ...cycled];
@@ -209,10 +386,6 @@ export function AppProvider({ children }) {
       ls.set(key, merged);
       dispatch({ type: 'SET_KEY', key: stateKey, value: merged });
       if (key === 'hops-employees') refreshPermsFromEmployees(merged);
-      if (localPending.length) {
-        // Re-push pending rows so Supabase eventually catches up
-        upsertRecord(key, localPending);
-      }
     });
     return cleanup;
   }, [refreshPermsFromEmployees]);
@@ -265,16 +438,54 @@ export function AppProvider({ children }) {
       const cfg = typeMap[type];
       if (!cfg) return;
       const data = cfg.arr.find((x) => x.id === id);
-      if (!data) return;
+      if (!data) {
+        console.warn(`[moveToTrash] ${type} ${id}: not found in state.${cfg.stateKey} (length=${cfg.arr?.length || 0})`);
+        return;
+      }
       const newArr = cfg.arr.filter((x) => x.id !== id);
+      console.log(`[moveToTrash] ${type} ${id} "${data.name || data.title}": state had ${cfg.arr.length} rows, newArr has ${newArr.length}`);
       ls.set(cfg.key, newArr);
+      // Track this ID as recently-deleted so the realtime handler can strip
+      // it out of any in-flight `fresh` payload — otherwise an event that
+      // fires AFTER LS was updated but BEFORE the Supabase delete completes
+      // would call loadAll → return fresh data still containing the deleted
+      // row → dispatch stale state and resurrect it.
+      const recentDeletes = ls.get('hops-recent-deletes', []);
+      recentDeletes.push({ key: cfg.key, id, at: Date.now() });
+      // Keep only the last 5 minutes of deletes
+      const cutoff = Date.now() - 5 * 60 * 1000;
+      ls.set('hops-recent-deletes', recentDeletes.filter(d => d.at >= cutoff));
+      ls.set('hops-last-local-write', { key: cfg.key, at: Date.now() });
       dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: newArr });
       const delResult = await deleteRecord(type, id);
+      // Under deleteRecord's current semantics, `no_rows` means "verify
+      // SELECT still found the row after the delete + retry — the Supabase
+      // delete did NOT persist". This is a REAL failure (likely persistent
+      // read-replica lag, RLS drop, or repeated network blip). Rolling back
+      // LS + state here means the user keeps seeing the row in the UI
+      // rather than seeing it briefly disappear and then reappear via the
+      // next realtime event when the stale Supabase state is fetched again.
+      if (delResult && delResult.ok === false && delResult.reason === 'no_rows') {
+        console.error(`moveToTrash: ${type} ${id} delete did not persist (no_rows after retry) — rolling back`, { table: delResult.table });
+        ls.set(cfg.key, cfg.arr);
+        dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: cfg.arr });
+        // Clear the local-write markers so the realtime handler stops
+        // trusting the now-rolled-back LS for the next 8 seconds. Without
+        // this, a realtime event within the window would dispatch LS
+        // (no X) and the user would see X flicker in and out.
+        ls.set('hops-last-local-write', null);
+        const rd = ls.get('hops-recent-deletes', []).filter((d) => !(d.key === cfg.key && d.id === id));
+        ls.set('hops-recent-deletes', rd);
+        return { error: true, reason: 'no_rows', message: 'Supabase delete did not persist after retry — row may have been filtered by RLS or hit a persistent read-replica lag spike.' };
+      }
       if (!delResult || !delResult.ok) {
-        // DB delete failed (row gone, RLS, network). Roll back LS + state so UI matches DB.
+        // Real failure (RLS, network, etc.) — roll back LS + state so UI matches DB.
         console.error('moveToTrash: deleteRecord failed', { type, id, delResult });
         ls.set(cfg.key, cfg.arr);
         dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: cfg.arr });
+        ls.set('hops-last-local-write', null);
+        const rd = ls.get('hops-recent-deletes', []).filter((d) => !(d.key === cfg.key && d.id === id));
+        ls.set('hops-recent-deletes', rd);
         return { error: true, reason: delResult?.reason || 'unknown', message: delResult?.message || '' };
       }
       const trashItem = {
