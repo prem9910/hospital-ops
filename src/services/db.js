@@ -28,17 +28,17 @@ const toIso = (v) => {
 const TABLES = {
   'hops-depts': {
     table: 'departments',
-    pack: (o) => ({ id: o.id, name: o.name || '', head: o.hod || o.head || '', contact: o.phone || o.contact || '', email: o.email || '', floor: o.floor || '', updated_at: o.updatedAt || _nowIso() }),
+    pack: (o) => ({ id: o.id, name: o.name || '', head: o.hod || o.head || '', contact: o.phone || o.contact || '', email: o.email || '', floor: o.floor || '', updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, name: r.name || '', hod: r.head || '', head: r.head || '', phone: r.contact || '', contact: r.contact || '', email: r.email || '', floor: r.floor || '', updatedAt: r.updated_at || '' }),
   },
   'hops-employees': {
     table: 'employees',
-    pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || o.name || '', dept: o.dept || '', designation: o.role || o.designation || '', email: o.email || '', password: o.password || '', contact: o.contact || '', perms: o.perms || [], is_incharge: o.isIncharge || false, pending_dept: o.pendingDept || '', updated_at: o.updatedAt || _nowIso() }),
+    pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || o.name || '', dept: o.dept || '', designation: o.role || o.designation || '', email: o.email || '', password: o.password || '', contact: o.contact || '', perms: o.perms || [], is_incharge: o.isIncharge || false, pending_dept: o.pendingDept || '', updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, name: r.name || '', username: r.username || r.name || '', dept: r.dept || '', role: r.designation || '', designation: r.designation || '', email: r.email || '', password: r.password || '', contact: r.contact || '', perms: Array.isArray(r.perms) ? r.perms : [], isIncharge: r.is_incharge || false, pendingDept: r.pending_dept || '', updatedAt: r.updated_at || '' }),
   },
   'hops-admins': {
     table: 'admins',
-    pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || '', email: o.email || '', password: o.password || '', role: o.role || '', dept: o.dept || '', perms: o.perms || [], created_by: o.createdBy || '', updated_at: o.updatedAt || _nowIso() }),
+    pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || '', email: o.email || '', password: o.password || '', role: o.role || '', dept: o.dept || '', perms: o.perms || [], created_by: o.createdBy || '', updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, name: r.name || '', username: r.username || '', email: r.email || '', password: r.password || '', role: r.role || '', dept: r.dept || '', perms: Array.isArray(r.perms) ? r.perms : Object.keys(r.perms || {}), createdBy: r.created_by || '', updatedAt: r.updated_at || '' }),
   },
   'hops-tasks': {
@@ -122,7 +122,7 @@ const TABLES = {
   },
   'hops-delegations': {
     table: 'delegations',
-    pack: (o) => ({ id: o.id, task_name: o.task || o.taskName || '', dept: o.dept || '', priority: o.priority || 'medium', doer_id: o.doerId || '', doer_name: o.doerName || '', delegated_by: o.createdBy || o.delegatedBy || '', exp_date: o.dueDate || o.expDate || '', exp_time: o.expTime || '', notes: o.remarks || o.notes || '', status: o.status || 'pending', created_date: o.createdAt || o.createdDate || '', actual_date: o.actualDate || '', actual_time: o.actualTime || '', done_remark: o.doneRemark || '', delay_reason: o.delayReason || '', is_delayed: o.isDelayed || false, extensions: o.extensionRequests || o.extensions || [], activity_log: o.activityLog || [], updated_at: o.updatedAt || _nowIso() }),
+    pack: (o) => ({ id: o.id, task_name: o.task || o.taskName || '', dept: o.dept || '', priority: o.priority || 'medium', doer_id: o.doerId || '', doer_name: o.doerName || '', delegated_by: o.createdBy || o.delegatedBy || '', exp_date: o.dueDate || o.expDate || '', exp_time: o.expTime || '', notes: o.remarks || o.notes || '', status: o.status || 'pending', created_date: o.createdAt || o.createdDate || '', actual_date: o.actualDate || '', actual_time: o.actualTime || '', done_remark: o.doneRemark || '', delay_reason: o.delayReason || '', is_delayed: o.isDelayed || false, extensions: o.extensionRequests || o.extensions || [], activity_log: o.activityLog || [], updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, task: r.task_name || '', taskName: r.task_name || '', dept: r.dept || '', priority: r.priority || 'medium', doerId: r.doer_id || '', doerName: r.doer_name || '', createdBy: r.delegated_by || '', dueDate: r.exp_date || '', expTime: r.exp_time || '', remarks: r.notes || '', notes: r.notes || '', status: r.status || 'pending', createdAt: r.created_date || '', actualDate: r.actual_date || '', actualTime: r.actual_time || '', doneRemark: r.done_remark || '', delayReason: r.delay_reason || '', isDelayed: r.is_delayed || false, extensionRequests: r.extensions || [], activityLog: r.activity_log || [], updatedAt: r.updated_at || '' }),
   },
   'hops-actlog': {

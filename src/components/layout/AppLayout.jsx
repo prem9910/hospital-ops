@@ -35,7 +35,7 @@ const PAGE_TITLES = {
 
 export default function AppLayout() {
   const { currentRole, currentUser, logout, inactivityPct, inactivityWarning, inactivitySeconds, showSessionModal, continueSession } = useAuth();
-  const { isSaving, notices, employees, save } = useAppForSaving();
+  const { isSaving, notices, employees, save, deleteRecord } = useAppForSaving();
   const { tasks, logAct } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
@@ -141,6 +141,16 @@ export default function AppLayout() {
         })
         .filter(Boolean);
       await save('hops-tasks', updatedTasks);
+      // Actually DELETE the rows we removed from the local array. Without
+      // this, save()'s upsert only updates/inserts rows in the array — the
+      // filtered-out (deleted) rows STAY in Supabase forever. On the next
+      // refresh, init merges SB as source-of-truth and the cleared tasks
+      // resurrect into the Upcoming tab. deleteRecord is fire-and-forget
+      // for each id (Supabase real-time confirms via SELECT-verify retry).
+      const allRemovedIds = [...removedTaskIds, ...removedChildIds];
+      for (const id of allRemovedIds) {
+        try { await deleteRecord('hops-tasks', id); } catch (e) { console.warn('acceptDeptChange deleteRecord failed for', id, e); }
+      }
       const parentSummary = `${removedTaskIds.length} parent(s) removed, ${unassignedOnlyIds.length} parent(s) unassigned-only`;
       const childSummary = `${removedChildIds.length} child(ren) removed, ${unassignedOnlyChildIds.length} child(ren) unassigned-only`;
       const summary = `${n.toName} on dept change to "${n.meta.newDept}": ${parentSummary}; ${childSummary}`;

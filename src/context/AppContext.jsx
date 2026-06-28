@@ -547,7 +547,7 @@ export function AppProvider({ children }) {
   }, [state.tasks]);
 
   return (
-    <AppContext.Provider value={{ ...state, isSaving, save, saveSingle, logAct, moveToTrash, restoreFromTrash, setKey, loadUserLinks, upsertUserLinks, deleteUserLink, ensureCycles }}>
+    <AppContext.Provider value={{ ...state, isSaving, save, saveSingle, logAct, moveToTrash, restoreFromTrash, setKey, loadUserLinks, upsertUserLinks, deleteUserLink, ensureCycles, deleteRecord }}>
       {children}
     </AppContext.Provider>
   );
