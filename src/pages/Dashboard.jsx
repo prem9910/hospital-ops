@@ -1,6 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { wasCompletedLate, isTaskDueToday, isAssignedTo, fDate, isEscalatedIssue, toDay } from '../utils';
 import { DeptTag, PriorityBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
@@ -524,6 +525,38 @@ function StaffDashboard() {
   // data, falling back to Today → Upcoming → Completed.
   const [myTab, setMyTab] = useState(myPending.length > 0 ? 'today' : myUpcoming.length > 0 ? 'upcoming' : 'completed');
 
+  // ?focus=<taskId> — set by the drilldown popup's "Open in My Tasks"
+  // button. On mount, find which tab the task lives in, switch to it,
+  // highlight the row briefly, and scroll it into view. Strip the param
+  // (replace: true) so refresh / back doesn't replay the scroll.
+  // The 2.5s yellow highlight mirrors Tasks.jsx / AllIssues.jsx /
+  // Delegations.jsx so the focus affordance feels consistent.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightTaskId, setHighlightTaskId] = useState(null);
+  const focusId = searchParams.get('focus');
+  useEffect(() => {
+    if (!focusId) return;
+    const target = tasks.find((t) => t.id === focusId);
+    if (!target) return;
+    // Decide which tab this task belongs to. A pending task with a
+    // future schedDate → Upcoming. Anything in myPending (today-scope)
+    // → Today. Everything else that's done → Completed.
+    let targetTab;
+    if (target.status === 'pending' && target.schedDate && target.schedDate > today) targetTab = 'upcoming';
+    else if (myPending.some((t) => t.id === focusId)) targetTab = 'today';
+    else targetTab = 'completed';
+    setMyTab(targetTab);
+    setHighlightTaskId(focusId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`staff-task-row-${focusId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setSearchParams((prev) => { prev.delete('focus'); return prev; }, { replace: true });
+    const t = setTimeout(() => setHighlightTaskId(null), 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId]);
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
@@ -620,15 +653,16 @@ function StaffDashboard() {
           myPending.length === 0 ? (
             <EmptyHint icon="🌅" message="Nothing pending for today. Enjoy the breather!" />
           ) : myPending.map((t) => (
-            <TaskRow key={t.id} task={t} />
+            <TaskRow key={t.id} task={t} highlight={highlightTaskId === t.id} />
           ))
+
         )}
 
         {myTab === 'upcoming' && (
           myUpcoming.length === 0 ? (
             <EmptyHint icon="📭" message="No upcoming tasks scheduled." />
           ) : myUpcoming.map((t) => (
-            <TaskRow key={t.id} task={t} />
+            <TaskRow key={t.id} task={t} highlight={highlightTaskId === t.id} />
           ))
         )}
 
@@ -636,7 +670,7 @@ function StaffDashboard() {
           allDone.length === 0 ? (
             <EmptyHint icon="📜" message="No completed tasks yet — they'll show up here once you mark something done." />
           ) : allDone.slice(0, 10).map((t) => (
-            <TaskRow key={t.id} task={t} showResult />
+            <TaskRow key={t.id} task={t} showResult highlight={highlightTaskId === t.id} />
           ))
         )}
 
@@ -740,17 +774,21 @@ function EmptyHint({ icon, message }) {
 // colour on the left border, dept + priority badges + schedDate in meta).
 // Used by the tabbed section. showResult adds the on-time / delayed pill
 // for the Completed tab.
-function TaskRow({ task, showResult }) {
+function TaskRow({ task, showResult, highlight }) {
   const late = wasCompletedLate(task);
   return (
-    <div style={{
-      background: '#f8fbff',
-      border: '1px solid #d8e2ef',
-      borderLeft: `4px solid ${task.priority === 'high' ? '#c0392b' : task.priority === 'low' ? '#1a7a4a' : '#d4920a'}`,
-      borderRadius: 9,
-      padding: '12px 14px',
-      marginBottom: 8,
-    }}>
+    <div
+      id={`staff-task-row-${task.id}`}
+      style={{
+        background: highlight ? '#fff7d6' : '#f8fbff',
+        border: highlight ? '1.5px solid #fbbf24' : '1px solid #d8e2ef',
+        borderLeft: `4px solid ${task.priority === 'high' ? '#c0392b' : task.priority === 'low' ? '#1a7a4a' : '#d4920a'}`,
+        borderRadius: 9,
+        padding: '12px 14px',
+        marginBottom: 8,
+        transition: 'background 0.6s, border-color 0.6s',
+      }}
+    >
       <div style={{ fontWeight: 700, fontSize: 14 }}>{task.name}</div>
       <div style={{ fontSize: 11, color: '#6b7a90', marginTop: 4 }}>
         <DeptTag name={task.dept} /> &nbsp; <PriorityBadge priority={task.priority} />
