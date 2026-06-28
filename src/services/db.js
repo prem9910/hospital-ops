@@ -125,13 +125,19 @@ export async function upsertRecord(key, val) {
   if (!TABLES[key] || !Array.isArray(val) || val.length === 0) return;
   const cfg = TABLES[key];
   const rows = val.map(cfg.pack);
+  // DEBUG: trace upserts to catch silent failures
+  const statusBreakdown = rows.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
+  console.log(`[upsertRecord] ${key} → ${rows.length} rows (status: ${JSON.stringify(statusBreakdown)})`);
   const { error } = await supabase.from(cfg.table).upsert(rows, { onConflict: 'id' });
   if (error) {
     console.error('❌ Upsert [' + key + ']:', error.message);
     if (/row-level security|permission denied|unauthorized/i.test(error.message || '')) {
       console.error('   → RLS policy missing for anon role. Run SQL_SCHEMA.sql in Supabase SQL editor.');
     }
+    return { ok: false, error: error.message };
   }
+  console.log(`[upsertRecord] ✅ ${key} upsert completed without error`);
+  return { ok: true };
 }
 
 export async function upsertSingle(key, obj) {
@@ -161,10 +167,63 @@ export async function deleteRecord(type, id) {
   const tmap = { task: 'tasks', issue: 'issues', employee: 'employees', dept: 'departments', admin: 'admins', handover: 'handovers', delegation: 'delegations', trash: 'trash', link: 'user_links' };
   const tbl = tmap[type];
   if (!tbl) return { ok: false, reason: 'unknown_type' };
-  const { data, error } = await supabase.from(tbl).delete().eq('id', id).select('id');
-  if (error) return { ok: false, reason: 'error', message: error.message };
-  if (!data || !data.length) return { ok: false, reason: 'no_rows', table: tbl };
-  return { ok: true };
+  console.log(`[deleteRecord] ${type} ${id}: starting delete from ${tbl}`);
+  // Issue the delete WITHOUT .select() — chaining .delete().select() in
+  // PostgREST relies on the RETURNING clause, and we've seen cases where
+  // the client returns empty `data` even when the row was actually deleted
+  // (network timing, replication lag, or RLS silently dropping the RETURNING
+  // payload). Without `.select()` the call is fire-and-forget — the error
+  // path is the only signal.
+  const { error } = await supabase.from(tbl).delete().eq('id', id);
+  if (error) {
+    console.error(`[deleteRecord] ❌ ${type} ${id}: delete returned error:`, error.message);
+    return { ok: false, reason: 'error', message: error.message };
+  }
+  console.log(`[deleteRecord] ${type} ${id}: delete call returned no error`);
+
+  // Verify with a follow-up SELECT (1 row, id column only — cheap). PostgREST
+  // on Supabase uses a primary + read-replica topology; a DELETE writes to
+  // primary but a follow-up SELECT can still be served from a replica that
+  // hasn't replicated yet. One retry after a short delay handles the common
+  // case without blocking the UI noticeably.
+  async function verify() {
+    return supabase.from(tbl).select('id').eq('id', id).limit(1);
+  }
+  let { data: check, error: checkErr } = await verify();
+  console.log(`[deleteRecord] ${type} ${id}: verify #1 → ${check?.length || 0} rows, checkErr=${checkErr?.message || 'none'}`);
+  if (checkErr) {
+    // Verification itself errored (likely network blip). We don't know
+    // whether the delete actually persisted. Retry once more; if the
+    // SELECT still fails, treat as a soft no_rows so the caller rolls
+    // back rather than letting the user see a row that comes back.
+    console.warn(`[deleteRecord] ${type} ${id}: verify #1 errored — retrying once more`);
+    await new Promise((r) => setTimeout(r, 400));
+    ({ data: check, error: checkErr } = await verify());
+    if (checkErr) {
+      console.error(`[deleteRecord] ${type} ${id}: verify #2 also errored — cannot confirm delete`);
+      return { ok: false, reason: 'no_rows', table: tbl };
+    }
+  }
+  if (check && check.length > 0) {
+    // Row still present — possible replication lag. Wait briefly and retry
+    // once. If it's still present after the retry, the delete genuinely
+    // didn't persist (RLS drop, network blip, etc.) and we surface failure
+    // so the caller can roll back rather than silently resurrecting the row.
+    console.warn(`[deleteRecord] ${type} ${id}: row still present after first verify — retrying after 400ms`);
+    await new Promise((r) => setTimeout(r, 400));
+    ({ data: check, error: checkErr } = await verify());
+    console.log(`[deleteRecord] ${type} ${id}: verify #2 → ${check?.length || 0} rows, checkErr=${checkErr?.message || 'none'}`);
+    if (checkErr) {
+      console.error(`[deleteRecord] ${type} ${id}: verify #2 errored — cannot confirm delete`);
+      return { ok: false, reason: 'no_rows', table: tbl };
+    }
+    if (check && check.length > 0) {
+      console.error(`[deleteRecord] ${type} ${id}: row still present after retry — delete FAILED (no_rows)`);
+      return { ok: false, reason: 'no_rows', table: tbl };
+    }
+  }
+  console.log(`[deleteRecord] ✅ ${type} ${id}: deleted and verified gone`);
+  return { ok: true, verified: true };
 }
 
 export async function deleteAllFromTable(key) {
