@@ -630,13 +630,83 @@ export default function Tasks() {
     const freqChanged = !!existing && existing.freq === 'delegation' && obj.freq !== 'delegation';
     await syncDelegationFromTask(obj, delegations, { save, moveToTrash }, { freqChanged });
 
-    // Send assignment email to newly assigned employees
+    // Send assignment email to newly assigned employees.
+    //
+    // Defer the email to the scheduled date when schedDate is in the future:
+    // the employee shouldn't get a "you're assigned X" email a week before
+    // the task is actually due — by then they may have forgotten about it.
+    // Instead, attach a `pendingAssignNotify` payload to the task; MyTasks's
+    // processPendingNotifications effect fires the email when schedDate
+    // arrives (the same way it fires deferred completion notifications).
+    //
+    // Tasks due today or earlier send the email immediately as before.
+    //
+    // If a previous assignment for this same task already deferred an email
+    // (existing.pendingAssignNotify with notifySent=false), merge the new
+    // assignee ids into the existing payload so everyone who was ever
+    // assigned gets one email on the scheduled date — not just the most
+    // recent set.
+    //
+    // Edge case: if admin edits the task to MOVE schedDate earlier (e.g.
+    // from next week to today) and there's still a deferred email pending,
+    // fire that deferred email immediately and clear the payload — the
+    // employee should know about the assignment NOW, not wait for the new
+    // future date that no longer exists.
     const prevAssigned = new Set(existing?.assignedTo || []);
     const newlyAssigned = (obj.assignedTo || []).filter(n => !prevAssigned.has(n));
+    const todayStr = toDay();
+    const isFuture = obj.schedDate && obj.schedDate > todayStr;
+    const hadPendingEmail = existing?.pendingAssignNotify && !existing.pendingAssignNotify.notifySent;
+
+    // Flush any previously-deferred email if the date is no longer in the
+    // future (admin moved it earlier). The list of recipients is captured
+    // from the existing payload, not from current assignedTo — someone who
+    // was unassigned between deferral and flush shouldn't get the email.
+    if (hadPendingEmail && !isFuture) {
+      const pan = existing.pendingAssignNotify;
+      const flushedAssignees = (pan.emailAssigneeIds || [])
+        .map((id) => employees.find(e => e.id === id))
+        .filter(Boolean);
+      if (flushedAssignees.length) {
+        sendTaskAssignedEmail(obj, flushedAssignees, pan.assignedBy || currentUser.name, pan.taskType || 'Normal Task');
+      }
+      // Clear the payload so it doesn't fire again on the next edit.
+      const withoutPending = newTasks.map((t) => t.id === obj.id
+        ? { ...t, pendingAssignNotify: undefined }
+        : t);
+      await save('hops-tasks', withoutPending);
+      // Update the local reference so the rest of the function sees the
+      // cleared payload.
+      newTasks.splice(0, newTasks.length, ...withoutPending);
+    }
+
     if (newlyAssigned.length > 0) {
       const taskType = obj.freq === 'delegation' ? 'Delegation Task' : 'Normal Task';
       const assigneeEmps = employees.filter(e => newlyAssigned.some(n => n.toUpperCase() === e.name.toUpperCase()));
-      sendTaskAssignedEmail(obj, assigneeEmps, currentUser.name, taskType);
+      if (isFuture) {
+        // Merge new assignee ids with any previously-deferred payload so a
+        // task reassigned across edits accumulates everyone who's owed an
+        // email. notifySent stays false (the email hasn't fired yet — the
+        // scheduled date is still in the future).
+        const existingIds = Array.isArray(existing?.pendingAssignNotify?.emailAssigneeIds)
+          ? existing.pendingAssignNotify.emailAssigneeIds
+          : [];
+        const mergedIds = Array.from(new Set([
+          ...existingIds,
+          ...assigneeEmps.filter(e => e.email).map(e => e.id),
+        ]));
+        const pendingAssignNotify = {
+          emailAssigneeIds: mergedIds,
+          assignedBy: existing?.pendingAssignNotify?.assignedBy || currentUser.name,
+          taskType,
+          notifySent: false,
+        };
+        const withNotify = newTasks.map((t) => t.id === obj.id ? { ...t, pendingAssignNotify } : t);
+        await save('hops-tasks', withNotify);
+      } else {
+        // Due today or in the past — send immediately (existing behaviour).
+        sendTaskAssignedEmail(obj, assigneeEmps, currentUser.name, taskType);
+      }
     }
 
     setShowForm(false);

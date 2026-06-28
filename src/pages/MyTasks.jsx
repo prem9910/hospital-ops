@@ -7,7 +7,7 @@ import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { Alert, EmptyState } from '../components/common/Alert';
 import { Pagination, paginate } from '../components/common/Pagination';
-import { sendTaskCompletedEmail } from '../lib/emailService';
+import { sendTaskCompletedEmail, sendTaskAssignedEmail } from '../lib/emailService';
 
 const IS = { width: '100%', padding: '9px 13px', borderRadius: 8, border: '1.5px solid #d8e2ef', fontFamily: "'Nunito',sans-serif", fontSize: 13, color: '#1a2535', outline: 'none', background: 'white', fontWeight: 600 };
 function Field({ label, children }) {
@@ -102,34 +102,78 @@ export default function MyTasks() {
   useEffect(() => { if (tasks.length) ensureCycles(); }, [tasks.length]);
 
   // Fire deferred notifications for tasks whose schedDate is today.
-  // When an employee marks a recurring task done, the admin-bell notice,
-  // email, and activity-log entry are stored on the next-slot child
-  // (pendingNotify) and surface only when the task actually reappears in
-  // My Tasks on its scheduled date — not the moment it's marked done.
+  // Two kinds of deferral are handled here:
+  //
+  // 1. pendingNotify — set when an employee marks a recurring task done.
+  //    Carries the admin-bell subject/message, completion-email target, and
+  //    activity-log entry. Fires when the next-slot child's schedDate
+  //    arrives (not the moment the parent was marked done).
+  //
+  // 2. pendingAssignNotify — set when main admin assigns a task with a
+  //    future schedDate. Carries the assignment-email target so the
+  //    employee gets a single "you've been assigned X" email on the day
+  //    the task becomes due, not a week early.
+  //
+  // Both payloads are stamped notifySent=true after firing so they never
+  // fire twice. The flag is the dedup key; the same task can have either,
+  // both, or neither — they're independent.
   useEffect(() => {
     if (!tasks.length) return;
     const todayStr = toDay();
-    const dueToday = tasks.filter(t => t.pendingNotify && !t.pendingNotify.notifySent && t.schedDate === todayStr);
+    const dueToday = tasks.filter(t =>
+      t.schedDate === todayStr && (
+        (t.pendingNotify && !t.pendingNotify.notifySent) ||
+        (t.pendingAssignNotify && !t.pendingAssignNotify.notifySent)
+      )
+    );
     if (!dueToday.length) return;
     (async () => {
       let mutated = false;
       const newAll = tasks.map((t) => {
-        if (!t.pendingNotify || t.pendingNotify.notifySent || t.schedDate !== todayStr) return t;
-        mutated = true;
-        const pn = t.pendingNotify;
-        // 1. Admin bell notice
-        notifyAdmins({
-          notices, save,
-          subject: pn.subject, message: pn.message, type: pn.type, meta: pn.meta,
-        }).catch(e => console.error('Deferred notify failed:', e));
-        // 2. Email (if employee record was captured)
-        if (pn.emailEmployeeId) {
-          const emp = employees.find(e => e.id === pn.emailEmployeeId);
-          if (emp) sendTaskCompletedEmail(t, emp);
+        if (t.schedDate !== todayStr) return t;
+        let next = t;
+        let touched = false;
+
+        // 1) pendingNotify — completion notifications
+        if (next.pendingNotify && !next.pendingNotify.notifySent) {
+          const pn = next.pendingNotify;
+          // 1a. Admin bell notice
+          notifyAdmins({
+            notices, save,
+            subject: pn.subject, message: pn.message, type: pn.type, meta: pn.meta,
+          }).catch(e => console.error('Deferred notify failed:', e));
+          // 1b. Email (if employee record was captured)
+          if (pn.emailEmployeeId) {
+            const emp = employees.find(e => e.id === pn.emailEmployeeId);
+            if (emp) sendTaskCompletedEmail(t, emp);
+          }
+          // 1c. Global activity-log entry
+          logAct('TASK COMPLETED', pn.meta?.taskName || t.name).catch(e => console.error('Deferred logAct failed:', e));
+          next = { ...next, pendingNotify: { ...pn, notifySent: true } };
+          touched = true;
         }
-        // 3. Global activity-log entry
-        logAct('TASK COMPLETED', pn.meta?.taskName || t.name).catch(e => console.error('Deferred logAct failed:', e));
-        return { ...t, pendingNotify: { ...pn, notifySent: true } };
+
+        // 2) pendingAssignNotify — assignment email for future-dated tasks
+        if (next.pendingAssignNotify && !next.pendingAssignNotify.notifySent) {
+          const pan = next.pendingAssignNotify;
+          // Send one email per assignee captured at assignment time.
+          // We resolve the employee records fresh (not from the closure) so
+          // a dept change / email update between assignment and due-date
+          // is reflected in the actual email.
+          if (Array.isArray(pan.emailAssigneeIds) && pan.emailAssigneeIds.length) {
+            const assignees = pan.emailAssigneeIds
+              .map((id) => employees.find(e => e.id === id))
+              .filter(Boolean);
+            if (assignees.length) {
+              sendTaskAssignedEmail(t, assignees, pan.assignedBy || 'Admin', pan.taskType || 'Normal Task');
+            }
+          }
+          next = { ...next, pendingAssignNotify: { ...pan, notifySent: true } };
+          touched = true;
+        }
+
+        if (touched) { mutated = true; return next; }
+        return t;
       });
       if (mutated) {
         try { await save('hops-tasks', newAll); } catch (e) { console.error('processPendingNotifications save failed:', e); }
