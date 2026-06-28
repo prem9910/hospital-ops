@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
-import { DeptTag } from './Badge';
-import { TaskDetailModal } from './TaskDetailModal';
+import { DeptTag, PriorityBadge, FreqBadge } from './Badge';
 import { wasCompletedLate, fDate, currentMonthRange, inDateRange, toDay } from '../../utils';
 
 // "Pending and due today" — matches the dashboard pending card so the
@@ -36,9 +36,11 @@ export function TasksDrilldownModal({
   const [dept, setDept] = useState('');
   const initialRange = useMemo(() => currentMonthRange(), []);
   const [dateRange, setDateRange] = useState({ preset: 'currentMonth', from: initialRange.from, to: initialRange.to, field: 'created' });
-  // Selected row → opens the read-only TaskDetailModal so the user can
-  // see every field on the task without leaving the dashboard popup.
-  const [selectedTask, setSelectedTask] = useState(null);
+  // Inline expansion state: row id whose detail is shown directly below
+  // the row in the same table. null = no expansion. Single-expansion so
+  // opening a new row auto-collapses the previous one.
+  const [expandedId, setExpandedId] = useState(null);
+  const navigate = useNavigate();
 
   // 1. Apply preFilter from the card
   const preFiltered = useMemo(() => {
@@ -107,10 +109,15 @@ export function TasksDrilldownModal({
         return (
           <td style={TD}>
             <button
-              onClick={() => setSelectedTask(t)}
-              style={{ padding: '4px 12px', borderRadius: 6, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800 }}
+              onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+              style={{
+                padding: '4px 12px', borderRadius: 6,
+                background: expandedId === t.id ? '#334155' : '#0d7377',
+                color: 'white', border: 'none', cursor: 'pointer',
+                fontSize: 11, fontWeight: 800,
+              }}
             >
-              👁 View
+              {expandedId === t.id ? '✕ Close' : '👁 View'}
             </button>
           </td>
         );
@@ -154,7 +161,10 @@ export function TasksDrilldownModal({
         </div>
       </div>
 
-      {/* Table — columns come from the per-card `columns` prop. */}
+      {/* Table — columns come from the per-card `columns` prop. Clicking
+          a row's View button toggles an inline detail panel directly below
+          the row. The detail lives INSIDE the tbody's scrollable area so
+          it can't get cropped behind the modal header. */}
       <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
@@ -165,27 +175,187 @@ export function TasksDrilldownModal({
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((t) => (
-              <tr key={t.id} style={{ background: wasCompletedLate(t) ? '#faf5ff' : 'white', borderBottom: '1px solid #f3f7fc' }}>
-                {columns.map((col) => renderCell(col, t))}
-              </tr>
-            )) : (
+            {rows.length ? rows.map((t) => {
+              const isExpanded = expandedId === t.id;
+              return (
+                <FragmentRow
+                  key={t.id}
+                  task={t}
+                  columns={columns}
+                  renderCell={renderCell}
+                  isExpanded={isExpanded}
+                  expandedNode={isExpanded ? (
+                    <InlineTaskDetail
+                      task={t}
+                      onOpenManage={() => { onClose(); navigate('/tasks?focus=' + encodeURIComponent(t.id)); }}
+                      onCollapse={() => setExpandedId(null)}
+                    />
+                  ) : null}
+                />
+              );
+            }) : (
               <tr><td colSpan={columns.length} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No tasks match the selected filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
-
-      {/* Read-only task detail — opened by the row's View button. The
-          action callbacks are null so the modal renders without
-          Edit/Delete/Mark-Complete buttons (dashboard is read-only). */}
-      <TaskDetailModal
-        task={selectedTask}
-        open={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
-        currentUser={null}
-        currentRole={null}
-      />
     </Modal>
+  );
+}
+
+// Wraps a data row + its optional inline expansion row inside a single
+// React.Fragment so they render as siblings under the same key in tbody.
+// (Returning two sibling <tr>s without Fragment from a map causes the
+// second one to be hoisted out of the table in some renderers.)
+function FragmentRow({ task, columns, renderCell, isExpanded, expandedNode }) {
+  return (
+    <>
+      <tr style={{ background: wasCompletedLate(task) ? '#faf5ff' : 'white', borderBottom: '1px solid #f3f7fc' }}>
+        {columns.map((col) => renderCell(col, task))}
+      </tr>
+      {isExpanded && expandedNode}
+    </>
+  );
+}
+
+// Inline detail panel rendered inside the table tbody directly below the
+// clicked row. Mirrors the read-only TaskDetailModal body (no action
+// buttons — those are gated on `onDone`/`canEdit` etc. and the dashboard
+// drilldown is intentionally read-only).
+function InlineTaskDetail({ task, onOpenManage, onCollapse }) {
+  const isDone = task.status === 'done';
+  const late = wasCompletedLate(task);
+  const actHtml = (task.activityLog || []);
+  const LBL = { fontSize: 10.5, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 110, paddingTop: 2 };
+  const CELL = { fontSize: 13, fontWeight: 600, color: '#1a2535', flex: 1 };
+  return (
+    <tr style={{ background: '#f0f7fb' }}>
+      <td colSpan={99} style={{ padding: '14px 18px', borderBottom: '2px solid #d8e2ef' }}>
+        {/* Status banner */}
+        {isDone && !late ? (
+          <div style={{ background: '#d4edda', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 18 }}>✅</span>
+            <div><div style={{ fontWeight: 800, color: '#155724' }}>COMPLETED ON TIME</div>
+              <div style={{ fontSize: 11.5, color: '#1a7a4a' }}>By {task.doneBy || '—'} at {task.doneTime || '—'}</div></div>
+          </div>
+        ) : isDone && late ? (
+          <div style={{ background: '#ede9fe', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, color: '#4c1d95' }}>⏰ COMPLETED WITH DELAY</div>
+          </div>
+        ) : (
+          <div style={{ background: '#fff3cd', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, color: '#7a4800' }}>⏳ PENDING</div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {/* Task Information */}
+          <Panel title="📋 Task Information">
+            <DetailRow label="Task Name"><strong>{task.name}</strong></DetailRow>
+            <DetailRow label="Department"><DeptTag name={task.dept} /></DetailRow>
+            <DetailRow label="Priority"><PriorityBadge priority={task.priority} /></DetailRow>
+            <DetailRow label="Frequency"><FreqBadge freq={task.freq} /></DetailRow>
+            <DetailRow label="Sched. Date">
+              <span style={{ color: '#0d7377', fontWeight: 800 }}>
+                {task.schedDate ? fDate(task.schedDate) + (task.time ? ' — ' + task.time : '') : '—'}
+              </span>
+            </DetailRow>
+            {task.notes && <DetailRow label="Notes"><span style={{ color: '#6b7a90' }}>{task.notes}</span></DetailRow>}
+          </Panel>
+
+          {/* Assigned By / To */}
+          <Panel title="👤 Assigned By / Assigned To">
+            {task.createdBy && (
+              <DetailRow label="Assigned By">
+                <span style={{ background: '#e8f4fd', color: '#0d7377', padding: '4px 10px', borderRadius: 8, fontWeight: 800, fontSize: 12 }}>
+                  👤 {task.createdBy}
+                </span>
+              </DetailRow>
+            )}
+            <DetailRow label="Assigned To">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {(task.assignedTo || []).map((name, i) => (
+                  <div key={i} style={{ background: '#0b1e3d', color: 'white', borderRadius: 8, padding: '5px 10px', fontSize: 11.5, fontWeight: 700 }}>
+                    {name}
+                    {task.assigneeEmails?.[i] && <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.5)' }}>{task.assigneeEmails[i]}</div>}
+                  </div>
+                ))}
+              </div>
+            </DetailRow>
+          </Panel>
+        </div>
+
+        {isDone && (
+          <Panel title="✅ Completion Details">
+            <DetailRow label="Done By"><strong>{task.doneBy || '—'}</strong></DetailRow>
+            <DetailRow label="Done At"><span style={{ color: '#0d7377', fontWeight: 800 }}>{task.doneTime || '—'}</span></DetailRow>
+            {task.doneRemark && <DetailRow label="Remark">{task.doneRemark}</DetailRow>}
+          </Panel>
+        )}
+
+        {late && task.delayReason && (
+          <div style={{ background: '#faf5ff', border: '1.5px solid #c4b5fd', borderRadius: 8, padding: '10px 13px', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', marginBottom: 6 }}>⏰ DELAY REASON</div>
+            <div style={{ fontSize: 13, color: '#6d28d9', fontWeight: 600 }}>{task.delayReason}</div>
+          </div>
+        )}
+
+        <Panel title="📜 Activity Log">
+          {actHtml.length ? actHtml.map((a, i) => (
+            <div key={i} style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0', fontSize: 11.5 }}>
+              <strong>{a.by}</strong> — {a.action} <span style={{ color: '#6b7a90' }}>{a.details || ''}</span>
+              <span style={{ float: 'right', color: '#6b7a90', fontSize: 10.5 }}>{a.at}</span>
+            </div>
+          )) : <span style={{ color: '#6b7a90', fontSize: 12 }}>No activity</span>}
+        </Panel>
+
+        {/* Action row — Open in Manage Tasks (primary) + Collapse. */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <button
+            onClick={onOpenManage}
+            style={{
+              padding: '9px 16px', borderRadius: 8,
+              background: '#0d7377', color: 'white',
+              border: 'none', cursor: 'pointer',
+              fontWeight: 800, fontSize: 12.5,
+            }}
+          >
+            📋 Open in Manage Tasks →
+          </button>
+          <button
+            onClick={onCollapse}
+            style={{
+              padding: '9px 14px', borderRadius: 8,
+              background: 'white', color: '#6b7a90',
+              border: '1.5px solid #d8e2ef', cursor: 'pointer',
+              fontWeight: 800, fontSize: 12.5,
+            }}
+          >
+            ✕ Collapse
+          </button>
+          <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#6b7a90', alignSelf: 'center' }}>
+            💡 For Edit / Delete / Mark Complete, open in Manage Tasks.
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function Panel({ title, children }) {
+  return (
+    <div style={{ background: '#f8fbff', borderRadius: 9, padding: '12px 14px', marginBottom: 10, border: '1px solid #d8e2ef' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({ label, children }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 110, paddingTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#1a2535', flex: 1 }}>{children}</div>
+    </div>
   );
 }

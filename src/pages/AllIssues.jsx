@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { fDate, exportToExcel } from '../utils';
 import { DeptTag, PriorityBadge, StatusBadge } from '../components/common/Badge';
@@ -10,6 +11,30 @@ export default function AllIssues() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
+  // ?focus=<issueId> — set by the dashboard drilldown's "Open in Issues"
+  // button. On mount, scroll the matching card into view and highlight it
+  // briefly so the user lands on it. The card itself may be filtered out
+  // by the current search/status/priority filter (we clear the filter
+  // chips so the focused card is visible), and we strip the param so a
+  // refresh doesn't re-trigger the scroll.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightId, setHighlightId] = useState(null);
+  const focusId = searchParams.get('focus');
+  useEffect(() => {
+    if (!focusId) return;
+    // Clear any active filters so the focused issue is visible regardless
+    // of what the user was looking at before navigating.
+    setSearch(''); setFilterStatus(''); setFilterPriority('');
+    setHighlightId(focusId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`issue-card-${focusId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setSearchParams((prev) => { prev.delete('focus'); return prev; }, { replace: true });
+    const t = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId]);
 
   const filtered = [...issues].filter((i) => {
     if (search && !i.title.toUpperCase().includes(search.toUpperCase())) return false;
@@ -55,7 +80,17 @@ export default function AllIssues() {
       </FilterPopup>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filtered.length ? filtered.map((i) => (
-          <div key={i.id} style={{ background: 'white', borderRadius: 11, border: '1px solid #d8e2ef', padding: '14px 16px', borderLeft: `4px solid ${i.priority === 'high' ? '#c0392b' : i.priority === 'low' ? '#1a7a4a' : '#d4920a'}` }}>
+          <div
+            key={i.id}
+            id={`issue-card-${i.id}`}
+            style={{
+              background: i.id === highlightId ? '#fff7d6' : 'white',
+              borderRadius: 11, border: `1px solid ${i.id === highlightId ? '#fbbf24' : '#d8e2ef'}`,
+              padding: '14px 16px',
+              borderLeft: `4px solid ${i.priority === 'high' ? '#c0392b' : i.priority === 'low' ? '#1a7a4a' : '#d4920a'}`,
+              transition: 'background 0.6s, border-color 0.6s',
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
               <strong style={{ fontSize: 14 }}>{i.title}</strong>
               <div style={{ display: 'flex', gap: 5 }}><PriorityBadge priority={i.priority} /><StatusBadge status={i.status} /></div>

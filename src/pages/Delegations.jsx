@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { uid, toDay, fDate, fDateTime, notifyAdmins, exportToExcel } from '../utils';
@@ -16,6 +17,26 @@ export default function Delegations() {
   const { currentRole, currentUser, hasPerm } = useAuth();
   const { delegations, employees, depts, notices, save, logAct } = useApp();
   const [filter, setFilter] = useState('');
+  // ?focus=<delegationId> — set by the dashboard drilldown's "Open in
+  // Delegations" button. On mount, scroll the matching card into view and
+  // highlight it briefly. We also clear the active status filter so the
+  // focused row is always visible regardless of what was filtered before.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightId, setHighlightId] = useState(null);
+  const focusId = searchParams.get('focus');
+  useEffect(() => {
+    if (!focusId) return;
+    setFilter('');
+    setHighlightId(focusId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`delegation-card-${focusId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setSearchParams((prev) => { prev.delete('focus'); return prev; }, { replace: true });
+    const t = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId]);
   const [showForm, setShowForm] = useState(false);
   const [showExtModal, setShowExtModal] = useState(null);
   const [extReason, setExtReason] = useState('');
@@ -154,7 +175,18 @@ export default function Delegations() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filtered.length ? filtered.map((d) => (
-          <div key={d.id} style={{ background: 'white', borderRadius: 12, border: '1px solid #d8e2ef', padding: '14px 16px', borderLeft: `4px solid ${STATUS_COLORS[d.status] || '#6b7a90'}` }}>
+          <div
+            key={d.id}
+            id={`delegation-card-${d.id}`}
+            style={{
+              background: d.id === highlightId ? '#fff7d6' : 'white',
+              borderRadius: 12,
+              border: `1px solid ${d.id === highlightId ? '#fbbf24' : '#d8e2ef'}`,
+              padding: '14px 16px',
+              borderLeft: `4px solid ${STATUS_COLORS[d.status] || '#6b7a90'}`,
+              transition: 'background 0.6s, border-color 0.6s',
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
               <strong style={{ fontSize: 14, color: d.task ? '#0b1e3d' : '#c0392b' }}>{d.task || '— Untitled task —'}</strong>
               <span style={{ background: STATUS_COLORS[d.status] || '#6b7a90', color: 'white', padding: '3px 10px', borderRadius: 20, fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>{d.status}</span>

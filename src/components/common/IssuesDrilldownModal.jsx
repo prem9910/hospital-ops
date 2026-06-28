@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
 import { DeptTag, PriorityBadge, StatusBadge } from './Badge';
-import { IssueDetailModal } from './IssueDetailModal';
 import { fDate, currentMonthRange, inDateRange, isEscalatedIssue } from '../../utils';
 
 // Per-card column spec for issues. Each dashboard card passes its own list.
@@ -31,8 +31,10 @@ export function IssuesDrilldownModal({
   const [dept, setDept] = useState('');
   const initialRange = useMemo(() => currentMonthRange(), []);
   const [dateRange, setDateRange] = useState({ preset: 'currentMonth', from: initialRange.from, to: initialRange.to, field: 'date' });
-  // Selected row → opens the read-only IssueDetailModal.
-  const [selectedIssue, setSelectedIssue] = useState(null);
+  // Inline expansion state: row id whose detail is shown directly below
+  // the row in the same table. null = no expansion.
+  const [expandedId, setExpandedId] = useState(null);
+  const navigate = useNavigate();
 
   const preFiltered = useMemo(() => {
     switch (preFilter) {
@@ -91,10 +93,15 @@ export function IssuesDrilldownModal({
         return (
           <td style={TD}>
             <button
-              onClick={() => setSelectedIssue(i)}
-              style={{ padding: '4px 12px', borderRadius: 6, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800 }}
+              onClick={() => setExpandedId(expandedId === i.id ? null : i.id)}
+              style={{
+                padding: '4px 12px', borderRadius: 6,
+                background: expandedId === i.id ? '#334155' : '#0d7377',
+                color: 'white', border: 'none', cursor: 'pointer',
+                fontSize: 11, fontWeight: 800,
+              }}
             >
-              👁 View
+              {expandedId === i.id ? '✕ Close' : '👁 View'}
             </button>
           </td>
         );
@@ -136,7 +143,10 @@ export function IssuesDrilldownModal({
         </div>
       </div>
 
-      {/* Table — columns come from the per-card `columns` prop. */}
+      {/* Table — columns come from the per-card `columns` prop. Clicking
+          a row's View button toggles an inline detail panel directly below
+          the row. The detail lives INSIDE the tbody's scrollable area so
+          it can't get cropped behind the modal header. */}
       <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
@@ -147,23 +157,132 @@ export function IssuesDrilldownModal({
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((i) => (
-              <tr key={i.id} style={{ background: 'white', borderBottom: '1px solid #f3f7fc' }}>
-                {columns.map((col) => renderCell(col, i))}
-              </tr>
-            )) : (
+            {rows.length ? rows.map((i) => {
+              const isExpanded = expandedId === i.id;
+              return (
+                <FragmentRow
+                  key={i.id}
+                  issue={i}
+                  columns={columns}
+                  renderCell={renderCell}
+                  isExpanded={isExpanded}
+                  expandedNode={isExpanded ? (
+                    <InlineIssueDetail
+                      issue={i}
+                      onOpenManage={() => { onClose(); navigate('/all-issues?focus=' + encodeURIComponent(i.id)); }}
+                      onCollapse={() => setExpandedId(null)}
+                    />
+                  ) : null}
+                />
+              );
+            }) : (
               <tr><td colSpan={columns.length} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No issues match the selected filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
-
-      {/* Read-only issue detail — opened by the row's View button. */}
-      <IssueDetailModal
-        issue={selectedIssue}
-        open={!!selectedIssue}
-        onClose={() => setSelectedIssue(null)}
-      />
     </Modal>
+  );
+}
+
+// Fragment wrapper so each issue row + its optional inline expansion render
+// as siblings under the same key inside tbody.
+function FragmentRow({ issue, columns, renderCell, isExpanded, expandedNode }) {
+  return (
+    <>
+      <tr style={{ background: 'white', borderBottom: '1px solid #f3f7fc' }}>
+        {columns.map((col) => renderCell(col, issue))}
+      </tr>
+      {isExpanded && expandedNode}
+    </>
+  );
+}
+
+// Inline detail panel for an issue, rendered inside the table tbody.
+function InlineIssueDetail({ issue, onOpenManage, onCollapse }) {
+  const i = issue;
+  return (
+    <tr style={{ background: '#f0f7fb' }}>
+      <td colSpan={99} style={{ padding: '14px 18px', borderBottom: '2px solid #d8e2ef' }}>
+        <Panel title="📋 Issue Details">
+          <DetailRow label="Title"><strong>{i.title || '—'}</strong></DetailRow>
+          <DetailRow label="Department"><DeptTag name={i.dept} /></DetailRow>
+          <DetailRow label="Priority"><PriorityBadge priority={i.priority} /></DetailRow>
+          <DetailRow label="Status"><StatusBadge status={i.status} /></DetailRow>
+          <DetailRow label="Reported By"><strong>{i.reporter || '—'}</strong></DetailRow>
+          <DetailRow label="Reported Date"><span style={{ color: '#0d7377', fontWeight: 800 }}>{i.date ? fDate(i.date) : '—'}</span></DetailRow>
+          {i.assigned && <DetailRow label="Assigned To"><strong>{i.assigned}</strong></DetailRow>}
+        </Panel>
+
+        {i.desc && (
+          <Panel title="📝 Description">
+            <div style={{ fontSize: 13, color: '#1a2535', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{i.desc}</div>
+          </Panel>
+        )}
+
+        {i.status === 'resolved' && (
+          <Panel title="✅ Resolution">
+            <DetailRow label="Resolved By"><strong>{i.resolveBy || '—'}</strong></DetailRow>
+            <DetailRow label="Resolved At"><span style={{ color: '#0d7377', fontWeight: 800 }}>{i.resolvedAt ? fDate(String(i.resolvedAt).slice(0, 10)) : '—'}</span></DetailRow>
+            {i.resolveRemark && <DetailRow label="Remark"><span style={{ color: '#6b7a90' }}>{i.resolveRemark}</span></DetailRow>}
+          </Panel>
+        )}
+
+        {i.status === 'escalated' && (
+          <Panel title="🚨 Escalation">
+            {i.escalatedTo && <DetailRow label="Escalated To"><strong>{i.escalatedTo}</strong></DetailRow>}
+            {i.escalatedAt && <DetailRow label="Escalated At"><span style={{ color: '#0d7377', fontWeight: 800 }}>{fDate(String(i.escalatedAt).slice(0, 10))}</span></DetailRow>}
+            {i.escalationReason && <DetailRow label="Reason"><span style={{ color: '#6b7a90' }}>{i.escalationReason}</span></DetailRow>}
+          </Panel>
+        )}
+
+        {/* Action row */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <button
+            onClick={onOpenManage}
+            style={{
+              padding: '9px 16px', borderRadius: 8,
+              background: '#0d7377', color: 'white',
+              border: 'none', cursor: 'pointer',
+              fontWeight: 800, fontSize: 12.5,
+            }}
+          >
+            📋 Open in Issues →
+          </button>
+          <button
+            onClick={onCollapse}
+            style={{
+              padding: '9px 14px', borderRadius: 8,
+              background: 'white', color: '#6b7a90',
+              border: '1.5px solid #d8e2ef', cursor: 'pointer',
+              fontWeight: 800, fontSize: 12.5,
+            }}
+          >
+            ✕ Collapse
+          </button>
+          <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#6b7a90', alignSelf: 'center' }}>
+            💡 For Resolve / Escalate actions, open in Issues page.
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function Panel({ title, children }) {
+  return (
+    <div style={{ background: '#f8fbff', borderRadius: 9, padding: '12px 14px', marginBottom: 10, border: '1px solid #d8e2ef' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({ label, children }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 110, paddingTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#1a2535', flex: 1 }}>{children}</div>
+    </div>
   );
 }

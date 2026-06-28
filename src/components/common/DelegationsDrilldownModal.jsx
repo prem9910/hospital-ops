@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
 import { DeptTag } from './Badge';
@@ -28,8 +29,10 @@ export function DelegationsDrilldownModal({
   const [dept, setDept] = useState('');
   const initialRange = useMemo(() => currentMonthRange(), []);
   const [dateRange, setDateRange] = useState({ preset: 'currentMonth', from: initialRange.from, to: initialRange.to, field: 'createdAt' });
-  // Selected row → opens the inline read-only detail modal below.
-  const [selectedDel, setSelectedDel] = useState(null);
+  // Inline expansion state: row id whose detail is shown directly below
+  // the row in the same table. null = no expansion.
+  const [expandedId, setExpandedId] = useState(null);
+  const navigate = useNavigate();
 
   const preFiltered = useMemo(() => {
     switch (preFilter) {
@@ -96,10 +99,15 @@ export function DelegationsDrilldownModal({
         return (
           <td style={TD}>
             <button
-              onClick={() => setSelectedDel(d)}
-              style={{ padding: '4px 12px', borderRadius: 6, background: '#0d7377', color: 'white', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800 }}
+              onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+              style={{
+                padding: '4px 12px', borderRadius: 6,
+                background: expandedId === d.id ? '#334155' : '#0d7377',
+                color: 'white', border: 'none', cursor: 'pointer',
+                fontSize: 11, fontWeight: 800,
+              }}
             >
-              👁 View
+              {expandedId === d.id ? '✕ Close' : '👁 View'}
             </button>
           </td>
         );
@@ -142,7 +150,10 @@ export function DelegationsDrilldownModal({
         </div>
       </div>
 
-      {/* Table — columns come from the per-card `columns` prop. */}
+      {/* Table — columns come from the per-card `columns` prop. Clicking
+          a row's View button toggles an inline detail panel directly below
+          the row. The detail lives INSIDE the tbody's scrollable area so
+          it can't get cropped behind the modal header. */}
       <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 9, overflow: 'hidden', maxHeight: '52vh', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
@@ -153,36 +164,78 @@ export function DelegationsDrilldownModal({
             </tr>
           </thead>
           <tbody>
-            {rows.length ? rows.map((d) => (
-              <tr key={d.id} style={{ background: 'white', borderBottom: '1px solid #f3f7fc' }}>
-                {columns.map((col) => renderCell(col, d))}
-              </tr>
-            )) : (
+            {rows.length ? rows.map((d) => {
+              const isExpanded = expandedId === d.id;
+              return (
+                <FragmentRow
+                  key={d.id}
+                  delegation={d}
+                  columns={columns}
+                  renderCell={renderCell}
+                  isExpanded={isExpanded}
+                  expandedNode={isExpanded ? (
+                    <tr style={{ background: '#f0f7fb' }}>
+                      <td colSpan={99} style={{ padding: '14px 18px', borderBottom: '2px solid #d8e2ef' }}>
+                        <DelegationDetailPanel d={d} />
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => { onClose(); navigate('/delegation?focus=' + encodeURIComponent(d.id)); }}
+                            style={{
+                              padding: '9px 16px', borderRadius: 8,
+                              background: '#0d7377', color: 'white',
+                              border: 'none', cursor: 'pointer',
+                              fontWeight: 800, fontSize: 12.5,
+                            }}
+                          >
+                            📋 Open in Delegations →
+                          </button>
+                          <button
+                            onClick={() => setExpandedId(null)}
+                            style={{
+                              padding: '9px 14px', borderRadius: 8,
+                              background: 'white', color: '#6b7a90',
+                              border: '1.5px solid #d8e2ef', cursor: 'pointer',
+                              fontWeight: 800, fontSize: 12.5,
+                            }}
+                          >
+                            ✕ Collapse
+                          </button>
+                          <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#6b7a90', alignSelf: 'center' }}>
+                            💡 For Accept / Reject / Extension actions, open in Delegations page.
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                />
+              );
+            }) : (
               <tr><td colSpan={columns.length} style={{ padding: 28, textAlign: 'center', color: '#6b7a90', fontSize: 12.5 }}>No delegations match the selected filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
-
-      {/* Inline read-only delegation detail — opened by the row's View button.
-          Lives at the same level as the drilldown modal; closes on backdrop
-          click. There is no shared DelegationDetailModal yet — this is a
-          small inline panel scoped to the dashboard drilldown. */}
-      <Modal open={!!selectedDel} onClose={() => setSelectedDel(null)} title={selectedDel?.task || 'Delegation'} maxWidth="max-w-md">
-        {selectedDel && (
-          <DelegationDetailPanel d={selectedDel} />
-        )}
-      </Modal>
     </Modal>
   );
 }
 
-// Read-only delegation panel — inline helper inside the drilldown. Shows
-// every field on a delegation record. Kept local (not extracted) because
-// only this modal uses it.
+// Fragment wrapper so each row + its optional inline expansion render as
+// siblings under the same key inside tbody.
+function FragmentRow({ delegation, columns, renderCell, isExpanded, expandedNode }) {
+  return (
+    <>
+      <tr style={{ background: 'white', borderBottom: '1px solid #f3f7fc' }}>
+        {columns.map((col) => renderCell(col, delegation))}
+      </tr>
+      {isExpanded && expandedNode}
+    </>
+  );
+}
+
+// Read-only delegation panel — inline helper inside the drilldown row.
 function DelegationDetailPanel({ d }) {
   const TD = { padding: '9px 12px', verticalAlign: 'middle', fontSize: 12 };
-  const LBL = { fontSize: 10.5, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 100 };
+  const LBL = { fontSize: 10.5, fontWeight: 800, color: '#6b7a90', textTransform: 'uppercase', letterSpacing: 0.5, minWidth: 110, paddingTop: 2 };
   return (
     <div>
       <div style={{ background: '#f8fbff', borderRadius: 9, padding: '12px 14px', marginBottom: 10, border: '1px solid #d8e2ef' }}>
@@ -222,9 +275,6 @@ function DelegationDetailPanel({ d }) {
           <div style={{ fontSize: 13, color: '#1a2535', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{d.remarks}</div>
         </div>
       )}
-      <div style={{ fontSize: 10.5, color: '#6b7a90' }}>
-        💡 For full delegation actions (accept / reject / request extension), open the <strong>Delegation Tracker</strong> page.
-      </div>
     </div>
   );
 }

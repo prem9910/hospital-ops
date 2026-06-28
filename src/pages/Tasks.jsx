@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isAssignedTo, isTaskDueToday, notifyAdmins, exportToExcel, getNextScheduledDate } from '../utils';
@@ -347,6 +348,20 @@ export default function Tasks() {
   const [showForm, setShowForm] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [showDetail, setShowDetail] = useState(null);
+  // ?focus=<taskId> — set by the dashboard drilldown's "Open in Manage Tasks"
+  // button. On mount, look up the matching task and open its detail modal,
+  // then strip the param so a refresh doesn't re-open it. Handles the case
+  // where the task has been deleted between drilldown and navigation by
+  // silently doing nothing (the param is still stripped).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusId = searchParams.get('focus');
+  useEffect(() => {
+    if (!focusId) return;
+    const found = tasks.find((t) => t.id === focusId);
+    if (found) setShowDetail(found);
+    setSearchParams((prev) => { prev.delete('focus'); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, tasks]);
   const [showDone, setShowDone] = useState(null);
   const [showExtApproval, setShowExtApproval] = useState(null);
   const [tab, setTab] = useState('ongoing');
