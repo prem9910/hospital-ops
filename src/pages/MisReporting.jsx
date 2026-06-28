@@ -311,9 +311,27 @@ export default function MisReporting() {
 
   // Pull the active tab's tasks/handover through the date filter once so
   // every stat + chart + table below is consistent.
+  //
+  // "Current-date" rule (added): future-dated pending tasks (schedDate > today)
+  // are dropped from every downstream tab/scoring. They are scheduled work,
+  // not in-flight work, so they shouldn't inflate the "Assigned" denominator
+  // nor pollute completion-rate / dept-health scores. Done tasks are always
+  // included regardless of schedDate — they're history. Pending tasks with
+  // no schedDate fall through (backstop for legacy rows).
+  const today = toDay();
+  const isCurrentDatePending = (t) => {
+    if (t.status !== 'pending') return false;
+    if (!t.schedDate) return true;
+    return t.schedDate <= today;
+  };
   const filteredTasks = useMemo(() => {
-    if (!range.from || !range.to) return tasks;
-    return tasks.filter((t) => inDateRange(t[range.field || 'created'], range.from, range.to));
+    let pool = tasks;
+    // Step 1: drop future-dated pending tasks so MIS doesn't inflate
+    //         scoring/tables with work that isn't actually due yet.
+    pool = pool.filter((t) => t.status === 'done' || isCurrentDatePending(t));
+    // Step 2: apply the user-selected date range on the chosen field.
+    if (!range.from || !range.to) return pool;
+    return pool.filter((t) => inDateRange(t[range.field || 'created'], range.from, range.to));
   }, [tasks, range.from, range.to, range.field]);
 
   const filteredHandovers = useMemo(() => {

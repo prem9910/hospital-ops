@@ -73,7 +73,11 @@ function StatCard({ num, label, color, onClick }) {
 }
 
 function DeptCard({ dept, stats, onClick }) {
-  const p = stats.tot ? Math.round(stats.dn / stats.tot * 100) : 100;
+  // Scope = done + current-date pending. Future-dated pending tasks are
+  // scheduled work, not in-flight work, so they shouldn't inflate the
+  // denominator (or deflate the %) on the dept card.
+  const scope = stats.dn + stats.pend;
+  const p = scope ? Math.round(stats.dn / scope * 100) : 100;
   const c = (p === 100 && !stats.dl) ? '#1a7a4a' : p > 60 ? '#0d7377' : '#d4920a';
   return (
     <div onClick={onClick} style={{ background: 'white', borderRadius: 11, border: '1px solid #d8e2ef', padding: 14, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}
@@ -82,7 +86,7 @@ function DeptCard({ dept, stats, onClick }) {
     >
       <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}><DeptTag name={dept} /></div>
       <div style={{ fontSize: 11, color: '#6b7a90', marginBottom: 4 }}>
-        {stats.dn}/{stats.tot} done {stats.iss > 0 && <span style={{ color: '#c0392b' }}>• ⚠️ {stats.iss}</span>}
+        {stats.dn}/{scope} done {stats.iss > 0 && <span style={{ color: '#c0392b' }}>• ⚠️ {stats.iss}</span>}
       </div>
       {stats.dl > 0 && <div style={{ fontSize: 10.5, color: '#6d28d9', fontWeight: 800, marginBottom: 2 }}>⏰ {stats.dl} delayed</div>}
       <div style={{ height: 6, background: '#e4eaf2', borderRadius: 10, overflow: 'hidden' }}>
@@ -94,6 +98,17 @@ function DeptCard({ dept, stats, onClick }) {
 }
 
 function scoreColor(s) { return s >= 80 ? '#1a7a4a' : s >= 60 ? '#0d7377' : s >= 40 ? '#d4920a' : '#c0392b'; }
+
+// Pending tasks the user actually needs to act on TODAY. Upcoming pending
+// tasks (schedDate > today) are intentionally excluded so the dashboard
+// answers "what's open right now?" not "what's scheduled in total?".
+// Tasks with no schedDate fall through to true (backstop — legacy rows
+// created before the form had a date default).
+const isCurrentDatePending = (t) => {
+  if (t.status !== 'pending') return false;
+  if (!t.schedDate) return true;
+  return t.schedDate <= new Date().toISOString().slice(0, 10);
+};
 
 export default function Dashboard() {
   const { currentRole, currentUser } = useAuth();
@@ -107,14 +122,21 @@ export default function Dashboard() {
 
   // Stats
   const done = tasks.filter((t) => t.status === 'done').length;
-  const pend = tasks.filter((t) => t.status === 'pending').length;
+  // Pending count = current-date pending only (excludes future-scheduled).
+  // The drill-down opens on this filter so the user sees the same scope.
+  const pend = tasks.filter(isCurrentDatePending).length;
   const delay = tasks.filter((t) => t.status === 'done' && wasCompletedLate(t)).length;
   const onTime = tasks.filter((t) => t.status === 'done' && !wasCompletedLate(t)).length;
   const openI = issues.filter((i) => i.status !== 'resolved').length;
   const resI = issues.filter((i) => i.status === 'resolved').length;
   const esc = issues.filter((i) => i.priority === 'high' && i.status === 'open').length;
-  const total = tasks.length;
-  const pct = total ? Math.round(done / total * 100) : 0;
+  // Donut share = done over (done + current-date pending). Done records are
+  // always historical; pending tasks due today are the actionable scope.
+  // Future-dated pending tasks are excluded from BOTH numerator and
+  // denominator so the percentage reflects real progress, not "what's
+  // scheduled in total".
+  const actionScope = done + pend;
+  const pct = actionScope > 0 ? Math.round((done / actionScope) * 100) : 0;
   const issComp = (openI + resI) > 0 ? Math.round(resI / (openI + resI) * 100) : 100;
 
   // Delegation stats. Source = union of (a) tasks with freq='delegation' and
@@ -167,10 +189,17 @@ export default function Dashboard() {
 
   // Employee performance scores
   const empScores = employees.map((e) => {
+    // Actionable scope = tasks this employee finished (done) PLUS tasks
+    // still pending and due today. Future-dated pending tasks don't count
+    // — they're scheduled work, not work the employee has been asked to
+    // action right now. Without this filter, an employee with one overdue
+    // task and three tomorrow-scheduled tasks would show score=25%
+    // (1/4 done) instead of the more useful 33% (1/3 done).
     const mine = tasks.filter((t) => isAssignedTo(t, e.name));
     const comp = mine.filter((t) => t.status === 'done');
     const late = comp.filter((t) => wasCompletedLate(t)).length;
-    const base = mine.length > 0 ? (comp.length / mine.length) * 100 : 100;
+    const active = mine.filter((t) => t.status === 'done' || isCurrentDatePending(t)).length;
+    const base = active > 0 ? (comp.length / active) * 100 : 100;
     const score = Math.max(0, Math.round(base - late * 10));
     return { name: e.name, score };
   }).sort((a, b) => b.score - a.score).slice(0, 6);
@@ -178,18 +207,20 @@ export default function Dashboard() {
   // Dept stats
   const deptStats = {};
   tasks.forEach((t) => {
-    if (!deptStats[t.dept]) deptStats[t.dept] = { tot: 0, dn: 0, dl: 0, pend: 0, iss: 0 };
-    deptStats[t.dept].tot++;
+    if (!deptStats[t.dept]) deptStats[t.dept] = { dn: 0, dl: 0, pend: 0, iss: 0 };
     if (t.status === 'done') deptStats[t.dept].dn++;
-    if (t.status === 'pending') deptStats[t.dept].pend++;
+    // Pending count = current-date pending only (matches the pending card).
+    if (isCurrentDatePending(t)) deptStats[t.dept].pend++;
     if (wasCompletedLate(t)) deptStats[t.dept].dl++;
   });
   issues.filter((i) => i.status !== 'resolved').forEach((i) => {
-    if (!deptStats[i.dept]) deptStats[i.dept] = { tot: 0, dn: 0, dl: 0, pend: 0, iss: 0 };
+    if (!deptStats[i.dept]) deptStats[i.dept] = { dn: 0, dl: 0, pend: 0, iss: 0 };
     deptStats[i.dept].iss++;
   });
 
-  const hiPending = tasks.filter((t) => t.status === 'pending' && t.priority === 'high');
+  // High-priority alerts — only current-date pending, so the alert list
+  // reflects "act on this today" rather than "someday in the future".
+  const hiPending = tasks.filter((t) => isCurrentDatePending(t) && t.priority === 'high');
 
   return (
     <div>

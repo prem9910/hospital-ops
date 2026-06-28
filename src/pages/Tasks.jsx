@@ -560,26 +560,42 @@ export default function Tasks() {
   const taskById = {};
   tasks.forEach(t => { taskById[t.id] = t; });
 
+  // Done-tab specific dedup rules:
+  //   The Ongoing / Upcoming tabs dedup cycle-rebirth chains (hide a "done"
+  //   parent whose pending child is the current state, hide grandchild bug
+  //   artefacts). Those rules are correct for "what should I work on" views,
+  //   but they ALSO hide legitimate completed records — so the Done tab ends
+  //   up empty even when there are dozens of completed cycles in history.
+  //
+  // We skip those two rules when tab === 'done' so the user can see every
+  // completed record. The signature-dedup still applies (true duplicate
+  // done rows are noise regardless of tab).
+  const isDoneTab = tab === 'done';
   const doneSignatures = new Set();
   const seenPendingParents = new Set();
   const filtered = rawFiltered.filter(t => {
-    // Hide grandchild tasks (parent also has a parentTaskId) — bug artifacts
-    if (t.parentTaskId) {
+    // Hide grandchild tasks (parent also has a parentTaskId) — bug artifacts.
+    // Skipped on the Done tab: a completed grandchild is still a real completion.
+    if (!isDoneTab && t.parentTaskId) {
       const parent = taskById[t.parentTaskId];
       if (parent?.parentTaskId) return false;
     }
-    // Deduplicate identical done records (same name+assigned+schedDate+doneTime = true duplicate)
+    // Deduplicate identical done records (same name+assigned+schedDate+doneTime = true duplicate).
+    // Applied on every tab — true duplicates are noise everywhere.
     if (t.status === 'done') {
       const sig = `${t.name}|${(t.assignedTo || []).slice().sort().join(',')}|${t.schedDate}|${t.doneTime}`;
       if (doneSignatures.has(sig)) return false;
       doneSignatures.add(sig);
     }
-    // Hide done parent when a pending child exists (child represents the current state)
-    if (t.status === 'done') {
+    // Hide done parent when a pending child exists (child represents the
+    // current state). Skipped on the Done tab so users can see every
+    // completed cycle, not just the most recent one without a live child.
+    if (!isDoneTab && t.status === 'done') {
       const hasPendingChild = tasks.some(x => x.parentTaskId === t.id && x.status === 'pending');
       if (hasPendingChild) return false;
     }
-    // Deduplicate multiple pending siblings (keep only one per parent)
+    // Deduplicate multiple pending siblings (keep only one per parent).
+    // Not relevant to Done tab since all rows there are status='done'.
     if (t.status !== 'pending' || !t.parentTaskId) return true;
     if (seenPendingParents.has(t.parentTaskId)) return false;
     seenPendingParents.add(t.parentTaskId);

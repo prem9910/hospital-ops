@@ -2,7 +2,17 @@ import { useState, useMemo } from 'react';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
 import { DeptTag, PriorityBadge } from './Badge';
-import { wasCompletedLate, fDate, currentMonthRange, inDateRange } from '../../utils';
+import { wasCompletedLate, fDate, currentMonthRange, inDateRange, toDay } from '../../utils';
+
+// "Pending and due today" — matches the dashboard pending card so the
+// drill-down opens on the same scope the user just clicked. Upcoming
+// scheduled tasks are excluded; the user can widen the scope later via
+// the date-range picker (set field=schedDate and pick a wider range).
+const isCurrentDatePending = (t) => {
+  if (t.status !== 'pending') return false;
+  if (!t.schedDate) return true;
+  return t.schedDate <= toDay();
+};
 
 // Drill-down for tasks. Opened from a dashboard card click. The card's
 // pre-filter narrows the initial dataset (e.g. "Delayed" card → only delayed
@@ -24,7 +34,11 @@ export function TasksDrilldownModal({ open, onClose, tasks = [], depts = [], pre
       case 'completed': return tasks.filter((t) => t.status === 'done');
       case 'onTime':    return tasks.filter((t) => t.status === 'done' && !wasCompletedLate(t));
       case 'delayed':   return tasks.filter((t) => t.status === 'done' &&  wasCompletedLate(t));
-      case 'pending':   return tasks.filter((t) => t.status === 'pending');
+      // "Pending" drill-down matches the dashboard pending card scope:
+      // current-date pending only. Upcoming tasks can still be explored by
+      // picking Status=Pending on the "all" drill-down or by widening the
+      // date range on the schedDate field.
+      case 'pending':   return tasks.filter(isCurrentDatePending);
       case 'high':      return tasks.filter((t) => t.priority === 'high');
       default:          return tasks;
     }
