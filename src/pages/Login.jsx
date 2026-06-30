@@ -215,7 +215,22 @@ export default function Login() {
 
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <span style={{ fontSize: 50, display: 'block', marginBottom: 10, animation: 'logoFloat 3.2s ease-in-out infinite', filter: isDark ? 'drop-shadow(0 0 18px rgba(20,165,171,0.5))' : 'drop-shadow(0 4px 12px rgba(13,115,119,0.25))' }}>🏥</span>
+            <span style={{ display: 'inline-block', marginBottom: 12, filter: isDark ? 'drop-shadow(0 0 18px rgba(20,165,171,0.5))' : 'drop-shadow(0 6px 16px rgba(13,115,119,0.25))' }}>
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="wdGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#0d7377"/>
+                    <stop offset="100%" stopColor="#14a5ab"/>
+                  </linearGradient>
+                </defs>
+                <rect x="3" y="3" width="50" height="50" rx="14" fill="url(#wdGrad)"/>
+                <rect x="13" y="16" width="30" height="24" rx="3" fill="white" fillOpacity="0.96"/>
+                <rect x="13" y="16" width="30" height="6" rx="3" fill="white" fillOpacity="0.7"/>
+                <line x1="18" y1="27" x2="34" y2="27" stroke="#0d7377" strokeWidth="2.2" strokeLinecap="round"/>
+                <line x1="18" y1="32" x2="30" y2="32" stroke="#0d7377" strokeWidth="2.2" strokeLinecap="round" opacity="0.55"/>
+                <line x1="18" y1="37" x2="26" y2="37" stroke="#0d7377" strokeWidth="2.2" strokeLinecap="round" opacity="0.35"/>
+              </svg>
+            </span>
             <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: titleColor, marginBottom: 5, transition: 'color 0.3s' }}>Work Desk</h1>
             <p style={{ fontSize: 10, color: subtitleColor, letterSpacing: 2.5, textTransform: 'uppercase', transition: 'color 0.3s' }}>Operations Management Platform</p>
           </div>

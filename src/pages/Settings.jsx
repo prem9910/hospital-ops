@@ -72,20 +72,20 @@ function CopyBtn({ text, label = '📋 Copy' }) {
 // Subject is set per-template below.
 
 export default function Settings() {
-  const { currentRole, currentUser } = useAuth();
+  const { currentRole, currentUser, refreshPermsFromEmployees } = useAuth();
   const { employees, admins, tasks, issues, handovers, delegations, notices, actLog, save, logAct } = useApp();
 
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
   const [pwMsg,  setPwMsg]  = useState('');
   const [showPw, setShowPw] = useState(false);
 
-  const [profileForm, setProfileForm] = useState({ contact: '', email: '' });
+  const [profileForm, setProfileForm] = useState({ contact: '', email: '', username: '' });
   const [profileMsg,  setProfileMsg]  = useState('');
 
   useEffect(() => {
     if (currentRole !== 'staff' && currentRole !== 'admin') return;
     const emp = employees.find(e => e.id === currentUser.empId);
-    if (emp) setProfileForm({ contact: emp.contact || '', email: emp.email || '' });
+    if (emp) setProfileForm({ contact: emp.contact || '', email: emp.email || '', username: emp.username || emp.name || '' });
   }, [employees, currentUser.empId, currentRole]);
 
   const saved = (() => { try { return JSON.parse(localStorage.getItem('workdesk-emailcfg') || '{}'); } catch { return {}; } })();
@@ -137,9 +137,19 @@ export default function Settings() {
   async function saveProfile() {
     const emp = employees.find(e => e.id === currentUser.empId);
     if (!emp) { setProfileMsg('❌ Employee record not found!'); return; }
-    await save('workdesk-employees', employees.map(e =>
-      e.id === emp.id ? { ...e, contact: profileForm.contact, email: profileForm.email } : e
+    const newUsername = (profileForm.username || '').trim();
+    if (!newUsername) { setProfileMsg('❌ Username cannot be empty!'); return; }
+    const sanitized = newUsername.toLowerCase().replace(/\s+/g, '');
+    if (!/^[a-z0-9_.]+$/.test(sanitized)) { setProfileMsg('❌ Username may only contain letters, digits, dot or underscore.'); return; }
+    const collision = employees.find(e => e.id !== emp.id && (
+      (e.username && e.username.toLowerCase() === sanitized) ||
+      (e.name && e.name.toUpperCase() === sanitized.toUpperCase())
     ));
+    if (collision) { setProfileMsg(`❌ Username "${sanitized}" is already in use by ${collision.name}.`); return; }
+    await save('workdesk-employees', employees.map(e =>
+      e.id === emp.id ? { ...e, contact: profileForm.contact, email: profileForm.email, username: sanitized } : e
+    ));
+    if (refreshPermsFromEmployees) await refreshPermsFromEmployees();
     await logAct('PROFILE UPDATED', currentUser.name);
     setProfileMsg('✅ Profile updated successfully!');
   }
@@ -327,7 +337,7 @@ export default function Settings() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 10.5, color: '#6b7a90', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 }}>Department</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2535' }}>{currentUser.dept || '—'}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2535' }}>🔒 {currentUser.dept || '—'}</div>
             </div>
           </div>
           {profileMsg && (
@@ -335,6 +345,9 @@ export default function Settings() {
               {profileMsg}
             </div>
           )}
+          <Field label="Username (your login ID)">
+            <input value={profileForm.username} onChange={e => setProfileForm({ ...profileForm, username: e.target.value })} placeholder="login-id" style={IS} />
+          </Field>
           <Field label="Contact / Phone">
             <input value={profileForm.contact} onChange={e => setProfileForm({ ...profileForm, contact: e.target.value })} placeholder="PHONE NUMBER" style={IS} />
           </Field>

@@ -2,6 +2,37 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
 export const uid = () => 'id-' + Date.now() + Math.random().toString(36).slice(2, 6);
+
+// Derive a username from an email's local part: 'vijay12@gmail.com' -> 'vijay12'
+export const deriveUsernameFromEmail = (email) => {
+  if (!email || typeof email !== 'string') return '';
+  const local = email.split('@')[0].trim().toLowerCase();
+  return local.replace(/[^a-z0-9_.]/g, '');
+};
+
+// Validate a gmail.com email (per product policy: @gmail.com is hardcoded)
+export const isValidEmail = (email) => {
+  if (!email || typeof email !== 'string') return false;
+  return /^[^\s@]+@gmail\.com$/i.test(email.trim());
+};
+
+// Return a username that doesn't collide with any existing username OR name.
+// Login matches by either, so a collision with another user's name counts too.
+export const makeUniqueUsername = (baseUsername, existingEmployees) => {
+  if (!baseUsername) return '';
+  const taken = new Set();
+  for (const e of (existingEmployees || [])) {
+    if (e.username) taken.add(e.username.toLowerCase());
+    if (e.name)     taken.add(e.name.toUpperCase());
+  }
+  const base = baseUsername.toLowerCase();
+  if (!taken.has(base)) return baseUsername;
+  for (let i = 1; i < 1000; i++) {
+    const candidate = `${baseUsername}${i}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${baseUsername}${Date.now()}`;
+};
 export const toDay = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

@@ -49,11 +49,13 @@ export async function sendWelcomeEmail(employee) {
     dept:    employee.dept  || '—',
     role:    employee.role  || 'Staff',
     hospital_name,
+    username: employee.username || (employee.email ? employee.email.split('@')[0] : '—'),
+    password: employee.password || '—',
   });
   await send({
     to_email:     employee.email,
     to_name:      employee.name,
-    subject:      `🏥 Work Desk — Your Account Is Ready, ${employee.name}!`,
+    subject:      `🗂️ Work Desk — Your Account Is Ready, ${employee.name}!`,
     message_html,
   });
 }

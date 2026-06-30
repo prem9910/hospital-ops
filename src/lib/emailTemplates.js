@@ -181,9 +181,9 @@ function alertBox(color, bgColor, borderColor, text) {
 }
 
 // ── 1. Employee Welcome ───────────────────────────────────────────────────────
-export function buildWelcomeHtml({ to_name, to_email, dept, role, hospital_name }) {
+export function buildWelcomeHtml({ to_name, to_email, dept, role, hospital_name, username, password }) {
   const header = `
-    <h2>🏥 Work Desk</h2>
+    <h2>🗂️ Work Desk</h2>
     <p>Welcome to the Team!</p>`;
 
   const body = `
@@ -194,8 +194,10 @@ export function buildWelcomeHtml({ to_name, to_email, dept, role, hospital_name 
       ${row('🏢 Department', esc(dept),                          true)}
       ${row('🔑 Role',       esc(role),                          false)}
       ${row('📧 Email',      esc(to_email),                      true)}
+      ${row('🆔 Username',   `<strong>${esc(username || '—')}</strong>`, false)}
+      ${row('🔒 Password',   `<strong style="font-family:monospace;font-size:15px;letter-spacing:1px">${esc(password || '—')}</strong>`, true)}
     </table>
-    ${alertBox('#1a7a4a', '#e8f5e9', '#1a7a4a', '✅ Please contact your admin for your login credentials.')}`;
+    ${alertBox('#b7791f', '#fef5e7', '#b7791f', '⚠️ Please log in and change your password from Settings → Change Password as soon as possible.')}`;
 
   return baseWrap('#0d7377', header, body, hospital_name);
 }

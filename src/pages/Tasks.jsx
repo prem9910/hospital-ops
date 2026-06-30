@@ -1354,6 +1354,7 @@ export default function Tasks() {
                     </td>
                     <td className="col-hide-mobile" style={{ padding: '11px 13px', verticalAlign: 'middle' }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <button onClick={() => setShowDetail(t)} style={{ background: 'none', border: '1px solid #d8e2ef', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12, color: '#0d7377' }} title="View details">👁</button>
                         {t.freq === 'delegation' && (currentUser.name === t.createdBy || currentRole === 'mainadmin') && (
                           <button
                             onClick={() => setShowExtApproval(t)}

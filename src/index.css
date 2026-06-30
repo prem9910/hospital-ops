@@ -391,8 +391,10 @@ body {
    The row's existing onClick → setShowDetail(t) opens the TaskDetailModal.
    The Actions <td> keeps its `e.stopPropagation()` so action buttons don't
    double-fire the row tap. */
-.tasks-table th.col-hide-mobile,
-.tasks-table td.col-hide-mobile { display: none !important; }
+@media (max-width: 768px) {
+  .tasks-table th.col-hide-mobile,
+  .tasks-table td.col-hide-mobile { display: none !important; }
+}
 
 /* Compact cell padding on mobile — 3 columns only need to fit comfortably */
 .tasks-table th,
@@ -413,25 +415,6 @@ body {
   color: #0d7377;
   vertical-align: middle;
   float: right;
-}
-
-@media (max-width: 768px) {
-  .tasks-table th.col-hide-mobile,
-  .tasks-table td.col-hide-mobile { display: none !important; }
-  .tasks-table th,
-  .tasks-table td { padding: 9px 10px !important; font-size: 12px !important; }
-  .tasks-table tbody tr { transition: background 0.15s; }
-  .tasks-table tbody tr:active { background: #e8f4fd !important; }
-  .tasks-table tbody tr td:nth-last-of-type(2)::after {
-    content: '›';
-    display: inline-block;
-    margin-left: 6px;
-    font-size: 18px;
-    font-weight: 700;
-    color: #0d7377;
-    vertical-align: middle;
-    float: right;
-  }
 }
 
 /* ── ActivityLog.jsx — scrollable table + Clear All button ────────────────── */

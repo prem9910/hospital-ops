@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, exportToExcel, toDay } from '../utils';
+import { uid, exportToExcel, toDay, deriveUsernameFromEmail, isValidEmail, makeUniqueUsername } from '../utils';
 import { sendWelcomeEmail } from '../lib/emailService';
 import { ALL_PERMS } from '../constants';
 import { Modal } from '../components/common/Modal';
@@ -34,6 +34,7 @@ export default function Staff() {
   const [showForm, setShowForm] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [form, setForm] = useState({ name: '', dept: '', role: '', contact: '', email: '', password: '' });
+  const [emailError, setEmailError] = useState('');
   const [perms, setPerms] = useState([]);
   const [page, setPage] = useState(1);
   const [pendingTaskModal, setPendingTaskModal] = useState(null); // { emp, pendingCount, newDept, noticeMsg }
@@ -47,13 +48,18 @@ export default function Staff() {
   });
   const paged = paginate(filtered, page);
 
-  function openNew() { setForm({ name: '', dept: '', role: '', isIncharge: false, contact: '', email: '', password: '' }); setPerms([]); setEditEmp(null); setShowForm(true); }
+  function openNew() { setForm({ name: '', dept: '', role: '', isIncharge: false, contact: '', email: '', password: '' }); setPerms([]); setEditEmp(null); setShowForm(true); setEmailError(''); }
   function openEdit(e) { setForm({ name: e.name, dept: e.dept, role: e.role || '', isIncharge: e.isIncharge || false, contact: e.contact || '', email: e.email || '', password: e.password || '' }); setPerms(e.perms || []); setEditEmp(e); setShowForm(true); }
 
   async function handleSave() {
     if (!form.name.trim() || !form.dept) { alert('Name and Department are required!'); return; }
     if (!editEmp && !form.password.trim()) { alert('Password is required for new staff!'); return; }
-    const obj = { id: editEmp?.id || uid(), name: form.name.toUpperCase().trim(), dept: form.dept, role: form.isIncharge ? 'INCHARGE' : 'STAFF', isIncharge: form.isIncharge, contact: form.contact, email: form.email, password: form.password || editEmp?.password || '', perms };
+    if (!isValidEmail(form.email)) { alert('A valid Gmail address is required (e.g. user@gmail.com)!'); return; }
+    const baseUsername = deriveUsernameFromEmail(form.email);
+    const username = editEmp
+      ? (editEmp.username || baseUsername)
+      : makeUniqueUsername(baseUsername, employees);
+    const obj = { id: editEmp?.id || uid(), name: form.name.toUpperCase().trim(), dept: form.dept, role: form.isIncharge ? 'INCHARGE' : 'STAFF', isIncharge: form.isIncharge, contact: form.contact, email: form.email.trim().toLowerCase(), password: form.password || editEmp?.password || '', username, perms };
     const isNew = !editEmp;
     const deptChanged = editEmp && editEmp.dept !== obj.dept;
     const todayStr = toDay();
@@ -236,8 +242,14 @@ export default function Staff() {
           <Field label="Contact Number">
             <input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} placeholder="PHONE" style={IS} />
           </Field>
-          <Field label="Email">
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="EMAIL" style={IS} />
+          <Field label="Email *">
+            <input value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); if (emailError) setEmailError(''); }} onBlur={() => { if (form.email && !isValidEmail(form.email)) setEmailError('Enter a valid gmail address (e.g. user@gmail.com)'); }} placeholder="employee@gmail.com" style={{ ...IS, borderColor: emailError ? '#e53e3e' : IS.borderColor }} />
+            {emailError && <div style={{ color: '#e53e3e', fontSize: 11, marginTop: 4, fontWeight: 700 }}>{emailError}</div>}
+            {form.email && !emailError && deriveUsernameFromEmail(form.email) && (
+              <div style={{ color: '#6b7a90', fontSize: 11, marginTop: 4 }}>
+                Login username will be: <b style={{ color: '#0d7377' }}>{deriveUsernameFromEmail(form.email)}</b>
+              </div>
+            )}
           </Field>
         </div>
         <Field label={editEmp ? 'Password (leave blank = no change)' : 'Password *'}>
