@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isTaskDueToday, isAssignedTo, notifyAdmins, exportToExcel, getNextScheduledDate } from '../utils';
+import { uid, toDay, fDate, fDateTime, wasCompletedLate, parseTimeToMinutes, isTaskDueToday, isAssignedTo, notifyAdmins, exportToExcel, getNextScheduledDate, ls } from '../utils';
 import { FREQ_LABELS } from '../constants';
 import { DeptTag, PriorityBadge, FreqBadge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
@@ -375,10 +375,24 @@ export default function MyTasks() {
   async function checkPendingDeptChange(completedTaskId) {
     const emp = employees.find(e => e.name.toUpperCase() === currentUser.name.toUpperCase());
     if (!emp?.pendingDept) return;
-    // Count remaining pending tasks excluding the one just completed
-    const remaining = tasks.filter(tx =>
+    const todayStr = toDay();
+    // ALWAYS read the freshest tasks from localStorage, not the closure's `tasks`.
+    // This function is called immediately after `save('workdesk-tasks', newAll)` from
+    // handleDone — the closure's `tasks` is still the pre-save snapshot. Using it
+    // here would (a) count the just-completed task as "remaining", blocking the
+    // approval notice, and (b) cause the upcoming-task cleanup block below to
+    // overwrite the just-saved done parent + new pending child with stale data,
+    // reverting the done task's status back to 'pending'. After refresh the user
+    // sees the task back in Ongoing in Manage Tasks and missing from Done tab.
+    const tasksFresh = ls.get('workdesk-tasks', tasks);
+    // Count remaining ONGOING pending tasks (schedDate <= today OR no date)
+    // excluding the one just completed. Upcoming/future tasks are ignored — once
+    // the dept changes they'll be auto-cancelled anyway, and counting them here
+    // would block the approval notice from ever firing.
+    const remaining = tasksFresh.filter(tx =>
       tx.id !== completedTaskId &&
       tx.status === 'pending' &&
+      (!tx.schedDate || tx.schedDate <= todayStr) &&
       (isAssignedTo(tx, currentUser.name) || handoverTaskIdsForMe.has(tx.id))
     ).length;
     if (remaining > 0) return;
@@ -393,15 +407,72 @@ export default function MyTasks() {
       !n.meta?.rejected
     );
     if (hasPendingApproval) return;
+    // Auto-cancel upcoming tasks assigned to this employee — they're obsolete
+    // once the dept changes. Same logic as acceptDeptChange: cancel rows
+    // assigned only to this employee (mark status='cancelled' so they
+    // surface in the Done tab with the 🚫 CANCELLED badge), strip the
+    // employee from multi-assignee rows, and cascade to child rows of
+    // every cleared parent.
+    const empNameUpper = currentUser.name.toUpperCase();
+    const seedUpcoming = tasksFresh.filter(t =>
+      t.status === 'pending' &&
+      t.schedDate &&
+      t.schedDate > todayStr &&
+      isAssignedTo(t, currentUser.name)
+    );
+    const clearedParentIds = new Set(seedUpcoming.filter(t => !t.parentTaskId).map(t => t.id));
+    const cascadeChildren = tasksFresh.filter(t =>
+      t.status === 'pending' &&
+      t.parentTaskId &&
+      clearedParentIds.has(t.parentTaskId) &&
+      isAssignedTo(t, currentUser.name)
+    );
+    const upcomingTasks = [...seedUpcoming, ...cascadeChildren];
+    const cancelledTaskIds = [];
+    const unassignedOnlyIds = [];
+    const cancelledChildIds = [];
+    const unassignedOnlyChildIds = [];
+    if (upcomingTasks.length > 0) {
+      const cancelReason = `Cancelled — department change from "${emp.dept}" to "${emp.pendingDept}" auto-approved after all tasks completed`;
+      const updatedTasks = tasksFresh
+        .map((t) => {
+          if (!upcomingTasks.find((u) => u.id === t.id)) return t;
+          const others = (t.assignedTo || []).filter((n) => (n || '').toUpperCase() !== empNameUpper);
+          if (others.length === 0) {
+            // Only this employee assigned — mark cancelled (preserves the
+            // row in the Done tab as an audit trail).
+            if (t.parentTaskId) cancelledChildIds.push(t.id);
+            else cancelledTaskIds.push(t.id);
+            return {
+              ...t,
+              status: 'cancelled',
+              cancelReason,
+              cancelledAt: new Date().toISOString(),
+              cancelledBy: currentUser.name,
+            };
+          }
+          // Other assignees remain — just strip this employee from the list.
+          if (t.parentTaskId) unassignedOnlyChildIds.push(t.id);
+          else unassignedOnlyIds.push(t.id);
+          return { ...t, assignedTo: others };
+        });
+      await save('workdesk-tasks', updatedTasks);
+      await logAct('UPCOMING TASKS CANCELLED — DEPT CHANGE (auto)',
+        `${currentUser.name}: ${cancelledTaskIds.length + cancelledChildIds.length} cancelled, ${unassignedOnlyIds.length + unassignedOnlyChildIds.length} unassigned-only on dept-change auto-approval`);
+    }
     // All tasks done — send dept_change_approval to employee + alert to main admin
     const nowIso = new Date().toISOString();
+    const totalCancelled = cancelledTaskIds.length + cancelledChildIds.length;
+    const cleanupNote = totalCancelled > 0
+      ? `\n\n${totalCancelled} upcoming task(s) previously assigned to you have been cancelled automatically. You can view them in the Done tab. Your new department will assign fresh tasks as needed.\n\n`
+      : '\n\n';
     const approvalNotice = {
       id: uid(), toEmpId: emp.id, toName: emp.name,
       fromName: 'MAIN ADMIN',
       subject: 'DEPARTMENT CHANGE REQUEST',
-      message: `Dear ${emp.name},\n\nYou have completed all your pending tasks. Your department is now being changed from "${emp.dept}" to "${emp.pendingDept}".\n\nPlease accept this change at your earliest convenience.\n\nRegards,\nMAIN ADMIN`,
+      message: `Dear ${emp.name},\n\nYou have completed all your pending tasks. Your department is now being changed from "${emp.dept}" to "${emp.pendingDept}".${cleanupNote}Please accept this change at your earliest convenience.\n\nRegards,\nMAIN ADMIN`,
       type: 'dept_change_approval', isRead: false, sentAt: nowIso,
-      meta: { newDept: emp.pendingDept, oldDept: emp.dept, empId: emp.id },
+      meta: { newDept: emp.pendingDept, oldDept: emp.dept, empId: emp.id, clearedTaskIds: [...cancelledTaskIds, ...unassignedOnlyIds, ...cancelledChildIds, ...unassignedOnlyChildIds] },
     };
     const adminAlert = {
       id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',

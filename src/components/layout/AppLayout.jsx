@@ -35,7 +35,7 @@ const PAGE_TITLES = {
 
 export default function AppLayout() {
   const { currentRole, currentUser, logout, inactivityPct, inactivityWarning, inactivitySeconds, showSessionModal, continueSession } = useAuth();
-  const { isSaving, notices, employees, save, deleteRecord } = useAppForSaving();
+  const { isSaving, notices, employees, save } = useAppForSaving();
   const { tasks, logAct } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
@@ -76,26 +76,31 @@ export default function AppLayout() {
     if (!n.meta?.newDept || !n.meta?.empId) return;
     const nowStr = new Date().toISOString();
     const todayStr = toDay();
-    // Remove all upcoming tasks (schedDate > today, status pending) assigned
+    // Cancel all upcoming tasks (schedDate > today, status pending) assigned
     // to this employee. The user's reasoning: after a dept change new tasks
     // will be assigned in the new department, so the old upcoming queue is
-    // obsolete. We DELETE the entries (not just mark cancelled) so they
-    // never reappear in any tab — Ongoing, Upcoming, or Done.
+    // obsolete. We mark them with status='cancelled' (not deleted) so:
+    //   1. They DON'T appear in Upcoming or Ongoing (terminal-status guard
+    //      in Tasks.jsx excludes them).
+    //   2. They DO appear in the Done tab with the 🚫 CANCELLED badge so
+    //      the user has an audit trail of what was cancelled and why.
+    //   3. The activity log records the cancellation for history.
     //
-    // For tasks assigned to MULTIPLE people we keep the task but remove this
-    // employee from `assignedTo` so the task stays valid for the other
-    // assignees. For tasks assigned to only this employee we drop the row.
+    // For tasks assigned to MULTIPLE people we keep the task pending but
+    // remove this employee from `assignedTo` so the task stays valid for
+    // the other assignees. For tasks assigned to only this employee we
+    // cancel the row.
     //
     // CHILD TASKS: child rows (parentTaskId !== '') inherit the parent's
     // assignedTo at creation time (see autoCycleTasks / handleDone). They
     // are not matched by the upcoming filter above because their schedDate
-    // is typically later than today, BUT once the parent is cleared the
+    // is typically later than today, BUT once the parent is cancelled the
     // child becomes an orphan still assigned to the employee — and still
     // shows in the Upcoming tab. So we cascade: for every parent in
     // upcomingTasks we also process its children with the SAME fate:
-    //   - parent dropped (single-assignee)         → drop ALL its children
-    //   - parent kept with stripped assignedTo     → strip this employee
-    //                                                 from every child
+    //   - parent cancelled (single-assignee)         → cancel ALL its children
+    //   - parent kept with stripped assignedTo       → strip this employee
+    //                                                   from every child
     // This catches children regardless of their own schedDate so the new
     // department starts with a clean queue.
     const seedUpcoming = (tasks || []).filter(t =>
@@ -118,47 +123,47 @@ export default function AppLayout() {
       isAssignedTo(t, n.toName)
     );
     const upcomingTasks = [...seedUpcoming, ...cascadeChildren];
-    const removedTaskIds = [];
+    const cancelledTaskIds = [];
     const unassignedOnlyIds = [];
-    const removedChildIds = [];
+    const cancelledChildIds = [];
     const unassignedOnlyChildIds = [];
     let updatedTasks = tasks || [];
     if (upcomingTasks.length > 0) {
+      const cancelReason = `Cancelled — department change from "${n.meta.oldDept}" to "${n.meta.newDept}" accepted by ${n.toName}`;
       updatedTasks = updatedTasks
         .map((t) => {
           if (!upcomingTasks.find((u) => u.id === t.id)) return t;
           const others = (t.assignedTo || []).filter((name) => (name || '').toUpperCase() !== n.toName.toUpperCase());
           if (others.length === 0) {
-            // Only this employee assigned — drop the row entirely.
-            if (t.parentTaskId) removedChildIds.push(t.id);
-            else removedTaskIds.push(t.id);
-            return null;
+            // Only this employee assigned — mark the row cancelled so it
+            // surfaces in the Done tab with the 🚫 CANCELLED badge. The row
+            // is preserved (not deleted) so the cancellation has an audit
+            // trail in the Done tab and the activity log.
+            if (t.parentTaskId) cancelledChildIds.push(t.id);
+            else cancelledTaskIds.push(t.id);
+            return {
+              ...t,
+              status: 'cancelled',
+              cancelReason,
+              cancelledAt: nowStr,
+              cancelledBy: n.toName,
+            };
           }
           // Other assignees remain — just strip this employee from the list.
+          // The task stays pending for the remaining assignees.
           if (t.parentTaskId) unassignedOnlyChildIds.push(t.id);
           else unassignedOnlyIds.push(t.id);
           return { ...t, assignedTo: others };
-        })
-        .filter(Boolean);
+        });
       await save('workdesk-tasks', updatedTasks);
-      // Actually DELETE the rows we removed from the local array. Without
-      // this, save()'s upsert only updates/inserts rows in the array — the
-      // filtered-out (deleted) rows STAY in Supabase forever. On the next
-      // refresh, init merges SB as source-of-truth and the cleared tasks
-      // resurrect into the Upcoming tab. deleteRecord is fire-and-forget
-      // for each id (Supabase real-time confirms via SELECT-verify retry).
-      const allRemovedIds = [...removedTaskIds, ...removedChildIds];
-      for (const id of allRemovedIds) {
-        try { await deleteRecord('workdesk-tasks', id); } catch (e) { console.warn('acceptDeptChange deleteRecord failed for', id, e); }
-      }
-      const parentSummary = `${removedTaskIds.length} parent(s) removed, ${unassignedOnlyIds.length} parent(s) unassigned-only`;
-      const childSummary = `${removedChildIds.length} child(ren) removed, ${unassignedOnlyChildIds.length} child(ren) unassigned-only`;
+      const parentSummary = `${cancelledTaskIds.length} parent(s) cancelled, ${unassignedOnlyIds.length} parent(s) unassigned-only`;
+      const childSummary = `${cancelledChildIds.length} child(ren) cancelled, ${unassignedOnlyChildIds.length} child(ren) unassigned-only`;
       const summary = `${n.toName} on dept change to "${n.meta.newDept}": ${parentSummary}; ${childSummary}`;
-      await logAct('UPCOMING TASKS CLEARED — DEPT CHANGE',
-        `${summary} (IDs: ${[...removedTaskIds, ...unassignedOnlyIds, ...removedChildIds, ...unassignedOnlyChildIds].slice(0, 5).map((id) => id.slice(-6)).join(', ')}${removedTaskIds.length + unassignedOnlyIds.length + removedChildIds.length + unassignedOnlyChildIds.length > 5 ? '…' : ''})`
+      await logAct('UPCOMING TASKS CANCELLED — DEPT CHANGE',
+        `${summary} (IDs: ${[...cancelledTaskIds, ...unassignedOnlyIds, ...cancelledChildIds, ...unassignedOnlyChildIds].slice(0, 5).map((id) => id.slice(-6)).join(', ')}${cancelledTaskIds.length + unassignedOnlyIds.length + cancelledChildIds.length + unassignedOnlyChildIds.length > 5 ? '…' : ''})`
       );
     }
-    const clearedTaskIds = [...removedTaskIds, ...unassignedOnlyIds, ...removedChildIds, ...unassignedOnlyChildIds];
+    const clearedTaskIds = [...cancelledTaskIds, ...unassignedOnlyIds, ...cancelledChildIds, ...unassignedOnlyChildIds];
     // Apply dept change + clear pendingDept
     const updatedEmps = (employees || []).map(e =>
       e.id === n.meta.empId ? { ...e, dept: n.meta.newDept, pendingDept: '' } : e
@@ -173,7 +178,7 @@ export default function AppLayout() {
       id: uid(), toEmpId: n.toEmpId, toName: n.toName,
       fromName: 'MAIN ADMIN',
       subject: 'DEPARTMENT CHANGED SUCCESSFULLY',
-      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\n${clearedTaskIds.length > 0 ? `${clearedTaskIds.length} upcoming task(s) previously assigned to you have been cleared automatically — please disregard them. Your new department will assign fresh tasks as needed.\n\n` : ''}Please report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
+      message: `Dear ${n.toName},\n\nYour department has been changed from "${n.meta.oldDept}" to "${n.meta.newDept}".\n\n${cancelledTaskIds.length + cancelledChildIds.length > 0 ? `${cancelledTaskIds.length + cancelledChildIds.length} upcoming task(s) previously assigned to you have been cancelled automatically. You can view them in the Done tab. Your new department will assign fresh tasks as needed.\n\n` : ''}Please report to your new department at the earliest.\n\nRegards,\nMAIN ADMIN`,
       type: 'general', isRead: false, sentAt: nowStr, meta: null,
     };
     // Admin bell alert — employee accepted the dept change
@@ -181,7 +186,7 @@ export default function AppLayout() {
       id: uid(), toEmpId: 'MAINADMIN', toName: 'MAIN ADMIN',
       fromName: n.toName,
       subject: `✅ ${n.toName} accepted dept change`,
-      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".${clearedTaskIds.length > 0 ? ` ${clearedTaskIds.length} upcoming task(s) cleared.` : ''}`,
+      message: `${n.toName} has accepted the department change from "${n.meta.oldDept}" to "${n.meta.newDept}".${clearedTaskIds.length > 0 ? ` ${cancelledTaskIds.length + cancelledChildIds.length} upcoming task(s) cancelled.` : ''}`,
       type: 'dept_change_accepted', isRead: false, sentAt: nowStr,
       meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept, clearedTaskIds },
     };
