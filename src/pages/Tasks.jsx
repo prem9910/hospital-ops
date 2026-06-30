@@ -257,7 +257,7 @@ function ExtensionApprovalModal({ task, open, onClose, onDecide, currentUser }) 
 // A task with `freq === 'delegation'` represents delegation work. To keep the
 // Delegation Tracker page (`Delegations.jsx`) and the dashboard drill-down
 // popup in lockstep with this view, every create/edit/complete/delete of a
-// delegation task also mirrors a corresponding row into `hops-delegations`.
+// delegation task also mirrors a corresponding row into `workdesk-delegations`.
 //
 // Both writes use the SAME id (task.id === delegation.id) so a later delete
 // or status update can find and patch the counterpart without a separate
@@ -324,7 +324,7 @@ async function syncDelegationFromTask(task, delegations, { save, moveToTrash }, 
   const next = idx >= 0
     ? delegations.map((d, i) => i === idx ? mirror : d)
     : [...delegations, mirror];
-  try { await save('hops-delegations', next); } catch (e) { console.error('syncDelegationFromTask save failed:', e); }
+  try { await save('workdesk-delegations', next); } catch (e) { console.error('syncDelegationFromTask save failed:', e); }
   return next;
 }
 
@@ -647,7 +647,7 @@ export default function Tasks() {
       extensions: existing?.extensions || [],
     };
     const newTasks = existing ? tasks.map((t) => t.id === obj.id ? obj : t) : [...tasks, obj];
-    await save('hops-tasks', newTasks);
+    await save('workdesk-tasks', newTasks);
     await logAct(existing ? 'TASK UPDATED' : 'TASK CREATED', obj.name);
 
     // Sync to delegations table when this is a delegation task (or when the
@@ -700,7 +700,7 @@ export default function Tasks() {
       const withoutPending = newTasks.map((t) => t.id === obj.id
         ? { ...t, pendingAssignNotify: undefined }
         : t);
-      await save('hops-tasks', withoutPending);
+      await save('workdesk-tasks', withoutPending);
       // Update the local reference so the rest of the function sees the
       // cleared payload.
       newTasks.splice(0, newTasks.length, ...withoutPending);
@@ -728,7 +728,7 @@ export default function Tasks() {
           notifySent: false,
         };
         const withNotify = newTasks.map((t) => t.id === obj.id ? { ...t, pendingAssignNotify } : t);
-        await save('hops-tasks', withNotify);
+        await save('workdesk-tasks', withNotify);
       } else {
         // Due today or in the past — send immediately (existing behaviour).
         sendTaskAssignedEmail(obj, assigneeEmps, currentUser.name, taskType);
@@ -779,9 +779,9 @@ export default function Tasks() {
       };
       newTasks = [...newTasks, child];
     }
-    await save('hops-tasks', newTasks);
+    await save('workdesk-tasks', newTasks);
     await logAct('TASK COMPLETED', t.name + (isDelayed ? ' [DELAYED]' : ''));
-    // Mirror completion into hops-delegations so the Delegation Tracker page
+    // Mirror completion into workdesk-delegations so the Delegation Tracker page
     // and the dashboard drill-down popup reflect the same status / remark.
     if (t.freq === 'delegation') {
       await syncDelegationFromTask(updated, delegations, { save, moveToTrash });
@@ -849,7 +849,7 @@ export default function Tasks() {
       for (const t of toDelete) {
         try { await moveToTrash('task', t.id); } catch (e) { console.error('bulk delete failed for', t.id, e); }
       }
-      // Mirror deletion into hops-delegations for any delegation tasks in the batch
+      // Mirror deletion into workdesk-delegations for any delegation tasks in the batch
       for (const t of toDelete) {
         if (t.freq === 'delegation') {
           const target = delegations.find((d) => d.id === t.id);
@@ -895,7 +895,7 @@ export default function Tasks() {
       activityLog: [...(task.activityLog || []), { by: decidedBy, action: `EXTENSION ${decision.toUpperCase()}`, details: approvedExt ? `New date: ${approvedExt.newDate}` : '', at: fDateTime() }],
     };
     const newTasks = tasks.map((t) => t.id === task.id ? updated : t);
-    await save('hops-tasks', newTasks);
+    await save('workdesk-tasks', newTasks);
     await logAct(`DELEGATION EXTENSION ${decision.toUpperCase()}`, task.name);
     // If the extension was approved on a delegation task, push it to the
     // delegation record so the workflow page reflects the new due date.
@@ -905,7 +905,7 @@ export default function Tasks() {
           ? { ...d, dueDate: approvedExt.newDate, expDate: approvedExt.newDate, status: 'extended', updatedAt: new Date().toISOString() }
           : d
       );
-      try { await save('hops-delegations', next); } catch (e) { /* non-fatal */ }
+      try { await save('workdesk-delegations', next); } catch (e) { /* non-fatal */ }
     }
     setShowExtApproval(updated);
   }

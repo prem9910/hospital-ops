@@ -27,7 +27,7 @@ export default function LiveTracking() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#0b1e3d' }}>📈 Live Tracking Dashboard</h2>
         <div style={{ background: 'white', border: '1px solid #d8e2ef', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700 }}>
-          🏥 Hospital: <span style={{ color: totalPct === 100 ? '#1a7a4a' : totalPct > 60 ? '#0d7377' : '#d4920a', fontFamily: "'Playfair Display',serif", fontSize: 18 }}>{totalPct}%</span>
+          🏥 Live: <span style={{ color: totalPct === 100 ? '#1a7a4a' : totalPct > 60 ? '#0d7377' : '#d4920a', fontFamily: "'Playfair Display',serif", fontSize: 18 }}>{totalPct}%</span>
         </div>
       </div>
 

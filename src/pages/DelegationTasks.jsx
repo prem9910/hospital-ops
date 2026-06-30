@@ -107,7 +107,7 @@ function TaskViewModal({ task, open, onClose, canEdit, onEdit }) {
 // Inline edit modal — main admin only. Mirrors Tasks.jsx TaskFormModal's
 // shape (same fields, same IS style) so admins don't need to jump pages to
 // fix a delegation task. Saves via the AppContext save() flow; auto-sync to
-// hops-delegations happens on the Tasks.jsx side via the same id.
+// workdesk-delegations happens on the Tasks.jsx side via the same id.
 function EditFormModal({ open, onClose, onSave, editTask, depts, employees }) {
   const blank = { name: '', dept: '', freq: 'delegation', assignedTo: [], assigneeEmails: [], schedDate: '', time: '', priority: 'medium', notes: '' };
   const [form, setForm] = useState(blank);
@@ -278,7 +278,7 @@ export default function DelegationTasks() {
 
   // Edit handler — same shape as Tasks.jsx handleSave so the auto-sync
   // helpers there (taskToDelegation + syncDelegationFromTask) keep the
-  // hops-delegations record in lockstep. We inline the body here instead
+  // workdesk-delegations record in lockstep. We inline the body here instead
   // of importing from Tasks.jsx so the page stays self-contained.
   async function handleEditSave(form) {
     if (!editTask) return;
@@ -291,10 +291,10 @@ export default function DelegationTasks() {
       activityLog: [...(editTask.activityLog || []), { by: currentUser.name, action: 'EDITED', details: '', at: fDateTime() }],
     };
     const newTasks = tasks.map((t) => t.id === obj.id ? obj : t);
-    await save('hops-tasks', newTasks);
+    await save('workdesk-tasks', newTasks);
     await logAct('DELEGATION TASK UPDATED', obj.name);
 
-    // Mirror the edit into hops-delegations so the Delegation Tracker page
+    // Mirror the edit into workdesk-delegations so the Delegation Tracker page
     // and dashboard drill-down reflect the same name/dept/due date/etc.
     // Build the same shape Tasks.jsx's taskToDelegation produces, then
     // upsert by id. We deliberately do NOT remove the record if something
@@ -327,7 +327,7 @@ export default function DelegationTasks() {
     const next = idx >= 0
       ? delegations.map((d, i) => i === idx ? mirror : d)
       : [...delegations, mirror];
-    await save('hops-delegations', next);
+    await save('workdesk-delegations', next);
 
     setEditTask(null);
     setViewTask(null);

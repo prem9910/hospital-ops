@@ -7,7 +7,7 @@ const START_HOUR = 8;
 
 // ── sessionStorage helpers (per-user, cleared when tab closes) ────────────────
 function ssKey(user, suffix) {
-  return `hops-${user.toLowerCase()}-${suffix}`;
+  return `workdesk-${user.toLowerCase()}-${suffix}`;
 }
 function ssGetSet(key) {
   try { return new Set(JSON.parse(sessionStorage.getItem(key) || '[]')); } catch { return new Set(); }
@@ -321,7 +321,7 @@ export function useTaskNotifications(tasks, handovers, currentUser, currentRole,
           new Notification(`⏳ ${tk.name}`, {
             body: `Department: ${tk.dept || '—'} | Priority: ${tk.priority || 'medium'}`,
             icon: '/favicon.ico',
-            tag: 'hops-reminder-' + tk.id,
+            tag: 'workdesk-reminder-' + tk.id,
           });
         }, i * 500);
       });

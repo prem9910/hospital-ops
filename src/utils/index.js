@@ -495,7 +495,7 @@ export function collectExportData({
 export function buildExportPayload({ currentRole, currentUser, collections, yearRange }) {
   const generated = new Date().toISOString();
   return {
-    schema: 'hospital-ops-export',
+    schema: 'workdesk-export',
     version: 1,
     generatedAt: generated,
     generatedBy: currentUser?.name || 'UNKNOWN',
@@ -546,7 +546,7 @@ export function readJsonFile(file) {
 // missing/invalid keys so the UI can show a single friendly error.
 export function validateImportPayload(payload) {
   if (!payload || typeof payload !== 'object') return ['Not a JSON object.'];
-  if (payload.schema !== 'hospital-ops-export') return ['File is not a hospital-ops export.'];
+  if (payload.schema !== 'workdesk-export') return ['File is not a Work Desk export.'];
   if (!payload.data || typeof payload.data !== 'object') return ['Missing `data` section.'];
   const valid = ['tasks', 'issues', 'handovers', 'delegations', 'notices', 'actLog'];
   const missing = valid.filter((k) => !Array.isArray(payload.data[k]));
@@ -637,7 +637,7 @@ export async function notifyAdmins({ notices, save, subject, message, type, meta
     const existing = notices || [];
     const seen = new Set(existing.map(n => n.id).filter(Boolean));
     const list = seen.has(alert.id) ? existing : [...existing, alert];
-    await save('hops-notices', list);
+    await save('workdesk-notices', list);
   } catch (e) {
     console.error('notifyAdmins failed:', e);
   }

@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
-const db = new Database(path.join(__dirname, 'hospital.db'));
+const db = new Database(path.join(__dirname, 'workdesk.db'));
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');

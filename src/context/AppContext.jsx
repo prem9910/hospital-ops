@@ -31,28 +31,28 @@ function reducer(state, action) {
 }
 
 const KEY_MAP = {
-  'hops-depts': 'depts',
-  'hops-employees': 'employees',
-  'hops-admins': 'admins',
-  'hops-tasks': 'tasks',
-  'hops-issues': 'issues',
-  'hops-handovers': 'handovers',
-  'hops-delegations': 'delegations',
-  'hops-actlog': 'actLog',
-  'hops-trash': 'trash',
-  'hops-notices': 'notices',
+  'workdesk-depts': 'depts',
+  'workdesk-employees': 'employees',
+  'workdesk-admins': 'admins',
+  'workdesk-tasks': 'tasks',
+  'workdesk-issues': 'issues',
+  'workdesk-handovers': 'handovers',
+  'workdesk-delegations': 'delegations',
+  'workdesk-actlog': 'actLog',
+  'workdesk-trash': 'trash',
+  'workdesk-notices': 'notices',
 };
 
 // Reverse map: ls-key → deleteRecord's `type` arg. Used by the init merge
 // when re-attempting deletes that didn't propagate to Supabase.
 const TYPE_MAP = {
-  'hops-tasks': 'task',
-  'hops-issues': 'issue',
-  'hops-employees': 'employee',
-  'hops-depts': 'dept',
-  'hops-admins': 'admin',
-  'hops-handovers': 'handover',
-  'hops-delegations': 'delegation',
+  'workdesk-tasks': 'task',
+  'workdesk-issues': 'issue',
+  'workdesk-employees': 'employee',
+  'workdesk-depts': 'dept',
+  'workdesk-admins': 'admin',
+  'workdesk-handovers': 'handover',
+  'workdesk-delegations': 'delegation',
 };
 
 export function AppProvider({ children }) {
@@ -80,10 +80,10 @@ export function AppProvider({ children }) {
     console.log('[save]', hopKey, '→', stamped.length, 'rows; localStorage now:', ls.get(hopKey, []).length);
     // Stamp local-write time BEFORE awaiting the network call so realtime/refresh
     // paths can recognise rows we just wrote but Supabase hasn't echoed back yet.
-    ls.set('hops-last-local-write', { key: hopKey, at: nowMs });
+    ls.set('workdesk-last-local-write', { key: hopKey, at: nowMs });
     dispatch({ type: 'SET_KEY', key: stateKey, value: stamped });
     // Refresh current employee's perms live if their record was updated
-    if (hopKey === 'hops-employees') refreshPermsFromEmployees(stamped);
+    if (hopKey === 'workdesk-employees') refreshPermsFromEmployees(stamped);
     try { await upsertRecord(hopKey, stamped); } catch (e) { console.error('Save error:', e); } finally { setIsSaving(false); }
   }, [refreshPermsFromEmployees]);
 
@@ -95,7 +95,7 @@ export function AppProvider({ children }) {
     const stamped = items.map((r) => r ? { ...r, updatedAt: nowMs } : r);
     ls.set(hopKey, stamped);
     console.log('[saveSingle]', hopKey, 'item.id=', item?.id, 'rows=', stamped.length);
-    ls.set('hops-last-local-write', { key: hopKey, at: nowMs });
+    ls.set('workdesk-last-local-write', { key: hopKey, at: nowMs });
     dispatch({ type: 'SET_KEY', key: stateKey, value: stamped });
     try { await upsertSingle(hopKey, item); } catch (e) { console.error('SaveSingle error:', e); } finally { setIsSaving(false); }
   }, []);
@@ -107,13 +107,13 @@ export function AppProvider({ children }) {
     function loadFromLS() {
       const merged = {};
       keys.forEach((k) => { merged[KEY_MAP[k]] = ls.get(k, []); });
-      merged.emailCfg = ls.get('hops-email', initialState.emailCfg);
+      merged.emailCfg = ls.get('workdesk-email', initialState.emailCfg);
       merged.trash = purgeOldTrash(merged.trash || [], ONE_YEAR_MS);
       const cycled = autoCycleTasks(merged.tasks || []);
       if (cycled.length) {
         merged.tasks = [...(merged.tasks || []), ...cycled];
-        ls.set('hops-tasks', merged.tasks);
-        upsertRecord('hops-tasks', cycled); // also persist to Supabase from fallback path
+        ls.set('workdesk-tasks', merged.tasks);
+        upsertRecord('workdesk-tasks', cycled); // also persist to Supabase from fallback path
       }
       return merged;
     }
@@ -136,7 +136,7 @@ export function AppProvider({ children }) {
         // whose id matches a delete we recorded but that didn't propagate to
         // Supabase. Without this, a delete that the verify SELECT misread as
         // success would resurrect on the very next page refresh.
-        const recentDeletesAll = ls.get('hops-recent-deletes', []);
+        const recentDeletesAll = ls.get('workdesk-recent-deletes', []);
         const recentDeleteCutoff = Date.now() - 5 * 60 * 1000;
 
         keys.forEach((k, i) => {
@@ -155,7 +155,7 @@ export function AppProvider({ children }) {
           const stale = lsOnly.slice();
 
           // ─── Drop SB-only rows the user recently tried to delete ──────────
-          // If we have a hops-recent-deletes entry for an id that's still in
+          // If we have a workdesk-recent-deletes entry for an id that's still in
           // SB (but not in LS — the user's local delete already removed it),
           // the Supabase delete didn't persist. Strip it from SB and re-attempt
           // the delete. Without this, the init merge would happily re-add the
@@ -213,10 +213,10 @@ export function AppProvider({ children }) {
           merged[KEY_MAP[k]] = [...resolvedSbData, ...pending];
           ls.set(k, [...resolvedSbData, ...pending]);
           // DEBUG: trace init merge for tasks to catch reverts
-          if (k === 'hops-tasks') {
+          if (k === 'workdesk-tasks') {
             const sbBreakdown = sbDataFiltered.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
             const lsBreakdown = lsData.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
-            console.log(`[init] hops-tasks: sbData (${sbDataFiltered.length})=${JSON.stringify(sbBreakdown)}, lsData (${lsData.length})=${JSON.stringify(lsBreakdown)}, pending=${pending.length}, stale=${stale.length}, lsNewer=${lsNewerRows.length}, reDelete=${reDeleteIds.length}`);
+            console.log(`[init] workdesk-tasks: sbData (${sbDataFiltered.length})=${JSON.stringify(sbBreakdown)}, lsData (${lsData.length})=${JSON.stringify(lsBreakdown)}, pending=${pending.length}, stale=${stale.length}, lsNewer=${lsNewerRows.length}, reDelete=${reDeleteIds.length}`);
             if (lsNewerRows.length) {
               console.log('[init] ⚠️ LS rows newer than SB — re-upserting:', lsNewerRows.map(r => ({ id: r.id, name: r.name, status: r.status, lsTs: tsOf(r), sbTs: tsOf(sbData.find(s => s.id === r.id) || {}) })));
             }
@@ -235,24 +235,24 @@ export function AppProvider({ children }) {
             reDeleteIds.forEach((id) => { deleteRecord(TYPE_MAP[k], id); });
           }
         });
-        ls.set('hops-last-sync', Date.now());
+        ls.set('workdesk-last-sync', Date.now());
 
-        merged.emailCfg = ls.get('hops-email', initialState.emailCfg);
+        merged.emailCfg = ls.get('workdesk-email', initialState.emailCfg);
         merged.trash = purgeOldTrash(merged.trash || [], ONE_YEAR_MS);
 
         // Remove duplicate pending cycle children before cycling
         const dupIds = getDuplicateCycleIds(merged.tasks || []);
         if (dupIds.length) {
           merged.tasks = merged.tasks.filter(t => !dupIds.includes(t.id));
-          ls.set('hops-tasks', merged.tasks);
-          dupIds.forEach(id => deleteRecord('hops-tasks', id));
+          ls.set('workdesk-tasks', merged.tasks);
+          dupIds.forEach(id => deleteRecord('workdesk-tasks', id));
         }
 
         const cycled = autoCycleTasks(merged.tasks || []);
         if (cycled.length) {
           merged.tasks = [...merged.tasks, ...cycled];
-          ls.set('hops-tasks', merged.tasks);
-          upsertRecord('hops-tasks', cycled);
+          ls.set('workdesk-tasks', merged.tasks);
+          upsertRecord('workdesk-tasks', cycled);
         }
 
         clearTimeout(fallbackTimer);
@@ -281,7 +281,7 @@ export function AppProvider({ children }) {
       // This guards against the realtime event firing before the new row is
       // visible to subsequent reads — without this, an in-flight task would be
       // wiped out the moment realtime fired.
-      const lastWrite = ls.get('hops-last-local-write', null);
+      const lastWrite = ls.get('workdesk-last-local-write', null);
       // When we have a recent local write to THIS key, prefer LS over fresh
       // entirely. Supabase can take 100ms+ to echo an upsert back through
       // realtime — if a realtime event fires in that window, `fresh` would
@@ -294,9 +294,9 @@ export function AppProvider({ children }) {
       const recentWriteCutoff = Date.now() - 8000;
       const recentLocalWrite = lastWrite && lastWrite.key === key && lastWrite.at >= recentWriteCutoff;
       // DEBUG: trace realtime events on tasks to catch reverts
-      if (key === 'hops-tasks') {
+      if (key === 'workdesk-tasks') {
         const freshBreakdown = fresh.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
-        console.log(`[realtime] hops-tasks event: recentLocalWrite=${recentLocalWrite}, fresh breakdown:`, freshBreakdown);
+        console.log(`[realtime] workdesk-tasks event: recentLocalWrite=${recentLocalWrite}, fresh breakdown:`, freshBreakdown);
       }
       let merged;
       if (recentLocalWrite) {
@@ -329,7 +329,7 @@ export function AppProvider({ children }) {
           return fRow;
         });
         merged = resolvedFresh;
-        if (key === 'hops-tasks' && overrideLsIds.size) {
+        if (key === 'workdesk-tasks' && overrideLsIds.size) {
           console.log(`[realtime] ⚠️ ${overrideLsIds.size} task(s) overridden from LS (LS newer than SB):`, [...overrideLsIds]);
         }
       }
@@ -348,7 +348,7 @@ export function AppProvider({ children }) {
       // `resolvedFresh` (a fresh.map(...) output) or a spread of it, so
       // `merged !== fresh` is always true now. We still splice from both
       // to be defensive — `fresh` may be referenced by `loadAll` callers.
-      const recentDeletes = ls.get('hops-recent-deletes', []);
+      const recentDeletes = ls.get('workdesk-recent-deletes', []);
       const deleteCutoff = Date.now() - 5 * 60 * 1000;
       if (!recentLocalWrite && recentDeletes.length) {
         // Build a fast lookup for this key's pending deletes within the window.
@@ -367,7 +367,7 @@ export function AppProvider({ children }) {
         }
       }
 
-      if (key === 'hops-tasks' && !recentLocalWrite && !recentDeletes.length) {
+      if (key === 'workdesk-tasks' && !recentLocalWrite && !recentDeletes.length) {
         // Always apply autoCycle on fresh Supabase data so cycled tasks survive realtime refreshes.
         // Skip during a recent local write OR recent delete — both situations
         // mean the user just mutated the data, and autoCycle could create
@@ -385,7 +385,7 @@ export function AppProvider({ children }) {
 
       ls.set(key, merged);
       dispatch({ type: 'SET_KEY', key: stateKey, value: merged });
-      if (key === 'hops-employees') refreshPermsFromEmployees(merged);
+      if (key === 'workdesk-employees') refreshPermsFromEmployees(merged);
     });
     return cleanup;
   }, [refreshPermsFromEmployees]);
@@ -398,13 +398,13 @@ export function AppProvider({ children }) {
       if (today === lastDate) return;
       lastDate = today;
       // Date changed — read fresh tasks from localStorage (closure-safe)
-      const currentTasks = ls.get('hops-tasks', []);
+      const currentTasks = ls.get('workdesk-tasks', []);
       const cycled = autoCycleTasks(currentTasks);
       if (cycled.length) {
         const updated = [...currentTasks, ...cycled];
-        ls.set('hops-tasks', updated);
+        ls.set('workdesk-tasks', updated);
         dispatch({ type: 'SET_KEY', key: 'tasks', value: updated });
-        upsertRecord('hops-tasks', cycled);
+        upsertRecord('workdesk-tasks', cycled);
       }
     }, 60 * 1000); // check every minute
     return () => clearInterval(timer);
@@ -418,7 +418,7 @@ export function AppProvider({ children }) {
         action, details: details || '', at: new Date().toISOString(), atStr: fDateTime(),
       };
       const newLog = [entry, ...(state.actLog || [])].slice(0, 500);
-      await save('hops-actlog', newLog);
+      await save('workdesk-actlog', newLog);
     },
     [currentUser, currentRole, state.actLog, save]
   );
@@ -427,13 +427,13 @@ export function AppProvider({ children }) {
   const moveToTrash = useCallback(
     async (type, id) => {
       const typeMap = {
-        task: { arr: state.tasks, key: 'hops-tasks', stateKey: 'tasks' },
-        issue: { arr: state.issues, key: 'hops-issues', stateKey: 'issues' },
-        handover: { arr: state.handovers, key: 'hops-handovers', stateKey: 'handovers' },
-        employee: { arr: state.employees, key: 'hops-employees', stateKey: 'employees' },
-        dept: { arr: state.depts, key: 'hops-depts', stateKey: 'depts' },
-        admin: { arr: state.admins, key: 'hops-admins', stateKey: 'admins' },
-        delegation: { arr: state.delegations, key: 'hops-delegations', stateKey: 'delegations' },
+        task: { arr: state.tasks, key: 'workdesk-tasks', stateKey: 'tasks' },
+        issue: { arr: state.issues, key: 'workdesk-issues', stateKey: 'issues' },
+        handover: { arr: state.handovers, key: 'workdesk-handovers', stateKey: 'handovers' },
+        employee: { arr: state.employees, key: 'workdesk-employees', stateKey: 'employees' },
+        dept: { arr: state.depts, key: 'workdesk-depts', stateKey: 'depts' },
+        admin: { arr: state.admins, key: 'workdesk-admins', stateKey: 'admins' },
+        delegation: { arr: state.delegations, key: 'workdesk-delegations', stateKey: 'delegations' },
       };
       const cfg = typeMap[type];
       if (!cfg) return;
@@ -450,12 +450,12 @@ export function AppProvider({ children }) {
       // fires AFTER LS was updated but BEFORE the Supabase delete completes
       // would call loadAll → return fresh data still containing the deleted
       // row → dispatch stale state and resurrect it.
-      const recentDeletes = ls.get('hops-recent-deletes', []);
+      const recentDeletes = ls.get('workdesk-recent-deletes', []);
       recentDeletes.push({ key: cfg.key, id, at: Date.now() });
       // Keep only the last 5 minutes of deletes
       const cutoff = Date.now() - 5 * 60 * 1000;
-      ls.set('hops-recent-deletes', recentDeletes.filter(d => d.at >= cutoff));
-      ls.set('hops-last-local-write', { key: cfg.key, at: Date.now() });
+      ls.set('workdesk-recent-deletes', recentDeletes.filter(d => d.at >= cutoff));
+      ls.set('workdesk-last-local-write', { key: cfg.key, at: Date.now() });
       dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: newArr });
       const delResult = await deleteRecord(type, id);
       // Under deleteRecord's current semantics, `no_rows` means "verify
@@ -473,9 +473,9 @@ export function AppProvider({ children }) {
         // trusting the now-rolled-back LS for the next 8 seconds. Without
         // this, a realtime event within the window would dispatch LS
         // (no X) and the user would see X flicker in and out.
-        ls.set('hops-last-local-write', null);
-        const rd = ls.get('hops-recent-deletes', []).filter((d) => !(d.key === cfg.key && d.id === id));
-        ls.set('hops-recent-deletes', rd);
+        ls.set('workdesk-last-local-write', null);
+        const rd = ls.get('workdesk-recent-deletes', []).filter((d) => !(d.key === cfg.key && d.id === id));
+        ls.set('workdesk-recent-deletes', rd);
         return { error: true, reason: 'no_rows', message: 'Supabase delete did not persist after retry — row may have been filtered by RLS or hit a persistent read-replica lag spike.' };
       }
       if (!delResult || !delResult.ok) {
@@ -483,9 +483,9 @@ export function AppProvider({ children }) {
         console.error('moveToTrash: deleteRecord failed', { type, id, delResult });
         ls.set(cfg.key, cfg.arr);
         dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: cfg.arr });
-        ls.set('hops-last-local-write', null);
-        const rd = ls.get('hops-recent-deletes', []).filter((d) => !(d.key === cfg.key && d.id === id));
-        ls.set('hops-recent-deletes', rd);
+        ls.set('workdesk-last-local-write', null);
+        const rd = ls.get('workdesk-recent-deletes', []).filter((d) => !(d.key === cfg.key && d.id === id));
+        ls.set('workdesk-recent-deletes', rd);
         return { error: true, reason: delResult?.reason || 'unknown', message: delResult?.message || '' };
       }
       const trashItem = {
@@ -494,7 +494,7 @@ export function AppProvider({ children }) {
         autoDeleteAt: new Date(Date.now() + ONE_YEAR_MS).toISOString(),
       };
       const newTrash = [...state.trash, trashItem];
-      await save('hops-trash', newTrash);
+      await save('workdesk-trash', newTrash);
       await logAct('DELETE ' + type.toUpperCase(), data.name || data.title || data.taskName || id);
       return data;
     },
@@ -507,13 +507,13 @@ export function AppProvider({ children }) {
       const item = state.trash.find((t) => t.id === trashItemId);
       if (!item) return false;
       const typeMap = {
-        task: { arr: state.tasks, key: 'hops-tasks', stateKey: 'tasks' },
-        issue: { arr: state.issues, key: 'hops-issues', stateKey: 'issues' },
-        handover: { arr: state.handovers, key: 'hops-handovers', stateKey: 'handovers' },
-        employee: { arr: state.employees, key: 'hops-employees', stateKey: 'employees' },
-        dept: { arr: state.depts, key: 'hops-depts', stateKey: 'depts' },
-        admin: { arr: state.admins, key: 'hops-admins', stateKey: 'admins' },
-        delegation: { arr: state.delegations, key: 'hops-delegations', stateKey: 'delegations' },
+        task: { arr: state.tasks, key: 'workdesk-tasks', stateKey: 'tasks' },
+        issue: { arr: state.issues, key: 'workdesk-issues', stateKey: 'issues' },
+        handover: { arr: state.handovers, key: 'workdesk-handovers', stateKey: 'handovers' },
+        employee: { arr: state.employees, key: 'workdesk-employees', stateKey: 'employees' },
+        dept: { arr: state.depts, key: 'workdesk-depts', stateKey: 'depts' },
+        admin: { arr: state.admins, key: 'workdesk-admins', stateKey: 'admins' },
+        delegation: { arr: state.delegations, key: 'workdesk-delegations', stateKey: 'delegations' },
       };
       const cfg = typeMap[item.type];
       if (!cfg) return false;
@@ -524,7 +524,7 @@ export function AppProvider({ children }) {
       dispatch({ type: 'SET_KEY', key: cfg.stateKey, value: newArr });
       await upsertSingle(cfg.key, item.data);
       const newTrash = state.trash.filter((t) => t.id !== trashItemId);
-      await save('hops-trash', newTrash);
+      await save('workdesk-trash', newTrash);
       await deleteRecord('trash', trashItemId);
       await logAct('RESTORED ' + item.type.toUpperCase(), item.data.name || item.data.title || item.data.taskName || '');
       return true;
@@ -541,9 +541,9 @@ export function AppProvider({ children }) {
     const cycled = autoCycleTasks(state.tasks);
     if (!cycled.length) return;
     const updated = [...state.tasks, ...cycled];
-    ls.set('hops-tasks', updated);
+    ls.set('workdesk-tasks', updated);
     dispatch({ type: 'SET_KEY', key: 'tasks', value: updated });
-    upsertRecord('hops-tasks', cycled);
+    upsertRecord('workdesk-tasks', cycled);
   }, [state.tasks]);
 
   return (

@@ -41,7 +41,7 @@ export default function Notices() {
       isRead: false,
       sentAt: new Date().toISOString(),
     };
-    await save('hops-notices', [...notices, notice]);
+    await save('workdesk-notices', [...notices, notice]);
     await logAct('NOTICE SENT', `To: ${emp.name} — ${form.subject}`);
     setForm({ dept: '', toEmpId: '', subject: '', message: '' });
     setSendMsg('✅ Notice sent successfully!');
@@ -50,13 +50,13 @@ export default function Notices() {
 
   // Mark as read
   async function markRead(id) {
-    await save('hops-notices', notices.map(n => n.id === id ? { ...n, isRead: true } : n));
+    await save('workdesk-notices', notices.map(n => n.id === id ? { ...n, isRead: true } : n));
   }
 
   async function markAllRead() {
     const myNotices = notices.filter(n => n.toEmpId === currentUser?.empId);
     if (!myNotices.some(n => !n.isRead)) return;
-    await save('hops-notices', notices.map(n => n.toEmpId === currentUser?.empId ? { ...n, isRead: true } : n));
+    await save('workdesk-notices', notices.map(n => n.toEmpId === currentUser?.empId ? { ...n, isRead: true } : n));
   }
 
   // Employees: all received notices. Mainadmin: all sent notices.
@@ -80,7 +80,7 @@ export default function Notices() {
   }
 
   async function markAlertRead(id) {
-    await save('hops-notices', notices.map(n => n.id === id ? { ...n, isRead: true } : n));
+    await save('workdesk-notices', notices.map(n => n.id === id ? { ...n, isRead: true } : n));
   }
 
   const typeColors = {

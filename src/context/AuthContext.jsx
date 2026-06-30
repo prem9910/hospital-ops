@@ -25,7 +25,7 @@ function timingSafeEqual(a, b) {
 }
 
 export function AuthProvider({ children }) {
-  // Lazy useState initializers read hops-session SYNCHRONOUSLY before the
+  // Lazy useState initializers read workdesk-session SYNCHRONOUSLY before the
   // first render — so the very first AppLayout render already sees a
   // populated currentRole/currentUser. Without this, AppLayout's
   // `if (!currentRole) return <Navigate to="/login" replace />` (line 45)
@@ -36,19 +36,19 @@ export function AuthProvider({ children }) {
   // app reloaded.
   const [currentRole, setCurrentRole] = useState(() => {
     try {
-      const s = ls.get('hops-session', null);
+      const s = ls.get('workdesk-session', null);
       return s?.role || '';
     } catch { return ''; }
   });
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const s = ls.get('hops-session', null);
+      const s = ls.get('workdesk-session', null);
       return s?.user?.name
         ? s.user
         : { name: '', dept: '', adminId: '', perms: {} };
     } catch { return { name: '', dept: '', adminId: '', perms: {} }; }
   });
-  const [savedStaffName, setSavedStaffName] = useState(() => ls.get('hops-saved-staff-name', ''));
+  const [savedStaffName, setSavedStaffName] = useState(() => ls.get('workdesk-saved-staff-name', ''));
   const inactivityTimer = useRef(null);
   const inactivityInterval = useRef(null);
   const [inactivityPct, setInactivityPct] = useState(100);
@@ -58,7 +58,7 @@ export function AuthProvider({ children }) {
   const currentRoleRef = useRef(currentRole);
   currentRoleRef.current = currentRole;
 
-  const clearSession = useCallback(() => localStorage.removeItem('hops-session'), []);
+  const clearSession = useCallback(() => localStorage.removeItem('workdesk-session'), []);
 
   const stopInactivityTimer = useCallback(() => {
     clearTimeout(inactivityTimer.current);
@@ -148,7 +148,7 @@ export function AuthProvider({ children }) {
       const updatedUser = { ...currentUser, perms: newPermsObj, dept: emp.dept };
       setCurrentRole('admin');
       setCurrentUser(updatedUser);
-      ls.set('hops-session', { role: 'admin', user: updatedUser });
+      ls.set('workdesk-session', { role: 'admin', user: updatedUser });
       return;
     }
 
@@ -158,7 +158,7 @@ export function AuthProvider({ children }) {
 
     const updatedUser = { ...currentUser, perms: newPermsObj, dept: emp.dept };
     setCurrentUser(updatedUser);
-    ls.set('hops-session', { role: currentRole, user: updatedUser });
+    ls.set('workdesk-session', { role: currentRole, user: updatedUser });
   }, [currentRole, currentUser]);
 
   const adminLogin = useCallback(
@@ -175,7 +175,7 @@ export function AuthProvider({ children }) {
         const user = { name: MAIN_ADMIN_USER, dept: 'MAIN ADMIN', adminId: 'mainadmin', perms: {} };
         setCurrentRole('mainadmin');
         setCurrentUser(user);
-        ls.set('hops-session', { role: 'mainadmin', user });
+        ls.set('workdesk-session', { role: 'mainadmin', user });
         return { ok: true, role: 'mainadmin' };
       }
       return { ok: false };
@@ -187,7 +187,7 @@ export function AuthProvider({ children }) {
     (nameRaw, password, employees) => {
       if (!nameRaw || !password) return { ok: false, error: '❌ Please enter your username and password.' };
       const nUp = nameRaw.toUpperCase();
-      // TODO(security): staff passwords are stored in plaintext in hops-employees
+      // TODO(security): staff passwords are stored in plaintext in workdesk-employees
       // and compared client-side. Migrate to Supabase Auth + bcrypt for any
       // production deployment. Until then, at least stop leaking match info
       // via timing.
@@ -207,17 +207,17 @@ export function AuthProvider({ children }) {
         const user = { name: emp.name, dept: emp.dept, empId: emp.id, username: emp.username || emp.name, perms: permsObj };
         setCurrentRole('admin');
         setCurrentUser(user);
-        ls.set('hops-session', { role: 'admin', user });
+        ls.set('workdesk-session', { role: 'admin', user });
         return { ok: true, role: 'admin' };
       }
 
       // Regular staff
       const user = { name: emp.name, dept: emp.dept, empId: emp.id, username: emp.username || emp.name, perms: {} };
       setSavedStaffName(emp.name);
-      ls.set('hops-saved-staff-name', emp.name);
+      ls.set('workdesk-saved-staff-name', emp.name);
       setCurrentRole('staff');
       setCurrentUser(user);
-      ls.set('hops-session', { role: 'staff', user });
+      ls.set('workdesk-session', { role: 'staff', user });
       return { ok: true, role: 'staff' };
     },
     []

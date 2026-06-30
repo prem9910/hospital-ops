@@ -216,7 +216,7 @@ export default function Login() {
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <span style={{ fontSize: 50, display: 'block', marginBottom: 10, animation: 'logoFloat 3.2s ease-in-out infinite', filter: isDark ? 'drop-shadow(0 0 18px rgba(20,165,171,0.5))' : 'drop-shadow(0 4px 12px rgba(13,115,119,0.25))' }}>🏥</span>
-            <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: titleColor, marginBottom: 5, transition: 'color 0.3s' }}>Hospital Ops System</h1>
+            <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: titleColor, marginBottom: 5, transition: 'color 0.3s' }}>Work Desk</h1>
             <p style={{ fontSize: 10, color: subtitleColor, letterSpacing: 2.5, textTransform: 'uppercase', transition: 'color 0.3s' }}>Operations Management Platform</p>
           </div>
 

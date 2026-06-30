@@ -48,8 +48,8 @@ export default function ActivityLog() {
     if (clearing) return;
     setClearing(true);
     try {
-      await deleteAllFromTable('hops-actlog');
-      await save('hops-actlog', []);
+      await deleteAllFromTable('workdesk-actlog');
+      await save('workdesk-actlog', []);
     } finally {
       setClearing(false);
       setShowConfirm(false);

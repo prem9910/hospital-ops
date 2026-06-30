@@ -1,6 +1,6 @@
-# 🏥 Hospital Ops
+# 🗂️ Work Desk
 
-A full-featured **Hospital Operations Management System** built with React 19 + Vite. Designed to streamline daily hospital workflows — task management, staff handovers, issue tracking, MIS reporting, and more.
+A full-featured **Operations Management Platform** built with React 19 + Vite. Designed to streamline daily team workflows — task management, staff handovers, issue tracking, MIS reporting, and more.
 
 ---
 
@@ -19,7 +19,7 @@ A full-featured **Hospital Operations Management System** built with React 19 + 
 | **Checklists** | Department-wise daily checklists |
 | **Live Tracking** | Real-time task completion tracking across departments |
 | **Staff Management** | Add/edit employees with role-based permissions |
-| **Departments** | Manage hospital departments |
+| **Departments** | Manage team departments |
 | **Activity Log** | Full audit trail of all actions (30 entries per page) |
 | **Trash** | Soft-delete with 90-day auto-purge and restore (20 entries per page) |
 | **Settings** | System-wide configuration |
@@ -39,7 +39,7 @@ A full-featured **Hospital Operations Management System** built with React 19 + 
 ## 📁 Project Structure
 
 ```
-hospital-ops/
+workdesk/
 ├── src/
 │   ├── pages/          # All page components (Tasks, Issues, Staff, etc.)
 │   ├── components/
@@ -76,8 +76,8 @@ hospital-ops/
 
 ```bash
 # Clone the repo
-git clone https://github.com/misexecutivesatkriti-collab/hospital-ops.git
-cd hospital-ops
+git clone https://github.com/prem9910/workdesk.git
+cd workdesk
 
 # Install frontend dependencies
 npm install

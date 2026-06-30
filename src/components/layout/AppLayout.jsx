@@ -68,7 +68,7 @@ export default function AppLayout() {
     setActiveNotice(n);
     // dept_change_approval stays unread until explicitly accepted
     if (!n.isRead && n.type !== 'dept_change_approval') {
-      await save('hops-notices', (notices || []).map(x => x.id === n.id ? { ...x, isRead: true } : x));
+      await save('workdesk-notices', (notices || []).map(x => x.id === n.id ? { ...x, isRead: true } : x));
     }
   }
 
@@ -140,7 +140,7 @@ export default function AppLayout() {
           return { ...t, assignedTo: others };
         })
         .filter(Boolean);
-      await save('hops-tasks', updatedTasks);
+      await save('workdesk-tasks', updatedTasks);
       // Actually DELETE the rows we removed from the local array. Without
       // this, save()'s upsert only updates/inserts rows in the array — the
       // filtered-out (deleted) rows STAY in Supabase forever. On the next
@@ -149,7 +149,7 @@ export default function AppLayout() {
       // for each id (Supabase real-time confirms via SELECT-verify retry).
       const allRemovedIds = [...removedTaskIds, ...removedChildIds];
       for (const id of allRemovedIds) {
-        try { await deleteRecord('hops-tasks', id); } catch (e) { console.warn('acceptDeptChange deleteRecord failed for', id, e); }
+        try { await deleteRecord('workdesk-tasks', id); } catch (e) { console.warn('acceptDeptChange deleteRecord failed for', id, e); }
       }
       const parentSummary = `${removedTaskIds.length} parent(s) removed, ${unassignedOnlyIds.length} parent(s) unassigned-only`;
       const childSummary = `${removedChildIds.length} child(ren) removed, ${unassignedOnlyChildIds.length} child(ren) unassigned-only`;
@@ -163,7 +163,7 @@ export default function AppLayout() {
     const updatedEmps = (employees || []).map(e =>
       e.id === n.meta.empId ? { ...e, dept: n.meta.newDept, pendingDept: '' } : e
     );
-    await save('hops-employees', updatedEmps);
+    await save('workdesk-employees', updatedEmps);
     // Mark approval notice as read AND record acceptance in meta
     const updatedNotices = (notices || []).map(x =>
       x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, accepted: true, acceptedAt: nowStr, clearedTaskIds } } : x
@@ -185,7 +185,7 @@ export default function AppLayout() {
       type: 'dept_change_accepted', isRead: false, sentAt: nowStr,
       meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept, clearedTaskIds },
     };
-    await save('hops-notices', [...updatedNotices, confirmNotice, adminAlert]);
+    await save('workdesk-notices', [...updatedNotices, confirmNotice, adminAlert]);
     setActiveNotice(null);
   }
 
@@ -198,7 +198,7 @@ export default function AppLayout() {
     const updatedEmps = (employees || []).map(e =>
       e.id === n.meta.empId ? { ...e, pendingDept: '' } : e
     );
-    await save('hops-employees', updatedEmps);
+    await save('workdesk-employees', updatedEmps);
     // Mark approval notice as read AND record rejection in meta
     const updatedNotices = (notices || []).map(x =>
       x.id === n.id ? { ...x, isRead: true, meta: { ...x.meta, rejected: true, rejectedAt: nowStr } } : x
@@ -220,7 +220,7 @@ export default function AppLayout() {
       type: 'dept_change_rejected', isRead: false, sentAt: nowStr,
       meta: { empId: n.meta.empId, newDept: n.meta.newDept, oldDept: n.meta.oldDept },
     };
-    await save('hops-notices', [...updatedNotices, confirmNotice, adminAlert]);
+    await save('workdesk-notices', [...updatedNotices, confirmNotice, adminAlert]);
     await logAct('DEPT CHANGE REJECTED', `${n.toName} declined change from "${n.meta.oldDept || '—'}" to "${n.meta.newDept}" — staying in current dept`);
     setActiveNotice(null);
   }
@@ -230,7 +230,7 @@ export default function AppLayout() {
     try { return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return iso; }
   }
 
-  const pageTitle = PAGE_TITLES[location.pathname] || 'Hospital Ops';
+  const pageTitle = PAGE_TITLES[location.pathname] || 'Work Desk';
 
   return (
     <>
@@ -613,7 +613,7 @@ function SidebarMenu({ currentPath, onNavigate, mobileOpen, onMobileClose, curre
         transition: 'background 0.3s, transform 0.3s',
       }}>
         <div style={{ padding: '16px', borderBottom: `1px solid ${navBorder}` }}>
-          <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: brandColor, lineHeight: 1.3, marginBottom: 6 }}>🏥 Hospital Ops</h1>
+          <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 15, color: brandColor, lineHeight: 1.3, marginBottom: 6 }}>🗂️ Work Desk</h1>
           <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 10, fontWeight: 800, letterSpacing: 0.7, textTransform: 'uppercase', ...chipStyle }}>
             {chipLabel}
           </span>

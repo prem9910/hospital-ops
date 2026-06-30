@@ -62,7 +62,7 @@ export default function Delegations() {
     );
     if (!ok) return;
     const keep = delegations.filter((d) => d.task && String(d.task).trim() && !/unknown/i.test(d.task));
-    await save('hops-delegations', keep);
+    await save('workdesk-delegations', keep);
     await logAct('CLEANUP', `Removed ${badRows.length} empty/unknown delegation(s)`);
   }
 
@@ -71,7 +71,7 @@ export default function Delegations() {
     if (!form.doerName) { alert('Please pick who will do this task (Doer).'); return; }
     if (!form.dueDate) { alert('Due Date is required.'); return; }
     const obj = { id: uid(), task: form.task.toUpperCase(), doerName: form.doerName.toUpperCase(), dept: form.dept, dueDate: form.dueDate, remarks: form.remarks, status: 'pending', createdBy: currentUser.name, createdAt: toDay(), extensionRequests: [] };
-    await save('hops-delegations', [...delegations, obj]);
+    await save('workdesk-delegations', [...delegations, obj]);
     await logAct('DELEGATION CREATED', obj.task);
     setShowForm(false);
     setForm({ task: '', doerName: '', dept: '', dueDate: '', remarks: '' });
@@ -79,7 +79,7 @@ export default function Delegations() {
 
   async function changeStatus(d, newStatus) {
     const updated = { ...d, status: newStatus };
-    await save('hops-delegations', delegations.map((x) => x.id === d.id ? updated : x));
+    await save('workdesk-delegations', delegations.map((x) => x.id === d.id ? updated : x));
     await logAct('DELEGATION STATUS: ' + newStatus.toUpperCase(), d.task);
     // Notify main admin bell when delegation is completed or status changes.
     // Body is laid out as a clean labelled report (mirrors the task-completion
@@ -122,7 +122,7 @@ export default function Delegations() {
     }
     const req = { requestedAt: new Date().toISOString(), reason: extReason.toUpperCase(), newDate: extDate };
     const updated = { ...showExtModal, status: 'extension-requested', extensionRequests: [...existing, req] };
-    await save('hops-delegations', delegations.map((x) => x.id === showExtModal.id ? updated : x));
+    await save('workdesk-delegations', delegations.map((x) => x.id === showExtModal.id ? updated : x));
     await logAct('EXTENSION REQUESTED', showExtModal.task);
     setShowExtModal(null); setExtReason(''); setExtDate('');
   }
@@ -131,7 +131,7 @@ export default function Delegations() {
     const lastReq = (d.extensionRequests || []).slice(-1)[0];
     if (!lastReq) return;
     const updated = { ...d, status: 'extended', dueDate: lastReq.newDate };
-    await save('hops-delegations', delegations.map((x) => x.id === d.id ? updated : x));
+    await save('workdesk-delegations', delegations.map((x) => x.id === d.id ? updated : x));
     await logAct('EXTENSION APPROVED', d.task);
   }
 

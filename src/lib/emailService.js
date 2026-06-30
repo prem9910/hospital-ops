@@ -10,16 +10,16 @@ import {
 
 const SERVER = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
-// Read the email config. The settings page writes it as `hops-email`; an
-// older version of this service used the `hops-emailcfg` key which left a
+// Read the email config. The settings page writes it as `workdesk-email`; an
+// older version of this service used the `workdesk-emailcfg` key which left a
 // bunch of deployments with empty cfg. New key wins; fall back to old key
 // only if new key is missing — never overwrite, so user-saved config
 // can't be clobbered.
 function getCfg() {
   try {
-    const newer = JSON.parse(localStorage.getItem('hops-email') || '{}');
+    const newer = JSON.parse(localStorage.getItem('workdesk-email') || '{}');
     if (newer && Object.keys(newer).length > 0) return newer;
-    return JSON.parse(localStorage.getItem('hops-emailcfg') || '{}');
+    return JSON.parse(localStorage.getItem('workdesk-emailcfg') || '{}');
   } catch {
     return {};
   }
@@ -42,7 +42,7 @@ async function send({ to_email, to_name, subject, message_html }) {
 export async function sendWelcomeEmail(employee) {
   if (!employee?.email) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
   const message_html = buildWelcomeHtml({
     to_name: employee.name,
     to_email: employee.email,
@@ -53,7 +53,7 @@ export async function sendWelcomeEmail(employee) {
   await send({
     to_email:     employee.email,
     to_name:      employee.name,
-    subject:      `🏥 Hospital Ops — Your Account Is Ready, ${employee.name}!`,
+    subject:      `🏥 Work Desk — Your Account Is Ready, ${employee.name}!`,
     message_html,
   });
 }
@@ -63,7 +63,7 @@ export async function sendWelcomeEmail(employee) {
 export async function sendTaskAssignedEmail(task, assignees, assignedBy, taskType = 'Normal Task') {
   if (!assignees?.length) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
 
   for (const emp of assignees) {
     if (!emp?.email) continue;
@@ -93,7 +93,7 @@ export async function sendTaskAssignedEmail(task, assignees, assignedBy, taskTyp
 export async function sendTaskCompletedEmail(task, employee) {
   if (!employee?.email) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
   const now = new Date();
   const message_html = buildCompletedHtml({
     to_name:      employee.name,
@@ -117,7 +117,7 @@ export async function sendTaskCompletedEmail(task, employee) {
 export async function sendHandoverTasksEmail(handover, toEmployee, taskList) {
   if (!toEmployee?.email || !taskList?.length) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
   const message_html = buildHandoverTasksHtml({
     to_name:    toEmployee.name,
     from_name:  handover.fromName,
@@ -139,7 +139,7 @@ export async function sendHandoverTasksEmail(handover, toEmployee, taskList) {
 export async function sendHandoverCreatedEmail(handover, toEmployee) {
   if (!toEmployee?.email) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
   const message_html = buildHandoverCreatedHtml({
     to_name:    toEmployee.name,
     from_name:  handover.fromName,
@@ -162,7 +162,7 @@ export async function sendHandoverCreatedEmail(handover, toEmployee) {
 export async function sendHandoverResponseEmail(handover, fromEmployee, decision) {
   if (!fromEmployee?.email) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
   const message_html = buildHandoverResponseHtml({
     to_name:    fromEmployee.name,
     by_name:    handover.toName,
@@ -188,7 +188,7 @@ export async function sendHandoverResponseEmail(handover, fromEmployee, decision
 export async function sendReminderEmail(task, employee, reminderType = 'scheduled') {
   if (!employee?.email) return;
   const cfg = getCfg();
-  const hospital_name = cfg.hospitalName || 'Hospital Operations';
+  const hospital_name = cfg.hospitalName || 'Work Desk';
   const message_html = buildReminderHtml({
     to_name:       employee.name,
     task_name:     task.name,

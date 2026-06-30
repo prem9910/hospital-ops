@@ -27,7 +27,7 @@ export default function Departments() {
 
   async function doSave(obj, ed) {
     const newDepts = ed ? depts.map((d) => d.id === obj.id ? obj : d) : [...depts, obj];
-    await save('hops-depts', newDepts);
+    await save('workdesk-depts', newDepts);
 
     const prevName = (ed?.name || '').toUpperCase();
     const newName = obj.name.toUpperCase();
@@ -47,7 +47,7 @@ export default function Departments() {
         }
         return updated;
       });
-      await save('hops-employees', updatedEmps);
+      await save('workdesk-employees', updatedEmps);
     }
 
     await logAct(ed ? 'DEPT UPDATED' : 'DEPT ADDED', obj.name);
@@ -90,7 +90,7 @@ export default function Departments() {
       isRead: false,
       sentAt: new Date().toISOString(),
     }));
-    await save('hops-notices', [...notices, ...newNotices]);
+    await save('workdesk-notices', [...notices, ...newNotices]);
     await logAct('NOTICES SENT', `Task reminder sent to ${pendingModal.empsWithTasks.length} employee(s) in ${pendingModal.editDept.name}`);
     setNoticeSent(true);
   }
@@ -136,9 +136,9 @@ export default function Departments() {
     const updatedIssues = issues.map((i) => (i.dept === dept.name ? { ...i, dept: '' } : i));
     const updatedEmps = employees.map((e) => (e.dept === dept.name ? { ...e, dept: '' } : e));
 
-    await save('hops-tasks', updatedTasks);
-    await save('hops-issues', updatedIssues);
-    await save('hops-employees', updatedEmps);
+    await save('workdesk-tasks', updatedTasks);
+    await save('workdesk-issues', updatedIssues);
+    await save('workdesk-employees', updatedEmps);
     await moveToTrash('dept', dept.id);
     await logAct('DEPT DELETED (CASCADE)', `${dept.name} · cleared dept on ${impact.tasks.length} tasks, ${impact.issues.length} issues, ${impact.emps.length} employees`);
     setDeleteModal(null);

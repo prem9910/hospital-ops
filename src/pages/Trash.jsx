@@ -56,8 +56,8 @@ export default function Trash() {
     setClearing(true);
     const count = trash.length;
     try {
-      await deleteAllFromTable('hops-trash');
-      await save('hops-trash', []);
+      await deleteAllFromTable('workdesk-trash');
+      await save('workdesk-trash', []);
       await logAct('TRASH CLEARED', `${count} items permanently deleted`);
     } finally {
       setClearing(false);

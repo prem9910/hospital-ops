@@ -19,7 +19,7 @@ export default function AssignTask() {
     if (!form.name.trim()) { setMsg('❌ Task name required!'); return; }
     if (!form.dept) { setMsg('❌ Department required!'); return; }
     const obj = { id: uid(), name: form.name.toUpperCase(), dept: form.dept, priority: form.priority, freq: 'daily', time: form.time, schedDate: toDay(), assignedTo: form.assignedTo, notes: form.notes, status: 'pending', createdBy: currentUser.name, createdAt: new Date().toISOString(), activityLog: [] };
-    await save('hops-tasks', [...tasks, obj]);
+    await save('workdesk-tasks', [...tasks, obj]);
     await logAct('TASK ASSIGNED BY STAFF', form.name);
     setMsg('✅ Task assigned successfully!');
     setForm({ name: '', dept: '', priority: 'medium', time: '', assignedTo: [], notes: '' });

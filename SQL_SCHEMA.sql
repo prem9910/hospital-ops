@@ -1,38 +1,45 @@
 -- ============================================================
--- Hospital Operations Management System — Complete SQL Schema
+-- Work Desk — Complete SQL Schema
 -- Supabase (PostgreSQL) — Run this in the Supabase SQL Editor
+-- Migration from hops-/hospital-ops to workdesk-* is data-preserving:
+-- creates workdesk_* tables, copies rows from the legacy tables,
+-- then drops the legacy tables at the end.
 -- ============================================================
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ─── DEPARTMENTS ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS departments (
-  id        TEXT PRIMARY KEY,
-  name      TEXT NOT NULL,
-  head      TEXT DEFAULT '',
-  contact   TEXT DEFAULT '',
-  email     TEXT DEFAULT '',
-  floor     TEXT DEFAULT '',
+CREATE TABLE IF NOT EXISTS workdesk_departments (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  head       TEXT DEFAULT '',
+  contact    TEXT DEFAULT '',
+  email      TEXT DEFAULT '',
+  floor      TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- ─── EMPLOYEES ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS employees (
-  id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  username    TEXT DEFAULT '',
-  dept        TEXT DEFAULT '',
-  designation TEXT DEFAULT '',
-  email       TEXT DEFAULT '',
-  password    TEXT DEFAULT '',
-  contact     TEXT DEFAULT '',
+CREATE TABLE IF NOT EXISTS workdesk_employees (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  username     TEXT DEFAULT '',
+  dept         TEXT DEFAULT '',
+  designation  TEXT DEFAULT '',
+  email        TEXT DEFAULT '',
+  password     TEXT DEFAULT '',
+  contact      TEXT DEFAULT '',
+  is_incharge  BOOLEAN DEFAULT false,
+  perms        JSONB DEFAULT '[]',
   pending_dept TEXT DEFAULT '',
-  created_at  TIMESTAMPTZ DEFAULT now()
+  updated_at   TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ DEFAULT now()
 );
 
 -- ─── ADMINS ──────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS admins (
+CREATE TABLE IF NOT EXISTS workdesk_admins (
   id         TEXT PRIMARY KEY,
   name       TEXT DEFAULT '',
   username   TEXT NOT NULL UNIQUE,
@@ -42,11 +49,12 @@ CREATE TABLE IF NOT EXISTS admins (
   dept       TEXT DEFAULT '',
   perms      JSONB DEFAULT '[]',
   created_by TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- ─── TASKS ───────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS tasks (
+CREATE TABLE IF NOT EXISTS workdesk_tasks (
   id                 TEXT PRIMARY KEY,
   name               TEXT NOT NULL,
   dept               TEXT DEFAULT '',
@@ -70,14 +78,15 @@ CREATE TABLE IF NOT EXISTS tasks (
   completion_history JSONB DEFAULT '[]',
   parent_task_id     TEXT DEFAULT '',
   extensions         JSONB DEFAULT '[]',
+  updated_at         TIMESTAMPTZ,
   created_at         TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_tasks_dept ON tasks(dept);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_workdesk_tasks_dept ON workdesk_tasks(dept);
+CREATE INDEX IF NOT EXISTS idx_workdesk_tasks_status ON workdesk_tasks(status);
 
 -- ─── ISSUES ──────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS issues (
+CREATE TABLE IF NOT EXISTS workdesk_issues (
   id             TEXT PRIMARY KEY,
   title          TEXT NOT NULL,
   dept           TEXT DEFAULT '',
@@ -90,34 +99,35 @@ CREATE TABLE IF NOT EXISTS issues (
   resolve_remark TEXT DEFAULT '',
   resolve_by     TEXT DEFAULT '',
   resolved_at    TIMESTAMPTZ,
+  updated_at     TIMESTAMPTZ,
   created_at     TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
-CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
+CREATE INDEX IF NOT EXISTS idx_workdesk_issues_status ON workdesk_issues(status);
+CREATE INDEX IF NOT EXISTS idx_workdesk_issues_priority ON workdesk_issues(priority);
 
 -- ─── HANDOVERS ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS handovers (
-  id          TEXT PRIMARY KEY,
-  name        TEXT DEFAULT '',
-  designation TEXT DEFAULT '',
-  dept        TEXT DEFAULT '',
-  date        TEXT DEFAULT '',
-  handover_to TEXT DEFAULT '',
-  tasks       TEXT DEFAULT '',
-  pending     TEXT DEFAULT '',
-  supervisor  TEXT DEFAULT '',
-  status      TEXT DEFAULT 'pending',
-  created_by  TEXT DEFAULT '',
-  created_at  TIMESTAMPTZ DEFAULT now(),
-  -- Decision fields (set when recipient clicks Accept/Reject with remark)
+CREATE TABLE IF NOT EXISTS workdesk_handovers (
+  id              TEXT PRIMARY KEY,
+  name            TEXT DEFAULT '',
+  designation     TEXT DEFAULT '',
+  dept            TEXT DEFAULT '',
+  date            TEXT DEFAULT '',
+  handover_to     TEXT DEFAULT '',
+  tasks           TEXT DEFAULT '',
+  pending         TEXT DEFAULT '',
+  supervisor      TEXT DEFAULT '',
+  status          TEXT DEFAULT 'pending',
+  created_by      TEXT DEFAULT '',
   decision_remark TEXT DEFAULT '',
   decision_by     TEXT DEFAULT '',
-  decision_at     TIMESTAMPTZ
+  decision_at     TIMESTAMPTZ,
+  updated_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ DEFAULT now()
 );
 
 -- ─── DELEGATIONS ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS delegations (
+CREATE TABLE IF NOT EXISTS workdesk_delegations (
   id           TEXT PRIMARY KEY,
   task_name    TEXT DEFAULT '',
   dept         TEXT DEFAULT '',
@@ -137,38 +147,41 @@ CREATE TABLE IF NOT EXISTS delegations (
   is_delayed   BOOLEAN DEFAULT false,
   extensions   JSONB DEFAULT '[]',
   activity_log JSONB DEFAULT '[]',
+  updated_at   TIMESTAMPTZ,
   created_at   TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_delegations_doer ON delegations(doer_name);
-CREATE INDEX IF NOT EXISTS idx_delegations_status ON delegations(status);
+CREATE INDEX IF NOT EXISTS idx_workdesk_delegations_doer ON workdesk_delegations(doer_name);
+CREATE INDEX IF NOT EXISTS idx_workdesk_delegations_status ON workdesk_delegations(status);
 
 -- ─── ACTIVITY LOG ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS activity_log (
-  id        TEXT PRIMARY KEY,
-  by_user   TEXT DEFAULT '',
-  role      TEXT DEFAULT '',
-  action    TEXT DEFAULT '',
-  details   TEXT DEFAULT '',
-  at_str    TEXT DEFAULT '',
+CREATE TABLE IF NOT EXISTS workdesk_activity_log (
+  id         TEXT PRIMARY KEY,
+  by_user    TEXT DEFAULT '',
+  role       TEXT DEFAULT '',
+  action     TEXT DEFAULT '',
+  details    TEXT DEFAULT '',
+  at_str     TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_actlog_created ON activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workdesk_actlog_created ON workdesk_activity_log(created_at DESC);
 
 -- ─── TRASH ───────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS trash (
+CREATE TABLE IF NOT EXISTS workdesk_trash (
   id             TEXT PRIMARY KEY,
   type           TEXT DEFAULT '',
   data           JSONB DEFAULT '{}',
   deleted_by     TEXT DEFAULT '',
   deleted_at     TIMESTAMPTZ DEFAULT now(),
   auto_delete_at TIMESTAMPTZ,
+  updated_at     TIMESTAMPTZ,
   created_at     TIMESTAMPTZ DEFAULT now()
 );
 
 -- ─── USER LINKS ──────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS user_links (
+CREATE TABLE IF NOT EXISTS workdesk_user_links (
   id       TEXT PRIMARY KEY,
   username TEXT NOT NULL,
   name     TEXT DEFAULT '',
@@ -177,10 +190,10 @@ CREATE TABLE IF NOT EXISTS user_links (
   added_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_links_username ON user_links(username);
+CREATE INDEX IF NOT EXISTS idx_workdesk_links_username ON workdesk_user_links(username);
 
 -- ─── NOTICES ─────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS notices (
+CREATE TABLE IF NOT EXISTS workdesk_notices (
   id         TEXT PRIMARY KEY,
   to_emp_id  TEXT DEFAULT '',
   to_name    TEXT DEFAULT '',
@@ -191,36 +204,14 @@ CREATE TABLE IF NOT EXISTS notices (
   is_read    BOOLEAN DEFAULT false,
   sent_at    TEXT DEFAULT '',
   meta       TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- ============================================================
--- MIGRATIONS — Run these if tables already exist (adds missing columns)
--- ============================================================
-ALTER TABLE departments ADD COLUMN IF NOT EXISTS head TEXT DEFAULT '';
-ALTER TABLE employees   ADD COLUMN IF NOT EXISTS is_incharge BOOLEAN DEFAULT false;
-ALTER TABLE employees   ADD COLUMN IF NOT EXISTS perms JSONB DEFAULT '[]';
-ALTER TABLE employees   ADD COLUMN IF NOT EXISTS pending_dept TEXT DEFAULT '';
-ALTER TABLE notices     ADD COLUMN IF NOT EXISTS meta TEXT DEFAULT '';
-
--- Sync bookkeeping: client uses updated_at to distinguish local-only
--- pending writes from stale localStorage leftovers after a server-side delete.
-ALTER TABLE departments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE employees   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE admins      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS extensions JSONB DEFAULT '[]';
-ALTER TABLE issues      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS decision_remark TEXT DEFAULT '';
-ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS decision_by     TEXT DEFAULT '';
-ALTER TABLE handovers   ADD COLUMN IF NOT EXISTS decision_at     TIMESTAMPTZ;
-ALTER TABLE delegations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-
--- ============================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- App uses the ANON key (public) from the browser.
--- For an internal hospital-ops app with no end-user sign-up,
+-- For an internal workdesk app with no end-user sign-up,
 -- we allow the anon role full CRUD on all data tables.
 -- This mirrors the previous service-role behaviour.
 -- For a future multi-tenant setup, replace these with
@@ -228,59 +219,44 @@ ALTER TABLE delegations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 -- ============================================================
 
 -- Enable RLS on all tables
-ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE employees   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admins      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE issues      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE handovers   ENABLE ROW LEVEL SECURITY;
-ALTER TABLE delegations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trash       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_links  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notices     ENABLE ROW LEVEL SECURITY;
-
--- Drop any old service-role-only policies so they don't shadow the new ones
-DROP POLICY IF EXISTS "service_role_all_departments"  ON departments;
-DROP POLICY IF EXISTS "service_role_all_employees"    ON employees;
-DROP POLICY IF EXISTS "service_role_all_admins"       ON admins;
-DROP POLICY IF EXISTS "service_role_all_tasks"        ON tasks;
-DROP POLICY IF EXISTS "service_role_all_issues"       ON issues;
-DROP POLICY IF EXISTS "service_role_all_handovers"    ON handovers;
-DROP POLICY IF EXISTS "service_role_all_delegations"  ON delegations;
-DROP POLICY IF EXISTS "service_role_all_actlog"       ON activity_log;
-DROP POLICY IF EXISTS "service_role_all_trash"        ON trash;
-DROP POLICY IF EXISTS "service_role_all_links"        ON user_links;
-DROP POLICY IF EXISTS "service_role_all_notices"      ON notices;
-
--- Anon CRUD policies (one per table, named clearly)
-CREATE POLICY "anon_all_departments"  ON departments  FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_employees"    ON employees    FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_admins"       ON admins       FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_tasks"        ON tasks        FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_issues"       ON issues       FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_handovers"    ON handovers    FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_delegations"  ON delegations  FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_actlog"       ON activity_log FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_trash"        ON trash        FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_links"        ON user_links   FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "anon_all_notices"      ON notices      FOR ALL TO anon USING (true) WITH CHECK (true);
-
--- Realtime also needs SELECT granted to anon
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES    IN SCHEMA public TO anon;
-GRANT USAGE, SELECT                  ON ALL SEQUENCES IN SCHEMA public TO anon;
+ALTER TABLE workdesk_departments    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_employees      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_admins         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_tasks          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_issues         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_handovers      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_delegations    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_activity_log   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_trash          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_user_links     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workdesk_notices        ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
--- REALTIME (Enable for live subscriptions)
+-- DATA MIGRATION — copy rows from legacy tables, then drop them.
+-- Safe to re-run: COPY only fills empty rows; DROP is idempotent.
 -- ============================================================
--- Run in Supabase Dashboard → Database → Replication → Add table to realtime:
--- tasks, issues, departments, employees, delegations, admins, handovers, notices, trash
 
--- ============================================================
--- SAMPLE: Enable realtime via SQL
--- ============================================================
-BEGIN;
-  DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE tasks, issues, departments, employees, delegations, admins, notices, handovers, trash;
-COMMIT;
+DO $$
+DECLARE
+  legacy_tables TEXT[] := ARRAY[
+    'departments','employees','admins','tasks','issues','handovers',
+    'delegations','activity_log','trash','user_links','notices'
+  ];
+  new_tables    TEXT[] := ARRAY[
+    'workdesk_departments','workdesk_employees','workdesk_admins','workdesk_tasks',
+    'workdesk_issues','workdesk_handovers','workdesk_delegations',
+    'workdesk_activity_log','workdesk_trash','workdesk_user_links','workdesk_notices'
+  ];
+  i INT;
+BEGIN
+  FOR i IN 1..array_length(legacy_tables, 1) LOOP
+    IF to_regclass(legacy_tables[i]) IS NOT NULL AND to_regclass(new_tables[i]) IS NOT NULL THEN
+      EXECUTE format(
+        'INSERT INTO %I SELECT * FROM %I WHERE NOT EXISTS (SELECT 1 FROM %I LIMIT 1)',
+        new_tables[i], legacy_tables[i], new_tables[i]
+      );
+      EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', legacy_tables[i]);
+      RAISE NOTICE 'Migrated % → %', legacy_tables[i], new_tables[i];
+    END IF;
+  END LOOP;
+END$$;

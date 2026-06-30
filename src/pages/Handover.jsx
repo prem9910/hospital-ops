@@ -142,7 +142,7 @@ export default function Handover() {
           taskIds: [...selectedIds],
           updatedAt: new Date().toISOString(),
         } : h);
-        await save('hops-handovers', updated);
+        await save('workdesk-handovers', updated);
         await logAct('HANDOVER EDITED', `${form.fromName} → ${form.toName} | ${selectedIds.size} tasks`);
         setMsg('✅ Handover updated successfully!');
       } else {
@@ -160,7 +160,7 @@ export default function Handover() {
           createdAt: new Date().toISOString(),
           createdBy: currentUser.name,
         };
-        await save('hops-handovers', [...handovers, obj]);
+        await save('workdesk-handovers', [...handovers, obj]);
         await logAct('HANDOVER CREATED', `${obj.fromName} → ${obj.toName} | ${obj.taskIds.length} tasks | ${obj.dateStart} to ${obj.dateEnd}`);
         // Notify main admin bell (skip if main admin is the creator — no self-notification)
         if (currentRole !== 'mainadmin') {
@@ -201,7 +201,7 @@ export default function Handover() {
     const { emp, handoverObj } = emailPopup;
     // Save email to employee record
     const updatedEmps = employees.map(e => e.id === emp.id ? { ...e, email: popupEmail.trim() } : e);
-    await save('hops-employees', updatedEmps);
+    await save('workdesk-employees', updatedEmps);
     sendHandoverCreatedEmail(handoverObj, { ...emp, email: popupEmail.trim() });
     setEmailPopup(null);
     resetForm();
@@ -226,9 +226,9 @@ export default function Handover() {
         const deduped = [...new Set(assigned)];
         return { ...t, assignedTo: deduped };
       });
-      await save('hops-tasks', updatedTasks);
+      await save('workdesk-tasks', updatedTasks);
     }
-    await save('hops-handovers', handovers.map(x => x.id === h.id ? { ...x, status: 'cancelled' } : x));
+    await save('workdesk-handovers', handovers.map(x => x.id === h.id ? { ...x, status: 'cancelled' } : x));
     await logAct('HANDOVER CANCELLED', `${h.fromName} → ${h.toName}${h.status === 'accepted' ? ' (tasks restored to original owner)' : ''}`);
   }
 

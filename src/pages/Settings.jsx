@@ -88,9 +88,9 @@ export default function Settings() {
     if (emp) setProfileForm({ contact: emp.contact || '', email: emp.email || '' });
   }, [employees, currentUser.empId, currentRole]);
 
-  const saved = (() => { try { return JSON.parse(localStorage.getItem('hops-emailcfg') || '{}'); } catch { return {}; } })();
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('workdesk-emailcfg') || '{}'); } catch { return {}; } })();
   const [emailForm, setEmailForm] = useState({
-    hospitalName: saved.hospitalName || 'Hospital Operations',
+    hospitalName: saved.hospitalName || 'Work Desk',
   });
   const [emailMsg, setEmailMsg] = useState('');
 
@@ -137,7 +137,7 @@ export default function Settings() {
   async function saveProfile() {
     const emp = employees.find(e => e.id === currentUser.empId);
     if (!emp) { setProfileMsg('❌ Employee record not found!'); return; }
-    await save('hops-employees', employees.map(e =>
+    await save('workdesk-employees', employees.map(e =>
       e.id === emp.id ? { ...e, contact: profileForm.contact, email: profileForm.email } : e
     ));
     await logAct('PROFILE UPDATED', currentUser.name);
@@ -151,12 +151,12 @@ export default function Settings() {
       const emp = employees.find(e => e.name === currentUser.name);
       if (!emp)                                  { setPwMsg('❌ Employee not found!');      return; }
       if (emp.password !== pwForm.current)        { setPwMsg('❌ Current password wrong!'); return; }
-      await save('hops-employees', employees.map(e => e.id === emp.id ? { ...e, password: pwForm.newPw } : e));
+      await save('workdesk-employees', employees.map(e => e.id === emp.id ? { ...e, password: pwForm.newPw } : e));
     } else if (currentRole === 'admin') {
       const adm = admins.find(a => a.username === currentUser.name);
       if (!adm)                                  { setPwMsg('❌ Admin not found!');         return; }
       if (adm.password !== pwForm.current)        { setPwMsg('❌ Current password wrong!'); return; }
-      await save('hops-admins', admins.map(a => a.id === adm.id ? { ...a, password: pwForm.newPw } : a));
+      await save('workdesk-admins', admins.map(a => a.id === adm.id ? { ...a, password: pwForm.newPw } : a));
     } else {
       setPwMsg('❌ Main admin password is hardcoded — change in constants/index.js'); return;
     }
@@ -166,7 +166,7 @@ export default function Settings() {
   }
 
   async function saveEmailCfg() {
-    localStorage.setItem('hops-emailcfg', JSON.stringify(emailForm));
+    localStorage.setItem('workdesk-emailcfg', JSON.stringify(emailForm));
     setEmailMsg('✅ Email config saved!');
     await logAct('EMAIL CONFIG UPDATED', '');
   }
@@ -189,11 +189,11 @@ export default function Settings() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Default export filename = "hospital-ops_<role>_<YYYY-MM-DD>"
+  // Default export filename = "workdesk_<role>_<YYYY-MM-DD>"
   useEffect(() => {
     if (showExport && !exportFileName) {
       const role = currentRole || 'user';
-      setExportFileName(`hospital-ops_${role}_${toDay()}`);
+      setExportFileName(`workdesk_${role}_${toDay()}`);
     }
   }, [showExport, exportFileName, currentRole]);
 
@@ -212,7 +212,7 @@ export default function Settings() {
 
   function doExport() {
     setExportError('');
-    const name = (exportFileName || `hospital-ops_${currentRole || 'user'}_${toDay()}`).trim();
+    const name = (exportFileName || `workdesk_${currentRole || 'user'}_${toDay()}`).trim();
     if (!name) { setExportError('File name is required.'); return; }
     if (!exportPreview || exportPreview.total === 0) {
       setExportError('No data to export with the current filter.');
@@ -270,12 +270,12 @@ export default function Settings() {
       const merged = mergeImport({ detected, choices: importChoices });
       // Persist every non-empty bucket to its hops-* table via save().
       const typeToKey = {
-        tasks:       'hops-tasks',
-        issues:      'hops-issues',
-        handovers:   'hops-handovers',
-        delegations: 'hops-delegations',
-        notices:     'hops-notices',
-        actLog:      'hops-actlog',
+        tasks:       'workdesk-tasks',
+        issues:      'workdesk-issues',
+        handovers:   'workdesk-handovers',
+        delegations: 'workdesk-delegations',
+        notices:     'workdesk-notices',
+        actLog:      'workdesk-actlog',
       };
       const stateToArr = {
         tasks:       tasks,
@@ -443,15 +443,15 @@ export default function Settings() {
                   type="text"
                   value={brevoForm.senderName}
                   onChange={e => setBrevoForm({ ...brevoForm, senderName: e.target.value })}
-                  placeholder={brevoMasked.senderName || 'Hospital Operations'}
+                  placeholder={brevoMasked.senderName || 'Work Desk'}
                   style={IS}
                 />
               </Field>
             </div>
 
-            {/* Hospital Name */}
-            <Field label="Hospital / Organization Name (shown in email footer)">
-              <input value={emailForm.hospitalName} onChange={e => setEmailForm({ ...emailForm, hospitalName: e.target.value })} placeholder="Hospital Operations" style={IS} />
+            {/* Organization Name */}
+            <Field label="Organization Name (shown in email footer)">
+              <input value={emailForm.hospitalName} onChange={e => setEmailForm({ ...emailForm, hospitalName: e.target.value })} placeholder="Work Desk" style={IS} />
             </Field>
           </div>
 
@@ -460,7 +460,7 @@ export default function Settings() {
               {brevoLoading ? '⏳ Saving...' : '💾 Save Brevo Config'}
             </button>
             <button onClick={saveEmailCfg} style={{ padding: '9px 20px', borderRadius: 8, background: 'transparent', color: '#0d7377', border: '1.5px solid #0d7377', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
-              💾 Save Hospital Name
+              💾 Save Organization Name
             </button>
           </div>
         </Card>
@@ -507,7 +507,7 @@ export default function Settings() {
             ['Logged in as', currentUser.name],
             ['Role', currentRole.toUpperCase()],
             ['Department', currentUser.dept || '—'],
-            ['Build', 'Hospital Ops v2.0'],
+            ['Build', 'Work Desk v1.0'],
           ].map(([k, v]) => (
             <div key={k} style={{ background: '#f3f7fc', padding: '10px 13px', borderRadius: 9, border: '1px solid #e4eaf2' }}>
               <div style={{ fontSize: 10.5, color: '#6b7a90', fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>{k}</div>
@@ -529,7 +529,7 @@ export default function Settings() {
             <input
               value={exportFileName}
               onChange={(e) => setExportFileName(e.target.value)}
-              placeholder="hospital-ops_export"
+              placeholder="workdesk_export"
               style={IS}
             />
             <span style={{ fontSize: 12, color: '#6b7a90', fontWeight: 700 }}>.json</span>
@@ -628,7 +628,7 @@ export default function Settings() {
         {!importPreview ? (
           <>
             <div style={{ fontSize: 12, color: '#6b7a90', marginBottom: 14, lineHeight: 1.5 }}>
-              Upload a JSON file previously exported from Hospital Ops. We'll scan it and show you
+              Upload a JSON file previously exported from Work Desk. We'll scan it and show you
               any duplicates before adding anything to your account.
             </div>
             <input

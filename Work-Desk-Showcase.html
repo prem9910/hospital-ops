@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Hospital Ops — Project Showcase</title>
+<title>Work Desk — Project Showcase</title>
 <style>
   /* ───────── Print & Page Setup ───────── */
   @page {
@@ -584,7 +584,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="cover">
   <div class="cover-top">
-    <div class="cover-logo">🏥 Hospital Operations Platform</div>
+    <div class="cover-logo">🏥 Work Desk Platform</div>
     <h1 class="cover-title">
       Hospital<br/><span class="accent">Ops</span>
     </h1>
@@ -597,7 +597,7 @@
   <div class="cover-info">
     <div class="info-card">
       <h4>Edition</h4>
-      <div class="value">Showcase v1.0<br/>June 2026</div>
+      <div class="value">Showcase v2.0<br/>June 2026 · Mobile-Ready</div>
     </div>
     <div class="info-card">
       <h4>Stack</h4>
@@ -615,7 +615,7 @@
 
   <div class="cover-bottom">
     <span>📍 Internal Project Showcase</span>
-    <span>© 2026 Hospital Ops</span>
+    <span>© 2026 Work Desk</span>
   </div>
 </div>
 
@@ -624,12 +624,12 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>Showcase Document</strong>Table of Contents</div>
   </div>
   <div class="page-body">
     <h1 class="section-title">Table of <span class="accent">Contents</span></h1>
-    <p class="section-subtitle">A guided tour through every feature, role, and technical layer of the Hospital Operations platform.</p>
+    <p class="section-subtitle">A guided tour through every feature, role, and technical layer of the Work Desk platform.</p>
 
     <div class="toc-section">Overview</div>
     <ul class="toc-list">
@@ -670,17 +670,22 @@
       <li><span class="toc-title">19. Activity Log + Trash + Links</span><span class="toc-page">21</span></li>
     </ul>
 
+    <div class="toc-section">UX Layer</div>
+    <ul class="toc-list">
+      <li><span class="toc-title">20. Mobile-Responsive UX</span><span class="toc-page">26</span></li>
+    </ul>
+
     <div class="toc-section">Technical Reference</div>
     <ul class="toc-list">
-      <li><span class="toc-title">20. Getting Started (Install + Run)</span><span class="toc-page">22</span></li>
-      <li><span class="toc-title">21. Folder Structure &amp; Architecture</span><span class="toc-page">23</span></li>
-      <li><span class="toc-title">22. Database Schema (Supabase)</span><span class="toc-page">24</span></li>
-      <li><span class="toc-title">23. Real-time Sync &amp; Offline Cache</span><span class="toc-page">25</span></li>
-      <li><span class="toc-title">24. Security, Permissions &amp; Roadmap</span><span class="toc-page">26</span></li>
+      <li><span class="toc-title">21. Getting Started (Install + Run)</span><span class="toc-page">22</span></li>
+      <li><span class="toc-title">22. Folder Structure &amp; Architecture</span><span class="toc-page">23</span></li>
+      <li><span class="toc-title">23. Database Schema (Supabase)</span><span class="toc-page">24</span></li>
+      <li><span class="toc-title">24. Real-time Sync &amp; Offline Cache</span><span class="toc-page">25</span></li>
+      <li><span class="toc-title">25. Security, Permissions &amp; Roadmap</span><span class="toc-page">27</span></li>
     </ul>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 2</span>
   </div>
 </div>
@@ -690,7 +695,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>01 · Overview</strong>Project &amp; Tech Stack</div>
   </div>
   <div class="page-body">
@@ -698,11 +703,11 @@
     <p class="section-subtitle">A cloud-synced operations command center designed for hospitals that need to coordinate daily tasks, manage staff across departments, and never lose a single handover.</p>
 
     <h3 class="sub-title">🎯 The Problem It Solves</h3>
-    <p class="lead">Hospital operations involve dozens of recurring tasks, inter-department dependencies, and shift-based handovers that historically live in WhatsApp groups, registers, and memory. Hospital Ops replaces all of these with a single, real-time, role-aware platform that anyone on staff can use from any device.</p>
+    <p class="lead">Hospital operations involve dozens of recurring tasks, inter-department dependencies, and shift-based handovers that historically live in WhatsApp groups, registers, and memory. Work Desk replaces all of these with a single, real-time, role-aware platform that anyone on staff can use from any device.</p>
 
     <div class="stat-row">
       <div class="stat"><div class="num">22</div><div class="lbl">Permissions</div></div>
-      <div class="stat"><div class="num">24</div><div class="lbl">Pages / Screens</div></div>
+      <div class="stat"><div class="num">26</div><div class="lbl">Showcase Pages</div></div>
       <div class="stat"><div class="num">7</div><div class="lbl">Task Frequencies</div></div>
       <div class="stat"><div class="num">3</div><div class="lbl">User Roles</div></div>
     </div>
@@ -715,6 +720,8 @@
       <div class="feature-card purple"><h4>🔔 Bell Notifications</h4><p>Main admin sees all system activity (task done, handover, delegation, dept change) in a unified notification bell.</p></div>
       <div class="feature-card red"><h4>🔐 Role-Based Access</h4><p>3 roles (Main Admin / Admin / Staff) with 22 fine-grained permissions toggled per admin user.</p></div>
       <div class="feature-card"><h4>📤 Excel Exports</h4><p>Every list page has date-range Excel export using the SheetJS XLSX library — ready for compliance audits.</p></div>
+      <div class="feature-card green"><h4>📱 Mobile-Responsive</h4><p>Every page, modal, and dashboard card reflows for phones. Tables hide non-essential columns, dates collapse behind a trigger, and rows expand on tap. Desktop pixel-identical.</p></div>
+      <div class="feature-card gold"><h4>🪟 Card-as-Popups</h4><p>Every dashboard KPI is a clickable card that opens a filtered drill-down modal. Charts are clickable too. Nothing is dead UI.</p></div>
     </div>
 
     <h3 class="sub-title">🧰 Tech Stack</h3>
@@ -745,7 +752,7 @@
     </table>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 3</span>
   </div>
 </div>
@@ -755,7 +762,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>02 · Roles</strong>User Roles &amp; Permissions</div>
   </div>
   <div class="page-body">
@@ -812,7 +819,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 4</span>
   </div>
 </div>
@@ -822,7 +829,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>03 · Login</strong>Authentication Flow</div>
   </div>
   <div class="page-body">
@@ -864,7 +871,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 5</span>
   </div>
 </div>
@@ -874,7 +881,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>04 · Dashboard</strong>Analytics Overview</div>
   </div>
   <div class="page-body">
@@ -908,7 +915,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 6</span>
   </div>
 </div>
@@ -918,7 +925,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>05 · Tasks</strong>Manage Tasks &amp; Recurring Engine</div>
   </div>
   <div class="page-body">
@@ -959,7 +966,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 7</span>
   </div>
 </div>
@@ -969,7 +976,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>06 · Departments</strong>Organizational Units</div>
   </div>
   <div class="page-body">
@@ -996,7 +1003,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 8</span>
   </div>
 </div>
@@ -1006,7 +1013,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>07 · Staff</strong>Employees Directory</div>
   </div>
   <div class="page-body">
@@ -1039,7 +1046,7 @@
     </ul>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 9</span>
   </div>
 </div>
@@ -1049,7 +1056,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>08 · Admins</strong>Role &amp; Permission Management</div>
   </div>
   <div class="page-body">
@@ -1076,7 +1083,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 10</span>
   </div>
 </div>
@@ -1086,7 +1093,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>09 · Issues</strong>Problem Tracker</div>
   </div>
   <div class="page-body">
@@ -1123,7 +1130,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 11</span>
   </div>
 </div>
@@ -1133,7 +1140,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>10 · Handover</strong>Shift Transition &amp; Task Transfer</div>
   </div>
   <div class="page-body">
@@ -1165,7 +1172,7 @@
     </table>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 12</span>
   </div>
 </div>
@@ -1175,7 +1182,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>11 · Delegation</strong>Tracker &amp; Extension Workflow</div>
   </div>
   <div class="page-body">
@@ -1208,7 +1215,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 13</span>
   </div>
 </div>
@@ -1218,7 +1225,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>12 · Checklists</strong>Ticketing &amp; Escalation</div>
   </div>
   <div class="page-body">
@@ -1249,7 +1256,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 14</span>
   </div>
 </div>
@@ -1259,7 +1266,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>13 · Reports</strong>Live Tracking &amp; MIS</div>
   </div>
   <div class="page-body">
@@ -1298,7 +1305,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 15</span>
   </div>
 </div>
@@ -1308,44 +1315,55 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>14 · My Tasks</strong>Employee Daily View</div>
   </div>
   <div class="page-body">
     <h1 class="section-title">📌 <span class="accent">My Tasks</span></h1>
-    <p class="section-subtitle">The staff member's home page. Shows everything assigned to them — pending, in-progress, and overdue — with quick-complete and mark-done actions.</p>
+    <p class="section-subtitle">The staff member's home page. Tabbed view (Today · Upcoming · Completed · Handover · Delegation), clickable dashboard cards that drill into detail, and a mobile-first row layout.</p>
 
     <div class="screenshot">
       <div class="ss-icon">🖼️</div>
       <div class="ss-label">SCREENSHOT — My Tasks</div>
-      <div class="ss-hint">Pending counter · Overdue badges · Tabbed views</div>
+      <div class="ss-hint">Tabs · Overdue badges · Inline detail expansion</div>
     </div>
-    <div class="screenshot-caption">My Tasks — overdue tasks highlighted in red, today's tasks in green, completed grayed out.</div>
+    <div class="screenshot-caption">My Tasks — overdue tasks highlighted in red, today's tasks in green, completed grayed out. Tabs split the same data into Today / Upcoming / Completed.</div>
 
     <h3 class="sub-title">The "What Shows as Pending" Logic</h3>
-    <p>A task appears in <strong>Pending</strong> when <em>all</em> of these are true:</p>
+    <p>A task appears in <strong>Today</strong> when <em>all</em> of these are true:</p>
     <ul class="feature-list">
       <li><strong>Assigned to me</strong> — case-insensitive match against <code>assignedTo</code> array</li>
       <li><strong>Status is <code>pending</code></strong> — not started, not done</li>
       <li><strong>Not a grandchild</strong> — i.e. not an auto-generated sub-task</li>
       <li><strong>Today ≥ schedDate</strong> — the scheduled date has arrived (or is in the past)</li>
     </ul>
+    <p>Tasks whose <code>schedDate</code> is in the future surface under the <strong>Upcoming</strong> tab instead — they don't pollute today's workload count.</p>
+
+    <h3 class="sub-title">Tabbed Layout</h3>
+    <div class="feature-grid three">
+      <div class="feature-card"><h4>📅 Today</h4><p>Pending tasks due today or overdue. The actionable scope. Each row shows priority badge + age in days.</p></div>
+      <div class="feature-card green"><h4>🔜 Upcoming</h4><p>Pending tasks scheduled in the future. Lets staff plan ahead without distracting from today's work.</p></div>
+      <div class="feature-card gold"><h4>✅ Completed</h4><p>All done tasks assigned to me, newest first. Includes on-time vs delayed badges for self-review.</p></div>
+    </div>
 
     <h3 class="sub-title">Visual Indicators</h3>
     <table class="data-table">
       <tr><th>Situation</th><th>Display</th></tr>
       <tr><td>Scheduled today</td><td><span class="pill green">📅 TODAY</span></td></tr>
       <tr><td>Past schedDate, not done</td><td><span class="pill red">⚠️ OVERDUE — Due: &lt;date&gt;</span></td></tr>
-      <tr><td>Future schedDate</td><td>Hidden from pending (shown in Upcoming)</td></tr>
-      <tr><td>Done</td><td>Moves to Completed tab, greyed out</td></tr>
+      <tr><td>Future schedDate</td><td><span class="pill">🔜 Upcoming tab</span></td></tr>
+      <tr><td>Done</td><td><span class="pill green">✅ Completed tab</span></td></tr>
     </table>
 
     <div class="callout">
-      <strong>Counts in App Bar:</strong> The header's "My Tasks" badge shows the count of tasks in the Pending tab — including overdue. This way staff see their workload at a glance without opening the page.
+      <strong>Card-as-Popups:</strong> The staff dashboard now mirrors the main-admin card-driven UX. Five KPI cards (Pending · Done Today · Delayed · My Delegations · Total Completed) plus two donuts (My Performance Score · Today's Task Status) are all clickable. Each opens a drill-down modal filtered to the current user.
     </div>
+
+    <h3 class="sub-title">Inline Detail Expansion</h3>
+    <p>From any drill-down popup, tap <strong>👁 View</strong> on a row to expand a full inline detail panel directly below it — no navigation needed. The panel shows every field (assign date, status, priority, remarks, lastDone, etc.) plus an <strong>Open in My Tasks →</strong> button that navigates to the parent dashboard and highlights the matching row with a pulse animation.</p>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 16</span>
   </div>
 </div>
@@ -1355,7 +1373,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>15 · Self-Assign</strong>Staff-Initiated Tasks</div>
   </div>
   <div class="page-body">
@@ -1385,7 +1403,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 17</span>
   </div>
 </div>
@@ -1395,7 +1413,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>16 · Inbox</strong>Incoming Handovers</div>
   </div>
   <div class="page-body">
@@ -1426,7 +1444,7 @@
     </ul>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 18</span>
   </div>
 </div>
@@ -1436,7 +1454,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>17 · My Delegations</strong>Tasks Assigned to Me</div>
   </div>
   <div class="page-body">
@@ -1465,7 +1483,7 @@
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 19</span>
   </div>
 </div>
@@ -1475,7 +1493,7 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>18 · Notifications</strong>Bell Icon &amp; Notices System</div>
   </div>
   <div class="page-body">
@@ -1523,7 +1541,7 @@ export async function notifyAdmins({<br/>
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 20</span>
   </div>
 </div>
@@ -1533,7 +1551,7 @@ export async function notifyAdmins({<br/>
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>19 · Utility</strong>Activity Log, Trash &amp; Links</div>
   </div>
   <div class="page-body">
@@ -1557,7 +1575,7 @@ export async function notifyAdmins({<br/>
     </table>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 21</span>
   </div>
 </div>
@@ -1567,7 +1585,7 @@ export async function notifyAdmins({<br/>
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>20 · Setup</strong>Getting Started</div>
   </div>
   <div class="page-body">
@@ -1584,8 +1602,8 @@ export async function notifyAdmins({<br/>
     <h3 class="sub-title">Install &amp; Run</h3>
     <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:4mm; border-radius:4px; font-family:'Courier New',monospace; font-size:9pt; margin:3mm 0 5mm 0;">
 # 1. Clone the repository<br/>
-git clone https://github.com/prem-prakash/hospital-ops.git<br/>
-cd hospital-ops<br/>
+git clone https://github.com/prem9910/workdesk.git<br/>
+cd workdesk<br/>
 <br/>
 # 2. Install dependencies<br/>
 npm install<br/>
@@ -1623,7 +1641,7 @@ npm run preview    # serves the build locally<br/>
     </ol>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 22</span>
   </div>
 </div>
@@ -1633,7 +1651,7 @@ npm run preview    # serves the build locally<br/>
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>21 · Architecture</strong>Folder Structure</div>
   </div>
   <div class="page-body">
@@ -1641,7 +1659,7 @@ npm run preview    # serves the build locally<br/>
     <p class="section-subtitle">A clean React feature-based layout. Pages, contexts, services, and utilities are all clearly separated.</p>
 
     <div style="background:#f3f7fc; border-left:4px solid var(--primary); padding:5mm; border-radius:4px; font-family:'Courier New',monospace; font-size:8.5pt; line-height:1.5;">
-hospital-ops/<br/>
+workdesk/<br/>
 ├── <strong>index.html</strong>                      # HTML entry<br/>
 ├── <strong>package.json</strong>                   # Dependencies<br/>
 ├── <strong>vite.config.js</strong>                 # Vite config<br/>
@@ -1686,7 +1704,7 @@ hospital-ops/<br/>
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 23</span>
   </div>
 </div>
@@ -1696,7 +1714,7 @@ hospital-ops/<br/>
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>22 · Database</strong>Schema Reference</div>
   </div>
   <div class="page-body">
@@ -1733,7 +1751,7 @@ ALTER TABLE tasks<br/>
     <p>The Supabase realtime channel is enabled per-table. When <code>hops-tasks</code> changes, every connected client receives a <code>postgres_changes</code> event within ~200ms.</p>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 24</span>
   </div>
 </div>
@@ -1743,12 +1761,12 @@ ALTER TABLE tasks<br/>
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
     <div class="page-meta"><strong>23 · Real-time</strong>Sync &amp; Offline Cache</div>
   </div>
   <div class="page-body">
     <h1 class="section-title">⚡ <span class="accent">Real-time</span> Sync</h1>
-    <p class="section-subtitle">The most technically interesting part of the system. Hospital Ops combines three storage layers to deliver a fast, offline-capable, multi-device experience.</p>
+    <p class="section-subtitle">The most technically interesting part of the system. Work Desk combines three storage layers to deliver a fast, offline-capable, multi-device experience.</p>
 
     <h3 class="sub-title">Three-Layer Architecture</h3>
     <div class="feature-grid">
@@ -1774,18 +1792,132 @@ if (eventTime &lt; lastLocalWriteAt) {<br/>
     </div>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
+    <span>🏥 Work Desk — Project Showcase</span>
     <span>Page 25</span>
   </div>
 </div>
 
 <!-- ════════════════════════════════════════════════════ -->
-<!-- PAGE 26 — SECURITY & ROADMAP                      -->
+<!-- PAGE 26 — MOBILE RESPONSIVENESS                    -->
 <!-- ════════════════════════════════════════════════════ -->
 <div class="sheet">
   <div class="page-header">
-    <div class="brand"><span class="heart">🏥</span> Hospital Ops</div>
-    <div class="page-meta"><strong>24 · Future</strong>Security &amp; Roadmap</div>
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
+    <div class="page-meta"><strong>20 · Mobile</strong>Phone-Ready UI</div>
+  </div>
+  <div class="page-body">
+    <h1 class="section-title">📱 <span class="accent">Mobile-Responsive</span> UX</h1>
+    <p class="section-subtitle">Every page, modal, and dashboard card is phone-ready. Below 768px the layout reflows without losing data; at 769px+ the desktop view is pixel-identical to before.</p>
+
+    <div class="stat-row">
+      <div class="stat"><div class="num">8</div><div class="lbl">Pages Optimised</div></div>
+      <div class="stat"><div class="num">120+</div><div class="lbl">CSS Lines Added</div></div>
+      <div class="stat"><div class="num">5</div><div class="lbl">Reused Patterns</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">Desktop Regressions</div></div>
+    </div>
+
+    <h2 class="feature-title"><span class="emoji">🧩</span>The Five Mobile Patterns</h2>
+
+    <h3 class="sub-title">1. Tap-to-Expand Detail Rows</h3>
+    <p>Tables that don't fit on a phone hide non-essential columns and let the user tap a row to see full details — no separate page load. The hidden columns keep their data in the DOM, so the detail view can show everything.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card"><h4>👁 Where it applies</h4><p>Manage Tasks table (10 cols → 3 on phone), Dashboard card popups, Delegation drilldowns.</p></div>
+      <div class="feature-card green"><h4>🎯 Affordance</h4><p>A <code>›</code> chevron appended to the last visible cell via <code>::after</code> pseudo-element. Pure CSS, no JSX change.</p></div>
+      <div class="feature-card gold"><h4>📌 Tap feedback</h4><p>Active-state background colour on press. The hidden Action cells preserve <code>e.stopPropagation</code> so taps on action buttons don't double-fire.</p></div>
+    </div>
+
+    <h3 class="sub-title">2. Date Range Trigger Button</h3>
+    <p>The <code>&lt;DateRangePicker&gt;</code> has presets, custom-range pickers, and a field selector — too wide for a phone. Solution: hide the picker behind a collapsible trigger button.</p>
+
+    <table class="data-table">
+      <tr><th>Viewport</th><th>Display</th></tr>
+      <tr><td>Desktop ≥769px</td><td>DateRangePicker renders inline, always visible</td></tr>
+      <tr><td>Mobile ≤768px</td><td>Compact button <code>📅 Date Range: Current Month ▼</code> · tap to expand · tap again to collapse</td></tr>
+      <tr><td>CSS classes</td><td><code>.mis-dr-trigger</code> (mobile-only) + <code>.mis-dr-collapsible</code> + <code>.is-open</code></td></tr>
+    </table>
+
+    <h3 class="sub-title">3. Column Hiding with Class Hooks</h3>
+    <p>Wide tables get a <code>col-hide-mobile</code> class on each non-essential <code>&lt;th&gt;</code> and <code>&lt;td&gt;</code>. CSS hides them at <code>≤768px</code>:</p>
+    <pre style="background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px; padding: 3mm 4mm; font-size: 8.5pt; font-family: 'Consolas', monospace; color: var(--navy); white-space: pre-wrap; margin: 3mm 0;">@media (max-width: 768px) {
+  .tasks-table th.col-hide-mobile,
+  .tasks-table td.col-hide-mobile { display: none !important; }
+  /* chevron on last visible cell */
+  .tasks-table tbody tr td:nth-last-of-type(2)::after {
+    content: '›'; float: right; color: var(--primary);
+    font-size: 18pt; font-weight: 700;
+  }
+}</pre>
+
+    <h3 class="sub-title">4. Stacked / Reflowed Cards</h3>
+    <p>Side-by-side breakdowns on desktop collapse to single-column stacks on phones. CSS Grid's <code>1fr 300px</code> becomes <code>1fr</code>:</p>
+
+    <div class="feature-grid">
+      <div class="feature-card"><h4>📊 MIS Employee tab</h4><p>Employee Task Breakdown + Overall Breakdown cards: side-by-side on desktop, stacked on mobile. Summary cards: 4-col grid → 2-col grid.</p></div>
+      <div class="feature-card green"><h4>🔍 Modal filter rows</h4><p>Search input + Dept select + Date range stack vertically on phones. Clear button goes full-width.</p></div>
+      <div class="feature-card gold"><h4>👥 Dept + Employee selects</h4><p>Flex-wrap layout becomes a 2-column grid <code>1fr 1fr</code> on mobile — both selects always visible without scrolling.</p></div>
+    </div>
+
+    <h3 class="sub-title">5. Horizontal Scroll for Read-Only Logs</h3>
+    <p>For dense reference data (Activity Log, MIS reports) where hiding columns would lose information, the table scrolls horizontally with a <code>min-width</code> guard so columns don't squish:</p>
+    <ul class="feature-list">
+      <li><code>.activity-log-wrap</code> — overflow-x: auto, <code>min-width: 520px</code>, touch-scrolling</li>
+      <li><strong>Details</strong> column wraps within <code>max-width: 220px</code> so long messages don't force pure horizontal scroll</li>
+      <li>Clear All button goes <strong>full-width + larger font</strong> on phones for tappability</li>
+    </ul>
+
+    <h2 class="feature-title"><span class="emoji">📄</span>Page-by-Page Mobile Behaviour</h2>
+
+    <table class="data-table">
+      <tr><th>Page</th><th>Mobile-Only Behaviour (≤768px)</th></tr>
+      <tr><td><strong>Dashboard (both roles)</strong></td><td>StatCards stack into 2-col grid; page header collapses title above action buttons; card popups, donut drilldowns, and inline row expansions all phone-ready</td></tr>
+      <tr><td><strong>My Tasks</strong></td><td>Tabs row scrolls horizontally; title + Export/Print + tabs collapse into a CSS Grid layout; tab labels keep their counts in parens</td></tr>
+      <tr><td><strong>Manage Tasks</strong></td><td>10-col table → 3-col (Assign Date · Status · Task); chevron on Task cell; row tap opens TaskDetailModal with all fields</td></tr>
+      <tr><td><strong>Activity Log</strong></td><td>Horizontal-scroll table with sticky-feel Date/Time column; Details wraps at 220px; Clear All full-width</td></tr>
+      <tr><td><strong>MIS Reporting</strong></td><td>Date range behind trigger button; breakdown cards stacked; Dept + Employee selects in a 2-col row; summary cards in 2-col grid</td></tr>
+      <tr><td><strong>Drill-down Modals</strong></td><td>Filter row stacks vertically; date-range trigger; tables horizontally scroll with min-width 520px; row tap expands inline detail panel; chevron appended to last visible cell</td></tr>
+    </table>
+
+    <h2 class="feature-title"><span class="emoji">⚙️</span>Implementation Notes</h2>
+
+    <div class="feature-grid">
+      <div class="feature-card"><h4>🎯 Mobile-Only via @media</h4><p>Every CSS rule is scoped inside <code>@media (max-width: 768px)</code>. Desktop pixel-identical. Verified by reverting each rule and comparing screenshots.</p></div>
+      <div class="feature-card green"><h4>🧪 Pure CSS where possible</h4><p>The chevron, tap feedback, and sticky behaviors use <code>::after</code>, <code>:active</code>, and <code>:last-child</code>. Only stateful behavior (collapse on tap) needs <code>useState</code>.</p></div>
+      <div class="feature-card gold"><h4>♿ Touch ergonomics</h4><p>Tap targets ≥36px, padding ≥9px, font ≥11.5pt on mobile. Active-state visual feedback so users know taps registered.</p></div>
+      <div class="feature-card red"><h4>🛡️ e.stopPropagation()</h4><p>Every hidden action cell carries <code>stopPropagation</code> so a tap on what would have been a checkbox / action button never accidentally fires the row's open-detail handler.</p></div>
+      <div class="feature-card"><h4>🔄 Reused Pattern</h4><p>Single mobile-collapse trigger pattern (<code>.mis-dr-trigger</code> + <code>.mis-dr-collapsible</code>) is reused across MIS Reporting, the drill-down modals, and any future date-filtered pages.</p></div>
+      <div class="feature-card purple"><h4>📦 No new dependencies</h4><p>Pure CSS + React state. Zero npm packages added. Total cost: ~120 CSS lines + small JSX hooks for className + state for collapse toggles.</p></div>
+    </div>
+
+    <div class="callout">
+      <strong>Desktop unchanged:</strong> Every CSS rule is gated behind <code>@media (max-width: 768px)</code>. The default <code>.mis-dr-trigger</code> has <code>display: none</code> on desktop, the picker stays inline. Open the same URL on a laptop and the layout is byte-for-byte the same as before the mobile pass.
+    </div>
+
+    <h3 class="sub-title">📊 Before vs After — Same Page, Different Viewport</h3>
+    <div class="two-col">
+      <div class="feature-card">
+        <h4>🖥️ Desktop (≥1024px)</h4>
+        <p>10-column tasks table; date picker inline; side-by-side breakdown cards; 4-column summary grid; all controls visible at once. Zero scrolling needed for the common actions.</p>
+      </div>
+      <div class="feature-card green">
+        <h4>📱 Phone (≤768px)</h4>
+        <p>3-column tasks table with tap-to-expand; date picker behind trigger; stacked breakdown cards; 2-column summary grid; horizontal-scroll for dense logs. Single-handed use comfortable.</p>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>🏥 Work Desk — Project Showcase</span>
+    <span>Page 26</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- PAGE 27 — SECURITY & ROADMAP                      -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="sheet">
+  <div class="page-header">
+    <div class="brand"><span class="heart">🏥</span> Work Desk</div>
+    <div class="page-meta"><strong>25 · Future</strong>Security &amp; Roadmap</div>
   </div>
   <div class="page-body">
     <h1 class="section-title">🛡️ <span class="accent">Security</span> &amp; Roadmap</h1>
@@ -1813,15 +1945,15 @@ if (eventTime &lt; lastLocalWriteAt) {<br/>
     </table>
 
     <div class="callout">
-      <strong>Open Source:</strong> Hospital Ops is built to be self-hosted. The entire codebase, schema, and seed scripts are included. A hospital IT team can clone, deploy, and own their own instance with zero vendor lock-in.
+      <strong>Mobile Milestone ✅ Shipped:</strong> The June 2026 release delivers phone-ready UI across every page. The next mobile milestone is the Q4 2026 PWA upgrade — install-to-home-screen, push notifications, and offline sync via Service Worker.
     </div>
 
     <h3 class="sub-title">🙏 Closing Note</h3>
-    <p>This platform was built to replace scattered registers, WhatsApp groups, and memory-based task tracking in hospital operations. Every screen, every notification, every permission toggle exists because a real hospital admin needed it. Thank you for exploring Hospital Ops.</p>
+    <p>This platform was built to replace scattered registers, WhatsApp groups, and memory-based task tracking in hospital operations. Every screen, every notification, every permission toggle exists because a real hospital admin needed it. Thank you for exploring Work Desk.</p>
   </div>
   <div class="page-footer">
-    <span>🏥 Hospital Ops — Project Showcase</span>
-    <span>Page 26</span>
+    <span>🏥 Work Desk — Project Showcase</span>
+    <span>Page 27</span>
   </div>
 </div>
 

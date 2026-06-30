@@ -30,14 +30,14 @@ export default function Admins() {
     if (!editAdmin && !form.password.trim()) { alert('Password required!'); return; }
     const obj = { id: editAdmin?.id || uid(), username: form.username.toUpperCase().trim(), password: form.password || editAdmin?.password || '', name: form.name.toUpperCase(), perms };
     const newAdmins = editAdmin ? admins.map((a) => a.id === obj.id ? obj : a) : [...admins, obj];
-    await save('hops-admins', newAdmins);
+    await save('workdesk-admins', newAdmins);
     await logAct(editAdmin ? 'ADMIN UPDATED' : 'ADMIN ADDED', obj.username);
     setShowForm(false);
   }
 
   async function handleDelete(a) {
     if (!confirm(`Delete admin ${a.username}?`)) return;
-    await save('hops-admins', admins.filter((x) => x.id !== a.id));
+    await save('workdesk-admins', admins.filter((x) => x.id !== a.id));
     await logAct('ADMIN DELETED', a.username);
   }
 

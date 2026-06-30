@@ -67,7 +67,7 @@ export default function Staff() {
       ? { ...obj, dept: editEmp.dept, pendingDept: obj.dept }
       : obj;
     const newEmps = editEmp ? employees.map((e) => e.id === obj.id ? objToSave : e) : [...employees, obj];
-    await save('hops-employees', newEmps);
+    await save('workdesk-employees', newEmps);
 
     // Audit trail: when editing an existing employee, log every field that
     // changed so the activity log captures role/dept/permission transitions.
@@ -100,7 +100,7 @@ export default function Staff() {
           type: 'dept_change_approval', isRead: false, sentAt: new Date().toISOString(),
           meta: { newDept: obj.dept, oldDept: editEmp.dept, empId: obj.id },
         };
-        await save('hops-notices', [...(notices || []), notice]);
+        await save('workdesk-notices', [...(notices || []), notice]);
       }
     }
 
@@ -111,11 +111,11 @@ export default function Staff() {
         if ((d.hod || '').toUpperCase() === obj.name) return { ...d, hod: '' };
         return d;
       });
-      await save('hops-depts', updatedDepts);
+      await save('workdesk-depts', updatedDepts);
     } else {
       const hadDept = depts.find(d => (d.hod || '').toUpperCase() === obj.name);
       if (hadDept) {
-        await save('hops-depts', depts.map(d => (d.hod || '').toUpperCase() === obj.name ? { ...d, hod: '' } : d));
+        await save('workdesk-depts', depts.map(d => (d.hod || '').toUpperCase() === obj.name ? { ...d, hod: '' } : d));
       }
     }
 
@@ -143,7 +143,7 @@ export default function Staff() {
       message: pendingTaskModal.noticeMsg,
       type: 'task_reminder', isRead: false, sentAt: new Date().toISOString(), meta: null,
     };
-    await save('hops-notices', [...(notices || []), notice]);
+    await save('workdesk-notices', [...(notices || []), notice]);
     await logAct('NOTICE SENT', `Pending task reminder to ${pendingTaskModal.emp.name}`);
     setPendingTaskModal(null);
   }

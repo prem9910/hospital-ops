@@ -21,7 +21,7 @@ export default function MyDelegations() {
   const myDels = delegations.filter((d) => d.doerName === currentUser.name);
 
   async function changeStatus(d, status) {
-    await save('hops-delegations', delegations.map((x) => x.id === d.id ? { ...x, status } : x));
+    await save('workdesk-delegations', delegations.map((x) => x.id === d.id ? { ...x, status } : x));
     await logAct('DELEGATION STATUS: ' + status.toUpperCase(), d.task);
   }
 
@@ -29,7 +29,7 @@ export default function MyDelegations() {
     if (!extReason.trim() || !extDate) { alert('Reason and new date required!'); return; }
     const req = { requestedAt: new Date().toISOString(), reason: extReason.toUpperCase(), newDate: extDate };
     const updated = { ...showExtModal, status: 'extension-requested', extensionRequests: [...(showExtModal.extensionRequests || []), req] };
-    await save('hops-delegations', delegations.map((x) => x.id === showExtModal.id ? updated : x));
+    await save('workdesk-delegations', delegations.map((x) => x.id === showExtModal.id ? updated : x));
     await logAct('EXTENSION REQUESTED', showExtModal.task);
     setShowExtModal(null); setExtReason(''); setExtDate('');
   }

@@ -176,7 +176,7 @@ export default function MyTasks() {
         return t;
       });
       if (mutated) {
-        try { await save('hops-tasks', newAll); } catch (e) { console.error('processPendingNotifications save failed:', e); }
+        try { await save('workdesk-tasks', newAll); } catch (e) { console.error('processPendingNotifications save failed:', e); }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -412,8 +412,8 @@ export default function MyTasks() {
     };
     // Clear pendingDept from employee record
     const updatedEmps = employees.map(e => e.id === emp.id ? { ...e, pendingDept: '' } : e);
-    await save('hops-employees', updatedEmps);
-    await save('hops-notices', [...(notices || []), approvalNotice, adminAlert]);
+    await save('workdesk-employees', updatedEmps);
+    await save('workdesk-notices', [...(notices || []), approvalNotice, adminAlert]);
   }
 
   async function handleDone({ remark, delayReason, isDelayed }) {
@@ -482,7 +482,7 @@ export default function MyTasks() {
       // Two sequential saveSingle calls create a window where realtime can fire
       // with only the new child echoed back, dispatching stale state and a
       // phantom task that disappears on refresh.
-      await save('hops-tasks', newAll);
+      await save('workdesk-tasks', newAll);
       try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
       setShowDone(null);
       return;
@@ -565,7 +565,7 @@ export default function MyTasks() {
     const updatedBreakdown = newAll.reduce((acc, r) => { acc[r.status || 'pending'] = (acc[r.status || 'pending'] || 0) + 1; return acc; }, {});
     const targetRow = newAll.find(r => r.id === t.id);
     console.log(`[handleDone] task "${t.name}" (${t.id}): newAll has ${newAll.length} rows (${JSON.stringify(updatedBreakdown)}), target row status="${targetRow?.status}", lastDone="${targetRow?.lastDone}"`);
-    await save('hops-tasks', newAll);
+    await save('workdesk-tasks', newAll);
     try { await checkPendingDeptChange(t.id); } catch (e) { console.error('Dept check failed', e); }
     setShowDone(null);
   }
@@ -587,7 +587,7 @@ export default function MyTasks() {
       extensions: [...(t.extensions || []), ext],
       activityLog: [...(t.activityLog || []), { by: currentUser.name, action: 'EXTENSION REQUESTED', details: `New date: ${newDate} — ${reason}`, at: fDateTime() }],
     };
-    await save('hops-tasks', tasks.map((x) => x.id === t.id ? updated : x));
+    await save('workdesk-tasks', tasks.map((x) => x.id === t.id ? updated : x));
     await logAct('EXTENSION REQUESTED', t.name);
     // Notify main admin bell
     try {

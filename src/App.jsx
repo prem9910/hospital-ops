@@ -30,16 +30,16 @@ import Notices from './pages/Notices';
 import Admins from './pages/Admins';
 
 function ThemeToggle() {
-  const [dark, setDark] = useState(() => localStorage.getItem('hops-theme') === 'dark');
+  const [dark, setDark] = useState(() => localStorage.getItem('workdesk-theme') === 'dark');
 
   useEffect(() => {
     const html = document.documentElement;
     if (dark) {
       html.setAttribute('data-theme', 'dark');
-      localStorage.setItem('hops-theme', 'dark');
+      localStorage.setItem('workdesk-theme', 'dark');
     } else {
       html.removeAttribute('data-theme');
-      localStorage.setItem('hops-theme', 'light');
+      localStorage.setItem('workdesk-theme', 'light');
     }
   }, [dark]);
 

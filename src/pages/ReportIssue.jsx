@@ -17,7 +17,7 @@ export default function ReportIssue() {
   async function handleSubmit() {
     if (!form.title.trim() || !form.dept) { setMsg('❌ Title and Department required!'); return; }
     const obj = { id: uid(), title: form.title.toUpperCase(), dept: form.dept, priority: form.priority, reporter: currentUser.name.toUpperCase(), assigned: '', desc: form.desc, status: 'open', date: toDay(), resolveRemark: '', resolveBy: '', resolvedAt: '' };
-    await save('hops-issues', [...issues, obj]);
+    await save('workdesk-issues', [...issues, obj]);
     await logAct('ISSUE REPORTED BY STAFF', form.title);
     // Notify main admin bell — high priority issues marked with red icon
     try {

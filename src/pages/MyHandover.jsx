@@ -65,7 +65,7 @@ export default function MyHandover() {
       decisionRemark: remark,
     };
     try {
-      await save('hops-handovers', handovers.map(x => x.id === h.id ? updated : x));
+      await save('workdesk-handovers', handovers.map(x => x.id === h.id ? updated : x));
       await logAct(`HANDOVER ${decision.toUpperCase()}`, `${h.fromName} → ${h.toName} | Remark: ${remark || '-'}`);
       // Notify main admin bell
       try {
@@ -113,7 +113,7 @@ export default function MyHandover() {
               decidedBy: currentUser.name,
             },
           };
-          await save('hops-notices', [...(notices || []), creatorNotice]);
+          await save('workdesk-notices', [...(notices || []), creatorNotice]);
         }
       } catch (e) { console.error('Creator notify failed:', e); }
 
@@ -155,7 +155,7 @@ export default function MyHandover() {
     const { emp, handover, decision, sendTasks, taskList } = emailPopup;
     const empWithEmail = { ...emp, email: popupEmail.trim() };
     const updatedEmps = employees.map(e => e.id === emp.id ? { ...e, email: popupEmail.trim() } : e);
-    await save('hops-employees', updatedEmps);
+    await save('workdesk-employees', updatedEmps);
     if (sendTasks && taskList) {
       sendHandoverTasksEmail(handover, empWithEmail, taskList);
     } else {

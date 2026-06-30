@@ -26,23 +26,23 @@ const toIso = (v) => {
   return _nowIso();
 };
 const TABLES = {
-  'hops-depts': {
-    table: 'departments',
+  'workdesk-depts': {
+    table: 'workdesk_departments',
     pack: (o) => ({ id: o.id, name: o.name || '', head: o.hod || o.head || '', contact: o.phone || o.contact || '', email: o.email || '', floor: o.floor || '', updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, name: r.name || '', hod: r.head || '', head: r.head || '', phone: r.contact || '', contact: r.contact || '', email: r.email || '', floor: r.floor || '', updatedAt: r.updated_at || '' }),
   },
-  'hops-employees': {
-    table: 'employees',
+  'workdesk-employees': {
+    table: 'workdesk_employees',
     pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || o.name || '', dept: o.dept || '', designation: o.role || o.designation || '', email: o.email || '', password: o.password || '', contact: o.contact || '', perms: o.perms || [], is_incharge: o.isIncharge || false, pending_dept: o.pendingDept || '', updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, name: r.name || '', username: r.username || r.name || '', dept: r.dept || '', role: r.designation || '', designation: r.designation || '', email: r.email || '', password: r.password || '', contact: r.contact || '', perms: Array.isArray(r.perms) ? r.perms : [], isIncharge: r.is_incharge || false, pendingDept: r.pending_dept || '', updatedAt: r.updated_at || '' }),
   },
-  'hops-admins': {
-    table: 'admins',
+  'workdesk-admins': {
+    table: 'workdesk_admins',
     pack: (o) => ({ id: o.id, name: o.name || '', username: o.username || '', email: o.email || '', password: o.password || '', role: o.role || '', dept: o.dept || '', perms: o.perms || [], created_by: o.createdBy || '', updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, name: r.name || '', username: r.username || '', email: r.email || '', password: r.password || '', role: r.role || '', dept: r.dept || '', perms: Array.isArray(r.perms) ? r.perms : Object.keys(r.perms || {}), createdBy: r.created_by || '', updatedAt: r.updated_at || '' }),
   },
-  'hops-tasks': {
-    table: 'tasks',
+  'workdesk-tasks': {
+    table: 'workdesk_tasks',
     pack: (o) => ({
       id: o.id, name: o.name || '', dept: o.dept || '', freq: o.freq || 'daily',
       assigned_to: o.assignedTo || [], assignee_emails: o.assigneeEmails || [],
@@ -70,13 +70,13 @@ const TABLES = {
       updatedAt: r.updated_at || '',
     }),
   },
-  'hops-issues': {
-    table: 'issues',
+  'workdesk-issues': {
+    table: 'workdesk_issues',
     pack: (o) => ({ id: o.id, title: o.title || '', dept: o.dept || '', priority: o.priority || 'medium', reporter: o.reporter || '', assigned: o.assigned || '', description: o.desc || '', status: o.status || 'open', date: o.date || '', resolve_remark: o.resolveRemark || '', resolve_by: o.resolveBy || '', resolved_at: o.resolvedAt ? toIso(o.resolvedAt) : null, updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, title: r.title || '', dept: r.dept || '', priority: r.priority || 'medium', reporter: r.reporter || '', assigned: r.assigned || '', desc: r.description || '', status: r.status || 'open', date: r.date || '', resolveRemark: r.resolve_remark || '', resolveBy: r.resolve_by || '', resolvedAt: r.resolved_at || '', updatedAt: r.updated_at || '' }),
   },
-  'hops-handovers': {
-    table: 'handovers',
+  'workdesk-handovers': {
+    table: 'workdesk_handovers',
     pack: (o) => ({
       id: o.id,
       name: o.fromName || '',
@@ -120,29 +120,29 @@ const TABLES = {
       };
     },
   },
-  'hops-delegations': {
-    table: 'delegations',
+  'workdesk-delegations': {
+    table: 'workdesk_delegations',
     pack: (o) => ({ id: o.id, task_name: o.task || o.taskName || '', dept: o.dept || '', priority: o.priority || 'medium', doer_id: o.doerId || '', doer_name: o.doerName || '', delegated_by: o.createdBy || o.delegatedBy || '', exp_date: o.dueDate || o.expDate || '', exp_time: o.expTime || '', notes: o.remarks || o.notes || '', status: o.status || 'pending', created_date: o.createdAt || o.createdDate || '', actual_date: o.actualDate || '', actual_time: o.actualTime || '', done_remark: o.doneRemark || '', delay_reason: o.delayReason || '', is_delayed: o.isDelayed || false, extensions: o.extensionRequests || o.extensions || [], activity_log: o.activityLog || [], updated_at: toIso(o.updatedAt) }),
     unpack: (r) => ({ id: r.id, task: r.task_name || '', taskName: r.task_name || '', dept: r.dept || '', priority: r.priority || 'medium', doerId: r.doer_id || '', doerName: r.doer_name || '', createdBy: r.delegated_by || '', dueDate: r.exp_date || '', expTime: r.exp_time || '', remarks: r.notes || '', notes: r.notes || '', status: r.status || 'pending', createdAt: r.created_date || '', actualDate: r.actual_date || '', actualTime: r.actual_time || '', doneRemark: r.done_remark || '', delayReason: r.delay_reason || '', isDelayed: r.is_delayed || false, extensionRequests: r.extensions || [], activityLog: r.activity_log || [], updatedAt: r.updated_at || '' }),
   },
-  'hops-actlog': {
-    table: 'activity_log',
+  'workdesk-actlog': {
+    table: 'workdesk_activity_log',
     pack: (o) => ({ id: o.id, by_user: o.by || '', role: o.role || '', action: o.action || '', details: o.details || '', at_str: o.atStr || '' }),
     unpack: (r) => ({ id: r.id, by: r.by_user || '', role: r.role || '', action: r.action || '', details: r.details || '', at: r.created_at || '', atStr: r.at_str || '' }),
   },
-  'hops-trash': {
-    table: 'trash',
+  'workdesk-trash': {
+    table: 'workdesk_trash',
     pack: (o) => ({ id: o.id, type: o.type || '', data: o.data || {}, deleted_by: o.deletedBy || '', deleted_at: o.deletedAt || new Date().toISOString(), auto_delete_at: o.autoDeleteAt || '' }),
     unpack: (r) => ({ id: r.id, type: r.type || '', data: r.data || {}, deletedBy: r.deleted_by || '', deletedAt: r.deleted_at || '', autoDeleteAt: r.auto_delete_at || '' }),
   },
-  'hops-notices': {
-    table: 'notices',
+  'workdesk-notices': {
+    table: 'workdesk_notices',
     pack: (o) => ({ id: o.id, to_emp_id: o.toEmpId || '', to_name: o.toName || '', from_name: o.fromName || '', subject: o.subject || '', message: o.message || '', type: o.type || 'general', is_read: o.isRead || false, sent_at: o.sentAt || '', meta: o.meta ? JSON.stringify(o.meta) : '' }),
     unpack: (r) => ({ id: r.id, toEmpId: r.to_emp_id || '', toName: r.to_name || '', fromName: r.from_name || '', subject: r.subject || '', message: r.message || '', type: r.type || 'general', isRead: r.is_read || false, sentAt: r.sent_at || '', meta: r.meta ? (() => { try { return JSON.parse(r.meta); } catch { return null; } })() : null }),
   },
 };
 
-const LINKS_TABLE = 'user_links';
+const LINKS_TABLE = 'workdesk_user_links';
 
 export async function upsertRecord(key, val) {
   if (!TABLES[key] || !Array.isArray(val) || val.length === 0) return;
@@ -180,14 +180,14 @@ export async function loadAll(key) {
   const cfg = TABLES[key];
   if (!cfg) return [];
   let query = supabase.from(cfg.table).select('*');
-  if (cfg.table === 'activity_log') query = query.order('created_at', { ascending: false }).limit(500);
+  if (cfg.table === 'workdesk_activity_log') query = query.order('created_at', { ascending: false }).limit(500);
   const { data, error } = await query;
   if (error) { console.warn('⚠️ Load [' + key + ']:', error.message); return []; }
   return (data || []).map(cfg.unpack);
 }
 
 export async function deleteRecord(type, id) {
-  const tmap = { task: 'tasks', issue: 'issues', employee: 'employees', dept: 'departments', admin: 'admins', handover: 'handovers', delegation: 'delegations', trash: 'trash', link: 'user_links' };
+  const tmap = { task: 'workdesk_tasks', issue: 'workdesk_issues', employee: 'workdesk_employees', dept: 'workdesk_departments', admin: 'workdesk_admins', handover: 'workdesk_handovers', delegation: 'workdesk_delegations', trash: 'workdesk_trash', link: 'workdesk_user_links' };
   const tbl = tmap[type];
   if (!tbl) return { ok: false, reason: 'unknown_type' };
   console.log(`[deleteRecord] ${type} ${id}: starting delete from ${tbl}`);
@@ -279,16 +279,16 @@ export function setupRealtime(onUpdate) {
   // new admin notices and activity log entries only appeared after a
   // manual reload.
   const TABLE_TO_KEY = {
-    tasks: 'hops-tasks',
-    issues: 'hops-issues',
-    departments: 'hops-depts',
-    employees: 'hops-employees',
-    delegations: 'hops-delegations',
-    admins: 'hops-admins',
-    handovers: 'hops-handovers',
-    notices: 'hops-notices',
-    trash: 'hops-trash',
-    activity_log: 'hops-actlog',
+    workdesk_tasks: 'workdesk-tasks',
+    workdesk_issues: 'workdesk-issues',
+    workdesk_departments: 'workdesk-depts',
+    workdesk_employees: 'workdesk-employees',
+    workdesk_delegations: 'workdesk-delegations',
+    workdesk_admins: 'workdesk-admins',
+    workdesk_handovers: 'workdesk-handovers',
+    workdesk_notices: 'workdesk-notices',
+    workdesk_trash: 'workdesk-trash',
+    workdesk_activity_log: 'workdesk-actlog',
   };
   const tables = Object.keys(TABLE_TO_KEY);
   const channels = tables.map((tbl) =>

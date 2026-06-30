@@ -26,12 +26,12 @@ function signature(hospitalName, headerColor) {
       </td>
       <td style="vertical-align:top">
         <p class="sig-name">${hospitalName}</p>
-        <p class="sig-title">Hospital Operations System</p>
+        <p class="sig-title">Work Desk</p>
         <div class="sig-divider"></div>
-        <p class="sig-detail">📍 Hospital Management Division</p>
-        <p class="sig-detail">📧 <a href="mailto:ops@${hospitalName.toLowerCase().replace(/\s+/g,'')}.in">ops@hospital.in</a></p>
+        <p class="sig-detail">📍 Operations Platform</p>
+        <p class="sig-detail">📧 <a href="mailto:ops@${hospitalName.toLowerCase().replace(/\s+/g,'')}.in">desk@workdesk.app</a></p>
         <p class="sig-detail">🕐 Working Hours: 8:00 AM – 8:00 PM</p>
-        <p class="sig-tagline">"Committed to Excellence in Healthcare Operations"</p>
+        <p class="sig-tagline">"Streamlining Operations, One Task at a Time"</p>
       </td>
     </tr>
   </table>
@@ -45,7 +45,7 @@ function baseWrap(headerColor, headerHtml, bodyHtml, hospitalName) {
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-<title>Hospital Ops</title>
+<title>Work Desk</title>
 <style>
   /* ── Reset ── */
   body,table,td,p,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
@@ -159,7 +159,7 @@ function baseWrap(headerColor, headerHtml, bodyHtml, hospitalName) {
         <div class="email-header">${headerHtml}</div>
         <div class="email-body">${bodyHtml}${signature(hospitalName, headerColor)}</div>
         <div class="email-footer">
-          <p>Hospital Operations System &nbsp;|&nbsp; ${hospitalName}</p>
+          <p>Work Desk &nbsp;|&nbsp; ${hospitalName}</p>
         </div>
       </div>
     </td></tr>
@@ -183,12 +183,12 @@ function alertBox(color, bgColor, borderColor, text) {
 // ── 1. Employee Welcome ───────────────────────────────────────────────────────
 export function buildWelcomeHtml({ to_name, to_email, dept, role, hospital_name }) {
   const header = `
-    <h2>🏥 Hospital Operations System</h2>
+    <h2>🏥 Work Desk</h2>
     <p>Welcome to the Team!</p>`;
 
   const body = `
     <p class="greeting">Hello <strong>${esc(to_name)}</strong>,</p>
-    <p class="subtext">You have been successfully registered as an <strong>Employee</strong> on the <strong>Hospital Ops System</strong>.</p>
+    <p class="subtext">You have been successfully registered as an <strong>Employee</strong> on the <strong>Work Desk</strong>.</p>
     <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
       ${row('👤 Name',       `<strong>${esc(to_name)}</strong>`, false)}
       ${row('🏢 Department', esc(dept),                          true)}
@@ -299,7 +299,7 @@ export function buildHandoverCreatedHtml({ to_name, from_name, dept, date_start,
       ${row('📌 Tasks Count',    `<strong>${esc(task_count)} tasks</strong>`, true)}
       ${notes ? row('📝 Notes',  esc(notes), false) : ''}
     </table>
-    ${alertBox('#7c3aed', '#f5f3ff', '#7c3aed', '⏳ Please log in to Hospital Ops System to <strong>Accept</strong> or <strong>Reject</strong> this request.')}`;
+    ${alertBox('#7c3aed', '#f5f3ff', '#7c3aed', '⏳ Please log in to Work Desk to <strong>Accept</strong> or <strong>Reject</strong> this request.')}`;
 
   return baseWrap('#7c3aed', header, body, hospital_name);
 }

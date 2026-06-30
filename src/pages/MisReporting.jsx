@@ -393,9 +393,9 @@ export default function MisReporting() {
   //
   // Two sources of truth are merged here:
   //   1. Tasks with `freq === 'delegation'` — the older implementation
-  //      writes these into hops-tasks when the user creates a delegation
+  //      writes these into workdesk-tasks when the user creates a delegation
   //      via the Assign Task flow.
-  //   2. Standalone records in hops-delegations — written by Delegations.jsx.
+  //   2. Standalone records in workdesk-delegations — written by Delegations.jsx.
   //      The dashboard donut uses (1) only, but the MIS report needs both
   //      so the user sees the full picture regardless of which flow was used.
   const delegTasks = useMemo(() => {
@@ -1024,7 +1024,7 @@ export default function MisReporting() {
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: scoreColor(avgHealth) }} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                 <div>
-                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d' }}>Hospital Health Score</div>
+                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: '#0b1e3d' }}>Work Health Score</div>
                   <div style={{ fontSize: 12, color: '#6b7a90', marginTop: 3 }}>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>

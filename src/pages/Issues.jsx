@@ -62,7 +62,7 @@ export default function Issues() {
     if (!form.dept) { alert('Department required!'); return; }
     const obj = { id: editIssue?.id || uid(), title: form.title.toUpperCase(), dept: form.dept, priority: form.priority, reporter: form.reporter.toUpperCase(), assigned: form.assigned.toUpperCase(), desc: form.desc, status: editIssue?.status || 'open', date: editIssue?.date || toDay(), resolveRemark: editIssue?.resolveRemark || '', resolveBy: editIssue?.resolveBy || '', resolvedAt: editIssue?.resolvedAt || '' };
     const newIssues = editIssue ? issues.map((i) => i.id === obj.id ? obj : i) : [...issues, obj];
-    await save('hops-issues', newIssues);
+    await save('workdesk-issues', newIssues);
     await logAct(editIssue ? 'ISSUE UPDATED' : 'ISSUE REPORTED', obj.title);
     setShowForm(false);
   }
@@ -70,7 +70,7 @@ export default function Issues() {
   async function submitResolve() {
     if (!resRemark.trim()) { alert('Resolution remark required!'); return; }
     const updated = { ...showResolve, status: 'resolved', resolveRemark: resRemark.toUpperCase(), resolveBy: resBy.toUpperCase(), resolvedAt: new Date().toISOString() };
-    await save('hops-issues', issues.map((i) => i.id === updated.id ? updated : i));
+    await save('workdesk-issues', issues.map((i) => i.id === updated.id ? updated : i));
     await logAct('ISSUE RESOLVED', showResolve.title);
     // Notify main admin bell
     try {
@@ -89,7 +89,7 @@ export default function Issues() {
     const issue = issues.find((i) => i.id === id);
     if (!issue) return;
     const updated = { ...issue, status: 'in-progress', assigned: issue.assigned || currentUser.name };
-    await save('hops-issues', issues.map((i) => i.id === id ? updated : i));
+    await save('workdesk-issues', issues.map((i) => i.id === id ? updated : i));
     await logAct('ISSUE IN-PROGRESS', issue.title);
     // Mirror the resolve flow: when a non-admin picks up an issue, surface
     // it on the admin's bell so they know it's actively being worked on.

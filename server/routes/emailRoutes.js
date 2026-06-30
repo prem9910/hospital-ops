@@ -51,7 +51,7 @@ function getClient() {
 
 const SENDER = () => ({
   email: process.env.BREVO_SENDER_EMAIL || '',
-  name:  process.env.BREVO_SENDER_NAME  || 'Hospital Ops',
+  name:  process.env.BREVO_SENDER_NAME  || 'Work Desk',
 });
 
 // POST /api/email/send

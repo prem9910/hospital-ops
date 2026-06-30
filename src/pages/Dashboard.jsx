@@ -147,7 +147,7 @@ export default function Dashboard() {
   //   { id, task, doerName, dept, status, dueDate, createdAt, extensions, _src }
   // where _src is 'task' or 'record' for downstream consumers.
   //
-  // When Tasks.jsx auto-syncs a freq='delegation' task into hops-delegations
+  // When Tasks.jsx auto-syncs a freq='delegation' task into workdesk-delegations
   // it reuses the task id, so the same logical item appears in BOTH source
   // arrays. To avoid double-counting we collapse on the original id (without
   // the source-prefix) and prefer the record-source shape (it carries the
