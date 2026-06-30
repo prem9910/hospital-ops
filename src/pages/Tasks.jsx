@@ -560,7 +560,6 @@ export default function Tasks() {
   // done rows are noise regardless of tab).
   const isDoneTab = tab === 'done';
   const doneSignatures = new Set();
-  const seenPendingParents = new Set();
   const filtered = rawFiltered.filter(t => {
     // Hide grandchild tasks (parent also has a parentTaskId) — bug artifacts.
     // Skipped on the Done tab: a completed grandchild is still a real completion.
@@ -582,11 +581,21 @@ export default function Tasks() {
       const hasPendingChild = tasks.some(x => x.parentTaskId === t.id && x.status === 'pending');
       if (hasPendingChild) return false;
     }
-    // Deduplicate multiple pending siblings (keep only one per parent).
-    // Not relevant to Done tab since all rows there are status='done'.
-    if (t.status !== 'pending' || !t.parentTaskId) return true;
-    if (seenPendingParents.has(t.parentTaskId)) return false;
-    seenPendingParents.add(t.parentTaskId);
+    // NOTE: previously we deduped "multiple pending siblings" by hiding all
+    // but the first pending child per parentTaskId. This was causing three
+    // bugs on Manage Tasks: (1) counts (Ongoing/Upcoming/Done badges) didn't
+    // match the table because the count used sourceList without dedup; (2)
+    // deleting the visible row would surface a second pending child with
+    // the same name/parent, making the user think the delete didn't work;
+    // (3) after marking a row done (which creates a new pending child for
+    // the next slot), the user saw a row move to Done and a same-named
+    // row appear in Upcoming, which they read as "delete from Upcoming
+    // went to Done". Showing every pending row directly is unambiguous —
+    // the user can see all instances and delete them individually. The
+    // grandchild filter above still hides true bug artifacts (parent of
+    // the parent also has a parentTaskId), and the done-parent-with-
+    // pending-child rule above still hides done parents whose pending
+    // child represents the current state. Those two rules are correct.
     return true;
   });
 
