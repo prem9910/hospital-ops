@@ -457,8 +457,13 @@ export default function Dashboard() {
 }
 
 function StaffDashboard() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPerm } = useAuth();
   const { tasks, issues, delegations } = useApp();
+  // Gate the "Open Manage Task" affordance on the tasks_view permission —
+  // the same perm the sidebar uses to expose the Manage Tasks nav item
+  // (AppLayout.jsx:639). If the employee can't reach /tasks at all, the
+  // button must not appear; otherwise the click would 404.
+  const canManageTasks = hasPerm('tasks_view');
 
   // Build taskMap for grandchild detection
   const taskMap = {};
@@ -716,13 +721,14 @@ function StaffDashboard() {
           preFilter="all"
           title={openStaffCard.title}
           columns={openStaffCard.columns}
-          // Staff users typically don't have /tasks permission. Route the
-          // "Open in Manage Tasks" affordance to the dashboard's My Tasks
-          // section instead — same data, accessible to everyone. (Pass
-          // `null` to hide the button entirely if a future screen wants
-          // a pure read-only inline detail.)
-          manageUrl="/dashboard"
-          manageLabel="📋 Open in My Tasks →"
+          // Permission-gated affordance. With tasks_view the button reads
+          // "Open in Manage Tasks" and routes to /tasks?focus=<id> — which
+          // Tasks.jsx picks up to open the matching task's detail modal
+          // (same behaviour main admin sees). Without the perm, manageUrl
+          // is null and the button is hidden entirely (the modal becomes
+          // a read-only inline detail).
+          manageUrl={canManageTasks ? '/tasks' : null}
+          manageLabel="📋 Open Manage Task →"
         />
       )}
       {openStaffCard?.type === 'delegations' && (
